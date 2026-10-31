@@ -30,6 +30,13 @@ function Section({ label, items, empty }: { label: string; items: ReactNode[]; e
 const sig = (n: GraphNode) =>
   (n.signature?.params ?? []).map((p) => `${p.name}${p.optional && !p.default ? "?" : ""}${p.type ? `: ${p.type}` : ""}${p.default ? ` = ${p.default}` : ""}`);
 
+/** Just the hook names, each once (×N when called several times). Details live in the sidebar. */
+const hookNames = (n: GraphNode) => {
+  const counts = new Map<string, number>();
+  for (const h of n.hooksUsed ?? []) counts.set(h.hook, (counts.get(h.hook) ?? 0) + 1);
+  return [...counts].map(([name, c]) => (c > 1 ? `${name} ×${c}` : name));
+};
+
 /** What a node's tooltip says, by kind. */
 function content(id: string, s: Snapshot, index: GraphIndex): ReactNode {
   const n = s.nodes[id];
@@ -57,7 +64,7 @@ function content(id: string, s: Snapshot, index: GraphIndex): ReactNode {
         <>
           {header}
           <Section label="Props" items={(n.props ?? []).map((p) => `${p.name}${p.optional ? "?" : ""}: ${p.type ?? "?"}${p.default ? ` = ${p.default}` : ""}`)} empty="none" />
-          <Section label="Hooks" items={(n.hooksUsed ?? []).map((h) => `${h.assignedTo ? `${h.assignedTo} = ` : ""}${h.hook}(${h.args.join(", ")})${h.returnType ? ` → ${h.returnType}` : ""}`)} />
+          <Section label="Hooks" items={hookNames(n)} />
           <Section label="Renders" items={renders.map((r) => `<${r}>`)} empty="only native elements" />
         </>
       );
