@@ -17,13 +17,19 @@ src/icons.ts          curated lucide icons, renamed Icon<Name> (IconPlus, IconCo
 src/components/       composed components: Modal, Tooltip, ActionIconButton, SearchInput, Select,
                       Panel/PanelHeader/PanelSection, EmptyState, PropertyList, DataTable, KindChip/BoundaryChip/CodeChip,
                       Switch, Checkbox, Alert, ContextMenu (point-anchored, nested submenus),
-                      ShortcutLegend, Popover (anchored to a trigger or a point)
+                      ShortcutLegend, Popover (anchored to a trigger or a point),
+                      KindTile (gradient icon tile per node kind), CodeToken, TagChip (tinted pill,
+                      a <span> unless clickable), Eyebrow, SegmentedToggles, ToolGroup
+src/tokens.ts         tokenVar(token) → CSS variable of any colour token
 ```
 
 ## Tokens
 - `kind.<module|component|hook|serverAction|function|external>.{solid,subtle,muted,fg}`
 - `boundary.<server|client|shared>.{solid,subtle,muted,fg}` (server gray, client cyan, shared pink)
-- `relation.imports`, `relation.importsMuted` (dark grey import edges)
+- `relation.<imports|importsMuted|renders|usesHook|invokes|invokesAction|declares>`: the edges' colours, reused by sidebar badges and toolbar dots
+- `syntax.<name|type|literal|keyword|punct|bg>`: code colours shared by the node tooltip (CSS vars) and the sidebar (CodeToken)
+- **No token may be named `value`**: Chakra reads any object with a `value` key as a token definition, which silently drops the whole group.
+- Radii are softened globally (`l1` 6px, `l2` 8px, `l3` 12px).
 - Kinds: module gray, component **#429cb5** (custom `component` palette), hook purple, server action orange, function teal, library yellow. **Blue is reserved for selected nodes** (relations always keep their own colours); don't use it for anything else.
 - `canvas.bg`, `canvas.dot`
 - Use them as Chakra style props (`bg="kind.hook.subtle"`). Outside Chakra (React Flow SVG), use CSS vars: `var(--chakra-colors-kind-hook-solid)`.

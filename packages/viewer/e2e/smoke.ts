@@ -27,7 +27,8 @@ const select = page.locator("select").first();
 const nextApp = await select.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => o.text.startsWith("next-app"))?.value);
 if (!nextApp) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app` first");
 await select.selectOption(nextApp);
-await page.getByText(/^next-app · \d+ files/).waitFor();
+// (the status text only shows on wide screens; it's always in the DOM)
+await page.getByText(/^next-app · \d+ files/).waitFor({ state: "attached" });
 await page.getByText("Empty diagram").waitFor();
 // Add the way noesis does: "Start exploration" opens the picker; filter, Enter picks the first match.
 await page.getByRole("button", { name: "Start exploration" }).click();
@@ -56,7 +57,8 @@ if ((await page.locator(".react-flow__handle.connectable").count()) !== 0) fail(
 await page.locator(".react-flow__controls-fitview").click();
 await page.waitForTimeout(400);
 await page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]').click();
-await page.locator("dl").getByRole("button", { name: "TodoItem.tsx", exact: true }).click();
+// the sidebar header shows the file a component is declared in, as a chip
+await page.getByRole("button", { name: "TodoItem.tsx", exact: true }).first().click();
 await page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"]').waitFor();
 if ((await page.locator('.react-flow__node-frame[data-id^="dir:"]').count()) === 0) fail("expected a folder frame around the file");
 
@@ -171,7 +173,7 @@ const dialog = page.getByRole("dialog");
 await dialog.getByText("react", { exact: true }).click();
 if (!(await dialog.getByRole("checkbox", { name: "react", exact: true }).isChecked())) fail("react checkbox did not toggle on");
 await page.keyboard.press("Escape");
-if ((await page.getByRole("button", { name: /Libraries \(1 hidden\)/ }).count()) !== 1) fail("toolbar should report 1 hidden library");
+if ((await page.getByRole("button", { name: /^Libraries\s*1$/ }).count()) !== 1) fail("toolbar should report 1 hidden library");
 
 // Scan from the UI: pick the react-app fixture via the folder browser + path input.
 const reactApp = new URL("../../fixtures/react-app", import.meta.url).pathname;

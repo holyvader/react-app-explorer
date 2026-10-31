@@ -31,6 +31,7 @@ export {
   CornerLeftUp as IconParentDir,
   ScanSearch as IconScan,
   Library as IconLibrary,
+  Network as IconBrand,
   Undo2 as IconUndo,
   MousePointerClick as IconSelect,
   Import as IconImport,

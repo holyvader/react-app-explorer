@@ -1,10 +1,19 @@
-import { ActionIconButton, Box, Button, Flex, Heading, HStack, Select, Separator, Text, Tooltip } from "@rae/design-system";
-import { IconClear, IconFolderTree, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
+import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, Text, ToolGroup, Tooltip } from "@rae/design-system";
+import { IconBrand, IconClear, IconFolderTree, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
 import { useRef } from "react";
-import { EDGE_GROUPS } from "../graph/relations.ts";
+import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { useExplorer } from "../store.ts";
+
+/** Each relation filter's dot: the same colour as its edges on the canvas. */
+const GROUP_COLOR: Record<EdgeGroup, string> = {
+  imports: "relation.imports",
+  declares: "relation.declares",
+  renders: "relation.renders",
+  hooks: "relation.usesHook",
+  invokes: "relation.invokes",
+};
 
 export interface ToolbarProps {
   list?: SnapshotList;
@@ -35,65 +44,98 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onL
   if (current && !options.some((o) => o.value === current)) options.unshift({ value: current, label: current });
 
   return (
-    <Flex align="center" gap="2" px="3" py="2" borderBottomWidth="1px" borderColor="border" bg="bg.panel" wrap="wrap">
-      <Heading size="sm" whiteSpace="nowrap" title="React App Explorer">
-        RAE
-      </Heading>
-      <Separator orientation="vertical" h="6" />
-      <Tooltip content={list ? `From ${list.dir}` : "Snapshots"}>
-        <Box>
-          <Select
-            value={current ?? ""}
-            onValueChange={onPickSnapshot}
-            options={options}
-            placeholder={options.length ? "Select snapshot" : "No snapshots found"}
-            width="260px"
-          />
+    <Flex align="center" gap="2.5" px="4" h="14" borderBottomWidth="1px" borderColor="border.muted" bg="bg.panel" flexShrink={0} minW="0">
+      {/* brand */}
+      <Flex align="center" gap="2" flexShrink={0} title="React App Explorer">
+        <Box
+          w="8"
+          h="8"
+          rounded="l3"
+          display="inline-flex"
+          alignItems="center"
+          justifyContent="center"
+          color="white"
+          style={{ background: "linear-gradient(135deg, var(--chakra-colors-component-400), var(--chakra-colors-component-700))", boxShadow: "0 2px 8px color-mix(in srgb, var(--chakra-colors-component-500) 40%, transparent)" }}
+        >
+          <IconBrand size={17} strokeWidth={2.2} />
         </Box>
-      </Tooltip>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="application/json,.json"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onLoadFile(f);
-          e.target.value = "";
-        }}
-      />
-      <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} variant="outline" size="sm" onClick={() => fileRef.current?.click()} />
-      <ActionIconButton label="Scan a project…" icon={<IconScan />} variant="outline" size="sm" onClick={onScan} />
+        <Text fontWeight="semibold" fontSize="sm" letterSpacing="-0.01em" display="none" css={{ "@media (min-width: 1720px)": { display: "block" } }}>
+          App Explorer
+        </Text>
+      </Flex>
+
+      {/* snapshot */}
+      <ToolGroup>
+        <Tooltip content={list ? `From ${list.dir}` : "Snapshots"}>
+          <Box>
+            <Select
+              value={current ?? ""}
+              onValueChange={onPickSnapshot}
+              options={options}
+              placeholder={options.length ? "Select snapshot" : "No snapshots found"}
+              width="220px"
+              size="xs"
+            />
+          </Box>
+        </Tooltip>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onLoadFile(f);
+            e.target.value = "";
+          }}
+        />
+        <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} size="xs" onClick={() => fileRef.current?.click()} />
+        <ActionIconButton label="Scan a project…" icon={<IconScan />} size="xs" onClick={onScan} />
+      </ToolGroup>
       {snapshot && (
-        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
+        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap" display="none" css={{ "@media (min-width: 1880px)": { display: "block" } }}>
           {snapshot.framework} · {snapshot.stats.files} files · {visible.length} shown
         </Text>
       )}
+
       <Box flex="1" />
-      <HStack gap="1">
-        {EDGE_GROUPS.map(({ group, label }) => (
-          <Button key={group} size="2xs" px="1.5" variant={enabled[group] ? "subtle" : "ghost"} opacity={enabled[group] ? 1 : 0.5} onClick={() => toggleGroup(group)} aria-pressed={enabled[group]}>
-            {label}
+
+      {/* relation filters, with their canvas colours */}
+      <SegmentedToggles
+        label="Relations"
+        items={EDGE_GROUPS.map(({ group, label }) => ({ value: group, label, color: GROUP_COLOR[group], on: enabled[group] }))}
+        onToggle={(g) => toggleGroup(g as EdgeGroup)}
+      />
+
+      {/* view options */}
+      <ToolGroup>
+        <Tooltip content="Draw folders as frames around files">
+          <Button size="xs" variant={folders ? "surface" : "ghost"} onClick={() => setFolders(!folders)} aria-pressed={folders} rounded="l2">
+            <IconFolderTree size={14} /> Folders
           </Button>
-        ))}
-      </HStack>
-      <Separator orientation="vertical" h="6" />
-      <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={EDITORS} width="120px" size="xs" />
-      <Tooltip content="Draw folders as frames around files">
-        <Button size="xs" variant={folders ? "subtle" : "ghost"} onClick={() => setFolders(!folders)} aria-pressed={folders}>
-          <IconFolderTree size={14} /> Folders
-        </Button>
-      </Tooltip>
-      <Tooltip content={hideAllLibraries ? "All 3rd-party libraries hidden" : `${excluded.length} libraries hidden: ${excluded.join(", ") || "none"}`}>
-        <Button size="xs" variant="ghost" onClick={onLibraries}>
-          <IconLibrary size={14} /> Libraries{hideAllLibraries ? " (all hidden)" : excluded.length ? ` (${excluded.length} hidden)` : ""}
-        </Button>
-      </Tooltip>
-      <ActionIconButton label="Undo (⌘Z)" icon={<IconUndo />} size="sm" onClick={undo} disabled={!canUndo} />
-      <ActionIconButton label="Redo (⇧⌘Z)" icon={<IconRedo />} size="sm" onClick={redo} disabled={!canRedo} />
-      <ActionIconButton label="Re-layout everything" icon={<IconLayout />} size="sm" onClick={relayout} disabled={!visible.length} />
-      <ActionIconButton label="Clear canvas" icon={<IconClear />} size="sm" onClick={clear} disabled={!visible.length} />
-      <Button size="sm" onClick={() => setSearchOpen(true)} disabled={!snapshot}>
+        </Tooltip>
+        <Tooltip content={hideAllLibraries ? "All 3rd-party libraries hidden" : `${excluded.length} libraries hidden: ${excluded.join(", ") || "none"}`}>
+          <Button size="xs" variant="ghost" onClick={onLibraries} rounded="l2">
+            <IconLibrary size={14} /> Libraries
+            {(hideAllLibraries || excluded.length > 0) && (
+              <Text as="span" fontSize="2xs" fontWeight="semibold" bg="bg.panel" px="1.5" rounded="full" color="fg.muted">
+                {hideAllLibraries ? "all" : excluded.length}
+              </Text>
+            )}
+          </Button>
+        </Tooltip>
+        <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={EDITORS} width="118px" size="xs" />
+      </ToolGroup>
+
+      {/* history & canvas */}
+      <ToolGroup>
+        <ActionIconButton label="Undo (⌘Z)" icon={<IconUndo />} size="xs" onClick={undo} disabled={!canUndo} />
+        <ActionIconButton label="Redo (⇧⌘Z)" icon={<IconRedo />} size="xs" onClick={redo} disabled={!canRedo} />
+        <ActionIconButton label="Re-layout everything" icon={<IconLayout />} size="xs" onClick={relayout} disabled={!visible.length} />
+        <ActionIconButton label="Clear canvas" icon={<IconClear />} size="xs" onClick={clear} disabled={!visible.length} />
+      </ToolGroup>
+
+      <Button size="sm" rounded="l3" onClick={() => setSearchOpen(true)} disabled={!snapshot} px="4">
         <IconPlus size={16} /> Add
       </Button>
     </Flex>

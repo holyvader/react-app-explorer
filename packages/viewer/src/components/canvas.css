@@ -115,7 +115,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rae-card__boundary { flex-shrink: 0; align-self: flex-start; margin-top: 10px; transition: opacity 140ms ease; }
+.rae-card__boundary { flex-shrink: 0; align-self: flex-start; margin-top: 10px; transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1); }
 /* the action toolbar takes its place on hover / selection */
 .react-flow__node-card:hover .rae-card__boundary,
 .react-flow__node-card.selected .rae-card__boundary { opacity: 0; }
@@ -128,7 +128,7 @@
   overflow: visible;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .rae-card__hover path {
   fill: color-mix(in srgb, var(--k) 7%, transparent);
@@ -153,7 +153,7 @@
   box-shadow: 0 4px 14px rgb(15 23 42 / 0.14), 0 0 0 1px var(--line);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .react-flow__node-card:hover .rae-card__actions,
 .react-flow__node-card:focus-within .rae-card__actions,
@@ -264,13 +264,13 @@
   background: color-mix(in srgb, var(--k) 4%, transparent);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .rae-frame[data-kind="folder"]::after { border-style: dashed; }
 .react-flow__node-frame:hover > .rae-frame:not([data-kind="folder"])::after { opacity: 1; }
 /* folders: hover only on the top bar (where they're dragged) — not over their content */
 .rae-frame[data-kind="folder"]:has(> .rae-frame__header:hover)::after { opacity: 1; }
-.rae-frame[data-kind="folder"] .rae-frame__header { transition: background-color 120ms ease; border-radius: 3px 11px 0 0; }
+.rae-frame[data-kind="folder"] .rae-frame__header { transition: background-color 260ms cubic-bezier(0.22, 1, 0.36, 1); border-radius: 3px 11px 0 0; }
 .rae-frame[data-kind="folder"] .rae-frame__header:hover { background: color-mix(in srgb, var(--k) 7%, transparent); }
 .react-flow__node.selected > .rae-frame::after,
 .rae-frame[data-refused]::after { border-color: transparent; }
@@ -391,27 +391,94 @@
 .rae-canvas[data-dragging][data-refused-drop] * { cursor: not-allowed !important; } /* it won't go in there */
 .rae-canvas .react-flow__controls-button { cursor: pointer; }
 
-/* ---- node tooltip (one for the whole canvas) ------------------------------------------- */
+/* ---- node tooltip (one for the whole canvas) — same language as the sidebar ------------- */
 .rae-tip {
   position: fixed;
   z-index: 1500;
   pointer-events: none;
+  width: max-content;
+  min-width: 240px;
   max-width: 380px;
-  background: var(--chakra-colors-bg-panel);
+  background: color-mix(in srgb, var(--chakra-colors-bg-panel) 96%, transparent);
   color: var(--chakra-colors-fg);
-  border: 1px solid var(--chakra-colors-border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
-  padding: 8px 10px;
+  border: 1px solid var(--chakra-colors-border-muted);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.16), 0 2px 6px rgb(15 23 42 / 0.06);
   font: 12px/1.45 var(--chakra-fonts-body);
+  animation: rae-tip-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.rae-tip__title { font-weight: 600; font-size: 13px; }
-.rae-tip__sub { color: var(--chakra-colors-fg-muted); font-size: 11px; margin-bottom: 4px; }
-.rae-tip__section { margin-top: 6px; }
-.rae-tip__label { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--chakra-colors-fg-subtle); }
-.rae-tip__list { margin: 2px 0 0; padding: 0; list-style: none; font-family: var(--chakra-fonts-mono); font-size: 11px; }
-.rae-tip__list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rae-tip__muted { color: var(--chakra-colors-fg-muted); }
+/* accent line in the kind's colour */
+.rae-tip::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: -1px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(90deg, var(--k), color-mix(in srgb, var(--k) 30%, transparent));
+}
+/* arrow pointing at the node */
+.rae-tip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border: inherit;
+  border-top: none;
+  border-left: none;
+  transform: translateX(-50%) rotate(45deg);
+}
+.rae-tip[data-side="top"]::after { bottom: -6px; }
+.rae-tip[data-side="bottom"]::after { top: -6px; transform: translateX(-50%) rotate(-135deg); }
+@keyframes rae-tip-in {
+  from { opacity: 0; margin-top: 4px; }
+  to { opacity: 1; margin-top: 0; }
+}
+.rae-tip__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 0; }
+.rae-tip__tile { width: 30px; height: 30px; border-radius: 9px; }
+.rae-tip__titles { min-width: 0; }
+.rae-tip__title { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; line-height: 18px; }
+.rae-tip__caption { color: var(--chakra-colors-fg-muted); font-size: 11px; }
+.rae-tip__path {
+  margin: 8px 14px 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--chakra-colors-syntax-bg);
+  font: 11px/1.5 var(--chakra-fonts-mono);
+  color: var(--chakra-colors-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rae-tip__body { padding: 4px 14px 12px; }
+.rae-tip__section { margin-top: 9px; }
+.rae-tip__label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--chakra-colors-fg-subtle); margin-bottom: 4px; }
+.rae-tip__code { font: 11.5px/1.6 var(--chakra-fonts-mono); }
+.rae-tip__code > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rae-tip__empty { color: var(--chakra-colors-fg-muted); font-size: 11.5px; }
+.rae-tip__foot { margin-top: 9px; color: var(--chakra-colors-fg-muted); font-size: 11px; }
+.rae-tip__more { font-size: 11px; color: var(--chakra-colors-fg-subtle); }
+.rae-tip__chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.rae-tip__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 500 11px/1 var(--chakra-fonts-mono);
+  color: color-mix(in srgb, var(--c) 82%, var(--chakra-colors-fg));
+  background: color-mix(in srgb, var(--c) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
+}
+/* code tokens — the same colours the sidebar uses (code.* tokens) */
+.rae-tok--name { color: var(--chakra-colors-syntax-name); font-weight: 500; }
+.rae-tok--type { color: var(--chakra-colors-syntax-type); }
+.rae-tok--value { color: var(--chakra-colors-syntax-literal); }
+.rae-tok--punct { color: var(--chakra-colors-syntax-punct); }
+.rae-tok--keyword { color: var(--chakra-colors-syntax-keyword); }
 
 /* The round "+" on a file's bottom border: what it contains that isn't drawn. */
 .rae-contains {

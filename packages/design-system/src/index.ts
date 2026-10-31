@@ -17,3 +17,6 @@ export { Checkbox, type CheckboxProps } from "./components/Checkbox.tsx";
 export { ContextMenu, type ContextMenuProps, type MenuEntry } from "./components/ContextMenu.tsx";
 export { ShortcutLegend, type Shortcut } from "./components/ShortcutLegend.tsx";
 export { Popover, type PopoverProps } from "./components/Popover.tsx";
+export { CodeToken, type CodeTokenKind, Eyebrow, KindTile, TagChip } from "./components/Kind.tsx";
+export { tokenVar } from "./tokens.ts";
+export { SegmentedToggles, type ToggleItem, ToolGroup } from "./components/Toggles.tsx";

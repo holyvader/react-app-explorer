@@ -488,7 +488,7 @@ export function Canvas() {
             if (!el?.isConnected) return;
             const r = el.getBoundingClientRect();
             setTip({ id: n.id, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } });
-          }, 450);
+          }, 600);
         }}
         // A moving view would leave the tooltip behind its node.
         onMoveStart={() => {

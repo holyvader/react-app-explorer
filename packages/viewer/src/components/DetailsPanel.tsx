@@ -1,21 +1,19 @@
-import type { Edge, GraphNode } from "@rae/schema";
+import type { Edge, GraphNode, ParamDef } from "@rae/schema";
 import {
   ActionIconButton,
-  Badge,
   BoundaryChip,
   Box,
   Button,
-  Code,
-  DataTable,
+  CodeToken,
+  Eyebrow,
   Flex,
   HStack,
-  KindChip,
-  Link,
+  KindTile,
   Panel,
   PanelHeader,
   PanelSection,
-  PropertyList,
   Stack,
+  TagChip,
   Text,
   Wrap,
 } from "@rae/design-system";
@@ -29,14 +27,19 @@ import {
   IconFocus,
   IconOpen,
 } from "@rae/design-system/icons";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
+import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
 import { RenderTree } from "./RenderTree.tsx";
 
+/**
+ * Details of the selected element. Shares its visual language with the canvas and the node
+ * tooltip: the kind's icon tile, code-coloured props/signatures, tinted chips, relation colours.
+ */
 export function DetailsPanel() {
   const snapshot = useExplorer((s) => s.snapshot);
   const index = useExplorer((s) => s.index);
@@ -57,118 +60,177 @@ export function DetailsPanel() {
     };
   }, [snapshot, index, node, enabled, excluded, hideAllLibraries]);
 
-  if (!snapshot || !node) return null;
+  if (!snapshot || !node || !index) return null;
 
+  const meta = KIND_META[node.kind];
+  const Icon = meta.icon;
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
-  const sig = node.signature;
+  const caption = [meta.label, node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
+  const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
   return (
-    <Panel w="420px" flexShrink={0}>
-      <PanelHeader
-        title={node.name}
-        subtitle={node.filePath}
-        actions={<ActionIconButton label="Close" icon={<IconClose />} onClick={() => select(undefined)} />}
-      >
-        <Wrap gap="1" mt="2">
-          <KindChip kind={node.kind}>{KIND_META[node.kind].label}</KindChip>
-          {node.moduleType && <BoundaryChip boundary={node.moduleType} />}
-          {node.nextRole && <Badge size="sm" variant="outline">next: {node.nextRole}</Badge>}
-          {node.isAsync && <Badge size="sm" variant="outline">async</Badge>}
-          {node.directives?.map((d) => (
-            <Badge key={d} size="sm" variant="outline" fontFamily="mono">
-              '{d}'
-            </Badge>
-          ))}
-        </Wrap>
-        <HStack gap="1" mt="2" wrap="wrap">
+    <Panel w="440px" flexShrink={0}>
+      <PanelHeader>
+        <Flex gap="3" align="start">
+          <KindTile kind={node.kind} size={44}>
+            <Icon size={20} strokeWidth={2.2} />
+          </KindTile>
+          <Box flex="1" minW="0">
+            <Text fontSize="lg" fontWeight="semibold" letterSpacing="-0.01em" lineHeight="1.25" truncate>
+              {node.name}
+            </Text>
+            <Text fontSize="xs" color="fg.muted" mt="0.5">
+              {caption}
+            </Text>
+          </Box>
+          <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={() => select(undefined)} />
+        </Flex>
+
+        <Flex mt="3" align="center" gap="1.5" bg="syntax.bg" rounded="l2" px="2.5" py="1.5" minW="0">
+          <Text fontFamily="mono" fontSize="xs" color="fg.muted" truncate flex="1" title={node.filePath}>
+            {node.filePath}
+            {node.loc && node.kind !== "module" ? `:${node.loc.line}` : ""}
+          </Text>
+          {node.absPath && (
+            <ActionIconButton label="Copy path" icon={<IconCopy />} size="2xs" onClick={() => navigator.clipboard.writeText(`${node.absPath}:${node.loc?.line ?? 1}`)} />
+          )}
+        </Flex>
+
+        {(node.moduleType || node.directives?.length || node.moduleId) && (
+          <Wrap gap="1.5" mt="3" align="center">
+            {node.moduleId && (
+              <>
+                <Text fontSize="xs" color="fg.muted">
+                  in
+                </Text>
+                <NodeChip id={node.moduleId} anchor={node.id} />
+              </>
+            )}
+            {node.moduleType && <BoundaryChip boundary={node.moduleType} rounded="full" px="2" />}
+            {node.directives?.map((d) => (
+              <TagChip key={d} color="kind.serverAction.solid" mono>
+                &apos;{d}&apos;
+              </TagChip>
+            ))}
+          </Wrap>
+        )}
+
+        <Flex mt="4" gap="2" align="center">
           {open && (
-            <Button asChild size="xs" variant="outline">
+            <Button asChild size="sm" variant="solid" rounded="l2">
               <a href={open}>
-                <IconOpen size={14} /> Open in editor
+                <IconOpen size={15} /> Open in editor
               </a>
             </Button>
           )}
-          {node.absPath && (
-            <ActionIconButton
-              label="Copy path"
-              icon={<IconCopy />}
-              onClick={() => navigator.clipboard.writeText(`${node.absPath}:${node.loc?.line ?? 1}`)}
-            />
-          )}
-          <ActionIconButton label="Center on canvas" icon={<IconFocus />} onClick={() => addNodes([node.id], { focus: node.id })} />
+          <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />
           <Box flex="1" />
-          <ActionIconButton label="Show parents" icon={<IconArrowUp />} onClick={() => expand(node.id, "parents", false)} />
-          <ActionIconButton label="Parents up to root" icon={<IconChevronsUp />} onClick={() => expand(node.id, "parents", true)} />
-          <ActionIconButton label="Show children" icon={<IconArrowDown />} onClick={() => expand(node.id, "children", false)} />
-          <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} onClick={() => expand(node.id, "children", true)} />
-        </HStack>
+          <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
+            <ActionIconButton label="Show parents" icon={<IconArrowUp />} size="xs" onClick={() => expand(node.id, "parents", false)} />
+            <ActionIconButton label="Parents up to root" icon={<IconChevronsUp />} size="xs" onClick={() => expand(node.id, "parents", true)} />
+            <ActionIconButton label="Show children" icon={<IconArrowDown />} size="xs" onClick={() => expand(node.id, "children", false)} />
+            <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="xs" onClick={() => expand(node.id, "children", true)} />
+          </HStack>
+        </Flex>
       </PanelHeader>
-
-      <PanelSection title="Info">
-        <PropertyList
-          items={[
-            { label: "Path", value: <Code fontSize="xs">{node.filePath}{node.loc ? `:${node.loc.line}:${node.loc.col}` : ""}</Code> },
-            ...(node.moduleId ? [{ label: "Module", value: <NodeLink id={node.moduleId} /> }] : []),
-            ...(node.exportNames?.length ? [{ label: "Exports", value: node.exportNames.join(", ") }] : node.moduleId ? [{ label: "Exports", value: "not exported" }] : []),
-            { label: "Id", value: <Code fontSize="2xs">{node.id}</Code> },
-          ]}
-        />
-      </PanelSection>
 
       {node.props && node.props.length > 0 && (
         <PanelSection title="Props" count={node.props.length}>
-          <DataTable
-            rows={node.props}
-            rowKey={(p) => p.name}
-            columns={[
-              { key: "name", header: "Name", width: "30%", render: (p) => <Code fontSize="xs">{p.name}{p.optional ? "?" : ""}</Code> },
-              { key: "type", header: "Type", render: (p) => <Text fontFamily="mono">{p.type ?? "—"}</Text> },
-              { key: "default", header: "Default", width: "22%", render: (p) => <Text fontFamily="mono">{p.default ?? ""}</Text> },
-            ]}
-          />
-        </PanelSection>
-      )}
-
-      {sig && node.kind !== "module" && node.kind !== "external" && (
-        <PanelSection title="Signature">
-          <Code display="block" whiteSpace="pre-wrap" fontSize="xs" p="2">
-            {formatSignature(node)}
-          </Code>
-        </PanelSection>
-      )}
-
-      {node.hooksUsed && node.hooksUsed.length > 0 && (
-        <PanelSection title="Hooks" count={node.hooksUsed.length}>
-          <Stack gap="2">
-            {node.hooksUsed.map((h, i) => (
-              <Box key={i} fontSize="xs" fontFamily="mono">
-                <Text>
-                  {h.assignedTo && <Text as="span" color="fg.muted">const {h.assignedTo} = </Text>}
-                  {h.targetId && snapshot.nodes[h.targetId]?.kind === "hook" ? (
-                    <NodeLink id={h.targetId} label={h.hook} />
-                  ) : (
-                    <Text as="span" fontWeight="semibold" color="kind.hook.fg">{h.hook}</Text>
-                  )}
-                  ({h.args.join(", ")})
-                </Text>
-                {h.returnType && <Text color="fg.muted" pl="3">→ {h.returnType}</Text>}
-              </Box>
+          <Stack gap="0.5">
+            {node.props.map((p) => (
+              <CodeRow key={p.name}>
+                <CodeToken kind="name">{p.name}</CodeToken>
+                <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
+                <CodeToken kind="type">{p.type ?? "unknown"}</CodeToken>
+                {p.default && (
+                  <>
+                    <CodeToken kind="punct"> = </CodeToken>
+                    <CodeToken kind="value">{p.default}</CodeToken>
+                  </>
+                )}
+              </CodeRow>
             ))}
           </Stack>
         </PanelSection>
       )}
 
+      {node.signature && node.kind !== "module" && node.kind !== "external" && (
+        <PanelSection title={node.kind === "component" ? "Signature" : "Inputs & output"}>
+          <Signature node={node} />
+        </PanelSection>
+      )}
+
+      {node.hooksUsed && node.hooksUsed.length > 0 && (
+        <PanelSection title="Hooks" count={node.hooksUsed.length}>
+          <Stack gap="2.5">
+            {node.hooksUsed.map((h, i) => {
+              const local = h.targetId && snapshot.nodes[h.targetId]?.kind === "hook" ? h.targetId : undefined;
+              return (
+                <Box key={i}>
+                  <Flex align="center" gap="2" minW="0">
+                    <TagChip color="kind.hook.solid" mono onClick={local ? () => addNodes([local], { select: local, focus: local, anchor: node.id }) : undefined}>
+                      {h.hook}
+                    </TagChip>
+                    <Text fontFamily="mono" fontSize="xs" color="fg.muted" truncate title={h.args.join(", ")}>
+                      ({h.args.join(", ")})
+                    </Text>
+                  </Flex>
+                  {(h.assignedTo || h.returnType) && (
+                    <CodeRow indent>
+                      {h.assignedTo && <CodeToken kind="name">{h.assignedTo}</CodeToken>}
+                      {h.returnType && (
+                        <>
+                          <CodeToken kind="punct">{h.assignedTo ? ": " : "→ "}</CodeToken>
+                          <CodeToken kind="type">{h.returnType}</CodeToken>
+                        </>
+                      )}
+                    </CodeRow>
+                  )}
+                </Box>
+              );
+            })}
+          </Stack>
+        </PanelSection>
+      )}
+
+      {renders.length > 0 && (
+        <PanelSection title="Renders" count={renders.length}>
+          <Wrap gap="1.5">
+            {renders.map((id) => (
+              <NodeChip key={id} id={id} anchor={node.id} />
+            ))}
+          </Wrap>
+        </PanelSection>
+      )}
+
+      {declared.length > 0 && (
+        <PanelSection title="Declares" count={declared.length}>
+          <Wrap gap="1.5">
+            {declared.map((d) => (
+              <NodeChip key={d.id} id={d.id} anchor={node.id} suffix={d.exported ? undefined : "local"} />
+            ))}
+          </Wrap>
+        </PanelSection>
+      )}
+
       {node.functions && node.functions.length > 0 && (
         <PanelSection title="Functions" count={node.functions.length}>
-          <Stack gap="1.5">
+          <Stack gap="1">
             {node.functions.map((f, i) => (
-              <Text key={i} fontSize="xs" fontFamily="mono">
-                {f.isAsync && <Text as="span" color="fg.muted">async </Text>}
-                <Text as="span" fontWeight="semibold" color="kind.function.fg">{f.name}</Text>(
-                {f.params.map((p) => `${p.name}${p.type ? `: ${p.type}` : ""}`).join(", ")})
-                {f.returnType && <Text as="span" color="fg.muted">: {f.returnType}</Text>}
-                <Text as="span" color="fg.subtle"> :{f.loc.line}</Text>
-              </Text>
+              <CodeRow key={i} aside={`:${f.loc.line}`}>
+                {f.isAsync && <CodeToken kind="keyword">async </CodeToken>}
+                <CodeToken kind="name">{f.name}</CodeToken>
+                <CodeToken kind="punct">(</CodeToken>
+                <Params params={f.params} />
+                <CodeToken kind="punct">)</CodeToken>
+                {f.returnType && (
+                  <>
+                    <CodeToken kind="punct">: </CodeToken>
+                    <CodeToken kind="type">{f.returnType}</CodeToken>
+                  </>
+                )}
+              </CodeRow>
             ))}
           </Stack>
         </PanelSection>
@@ -180,60 +242,179 @@ export function DetailsPanel() {
         </PanelSection>
       )}
 
-      <PanelSection title="Parents" count={relations.parents.length} defaultOpen={relations.parents.length <= 30}>
+      <PanelSection title="Used by" count={relations.parents.length} defaultOpen={relations.parents.length <= 30}>
         <RelationList edges={relations.parents} side="from" />
       </PanelSection>
-      <PanelSection title="Children" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
+      <PanelSection title="Uses" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
         <RelationList edges={relations.children} side="to" />
+      </PanelSection>
+
+      <PanelSection title="Details" defaultOpen={false}>
+        <Stack gap="3">
+          <Box>
+            <Eyebrow>Exports</Eyebrow>
+            <Text fontSize="sm" mt="1" color={node.exportNames?.length ? "fg" : "fg.muted"}>
+              {node.exportNames?.length ? node.exportNames.join(", ") : "not exported"}
+            </Text>
+          </Box>
+          <Box>
+            <Eyebrow>Id</Eyebrow>
+            <Text fontFamily="mono" fontSize="xs" color="fg.muted" mt="1" wordBreak="break-all">
+              {node.id}
+            </Text>
+          </Box>
+        </Stack>
       </PanelSection>
     </Panel>
   );
 }
 
-function formatSignature(n: GraphNode): string {
-  const sig = n.signature!;
-  const params = sig.params.map((p) => `  ${p.name}${p.optional && !p.default ? "?" : ""}${p.type ? `: ${p.type}` : ""}${p.default ? ` = ${p.default}` : ""}`);
-  const head = `${n.isAsync ? "async " : ""}${n.name}(`;
-  return params.length ? `${head}\n${params.join(",\n")}\n): ${sig.returnType ?? "?"}` : `${head}): ${sig.returnType ?? "?"}`;
+/** One line of code tokens, wrapping softly; optional right-aligned note. */
+function CodeRow({ children, aside, indent }: { children: ReactNode; aside?: string; indent?: boolean }) {
+  return (
+    <Flex
+      align="baseline"
+      gap="2"
+      fontFamily="mono"
+      fontSize="xs"
+      lineHeight="1.6"
+      px="2"
+      py="0.5"
+      ml={indent ? "2" : undefined}
+      rounded="l1"
+      transition="background 150ms ease"
+      _hover={{ bg: "bg.subtle" }}
+    >
+      <Box flex="1" minW="0" wordBreak="break-word">
+        {children}
+      </Box>
+      {aside && (
+        <Text as="span" color="fg.subtle" flexShrink={0}>
+          {aside}
+        </Text>
+      )}
+    </Flex>
+  );
 }
 
-function NodeLink({ id, label }: { id: string; label?: string }) {
-  const snapshot = useExplorer((s) => s.snapshot);
-  const { addNodes } = useExplorer.getState();
-  const n = snapshot?.nodes[id];
-  if (!n) return <Text as="span">{label ?? id}</Text>;
+function Params({ params }: { params: ParamDef[] }) {
   return (
-    <Link
-      as="button"
-      color={`kind.${n.kind}.fg`}
-      fontWeight="semibold"
-      onClick={() => addNodes([id], { select: id, focus: id, anchor: useExplorer.getState().selectedId })}
+    <>
+      {params.map((p, i) => (
+        <span key={i}>
+          {i > 0 && <CodeToken kind="punct">, </CodeToken>}
+          <CodeToken kind="name">{p.name}</CodeToken>
+          {p.type && (
+            <>
+              <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
+              <CodeToken kind="type">{p.type}</CodeToken>
+            </>
+          )}
+          {p.default && (
+            <>
+              <CodeToken kind="punct"> = </CodeToken>
+              <CodeToken kind="value">{p.default}</CodeToken>
+            </>
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function Signature({ node }: { node: GraphNode }) {
+  const sig = node.signature!;
+  return (
+    <Box bg="syntax.bg" rounded="l2" px="3" py="2.5" fontFamily="mono" fontSize="xs" lineHeight="1.7" borderWidth="1px" borderColor="border.muted">
+      {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
+      <CodeToken kind="name">{node.name}</CodeToken>
+      <CodeToken kind="punct">(</CodeToken>
+      {sig.params.length > 0 && (
+        <Box pl="4">
+          {sig.params.map((p, i) => (
+            <Box key={i} wordBreak="break-word">
+              <Params params={[p]} />
+              {i < sig.params.length - 1 && <CodeToken kind="punct">,</CodeToken>}
+            </Box>
+          ))}
+        </Box>
+      )}
+      <CodeToken kind="punct">): </CodeToken>
+      <CodeToken kind="type">{sig.returnType ?? "unknown"}</CodeToken>
+    </Box>
+  );
+}
+
+/** A related element as a tinted chip in its kind's colour; click adds/focuses it. */
+function NodeChip({ id, anchor, suffix }: { id: string; anchor: string; suffix?: string }) {
+  const snapshot = useExplorer((s) => s.snapshot);
+  const n = snapshot?.nodes[id];
+  if (!n) return null;
+  const Icon = KIND_META[n.kind].icon;
+  return (
+    <TagChip
+      color={`kind.${n.kind}.solid`}
+      title={n.filePath}
+      onClick={() => useExplorer.getState().addNodes([id], { select: id, focus: id, anchor })}
     >
-      {label ?? n.name}
-    </Link>
+      <Icon size={12} strokeWidth={2.4} />
+      {n.name}
+      {suffix && (
+        <Text as="span" opacity={0.6} fontWeight="normal">
+          · {suffix}
+        </Text>
+      )}
+    </TagChip>
   );
 }
 
 function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
   const snapshot = useExplorer((s) => s.snapshot);
-  if (!edges.length) return <Text fontSize="xs" color="fg.muted">None</Text>;
+  const selectedId = useExplorer((s) => s.selectedId);
+  if (!edges.length)
+    return (
+      <Text fontSize="sm" color="fg.muted">
+        Nothing
+      </Text>
+    );
   return (
-    <Stack gap="1.5">
+    <Stack gap="1">
       {edges.map((e, i) => {
         const other = snapshot?.nodes[e[side]];
+        if (!other) return null;
+        const Icon = KIND_META[other.kind].icon;
         return (
-          <Flex key={i} gap="2" align="start" fontSize="xs">
-            <Badge size="xs" variant="subtle" flexShrink={0} minW="16" justifyContent="center">
-              {e.kind === "imports" && e.importType && e.importType !== "static" ? e.importType : e.kind}
-            </Badge>
-            <Box minW="0">
-              <NodeLink id={e[side]} />
-              {other && other.kind !== "external" && (
-                <Text color="fg.subtle" fontFamily="mono" truncate>{other.filePath}</Text>
-              )}
-              {e.specifiers && <Text color="fg.muted" fontFamily="mono">{e.specifiers.join(", ")}</Text>}
+          <Flex
+            key={i}
+            as="button"
+            gap="2.5"
+            align="center"
+            textAlign="left"
+            px="2"
+            py="1.5"
+            mx="-2"
+            rounded="l2"
+            transition="background 150ms ease"
+            _hover={{ bg: "bg.subtle" }}
+            onClick={() => useExplorer.getState().addNodes([other.id], { select: other.id, focus: other.id, anchor: selectedId })}
+          >
+            <KindTile kind={other.kind} size={26}>
+              <Icon size={13} strokeWidth={2.4} />
+            </KindTile>
+            <Box flex="1" minW="0">
+              <Flex align="center" gap="2" minW="0">
+                <Text fontSize="sm" fontWeight="medium" truncate>
+                  {other.name}
+                </Text>
+                <TagChip color={relationToken(e)}>{relationWord(e)}</TagChip>
+              </Flex>
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
+                {e.specifiers?.length ? e.specifiers.join(", ") : other.kind === "external" ? "library" : other.filePath}
+              </Text>
               {e.conditions && (
-                <Text color="orange.fg" fontFamily="mono">when {e.conditions.map(formatCondition).join(" ∧ ")}</Text>
+                <Text fontSize="xs" color="syntax.literal" fontFamily="mono" truncate title={e.conditions.map(formatCondition).join(" ∧ ")}>
+                  when {e.conditions.map(formatCondition).join(" ∧ ")}
+                </Text>
               )}
             </Box>
           </Flex>

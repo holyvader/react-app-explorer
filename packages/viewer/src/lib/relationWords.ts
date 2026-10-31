@@ -27,3 +27,21 @@ export function relationWord(e: GraphEdge): string {
       return "declares";
   }
 }
+
+/** The relation's colour token (same colour as its edge and label on the canvas). */
+export function relationToken(e: GraphEdge): string {
+  switch (e.kind) {
+    case "imports":
+      return e.importType === "type-only" ? "relation.importsMuted" : "relation.imports";
+    case "renders":
+      return "relation.renders";
+    case "usesHook":
+      return "relation.usesHook";
+    case "invokes":
+      return "relation.invokes";
+    case "invokesAction":
+      return "relation.invokesAction";
+    case "declares":
+      return "relation.declares";
+  }
+}

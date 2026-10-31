@@ -35,6 +35,12 @@ const config = defineConfig({
           950: { value: "#142c35" },
         },
       },
+      // Softer, more modern corners across every component.
+      radii: {
+        l1: { value: "6px" },
+        l2: { value: "8px" },
+        l3: { value: "12px" },
+      },
       fonts: {
         body: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
         heading: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
@@ -61,6 +67,22 @@ const config = defineConfig({
           // "imports" edges: dark grey, distinct from the lighter module frames.
           imports: { value: { _light: "{colors.gray.700}", _dark: "{colors.gray.300}" } },
           importsMuted: { value: { _light: "{colors.gray.500}", _dark: "{colors.gray.500}" } },
+          // Same colours as the edges and their labels on the canvas (sidebar badges reuse them).
+          renders: { value: "{colors.component.500}" },
+          usesHook: { value: "{colors.purple.500}" },
+          invokes: { value: "{colors.teal.500}" },
+          invokesAction: { value: "{colors.orange.500}" },
+          declares: { value: "{colors.gray.500}" },
+        },
+        // Code tokens (props, signatures, hooks) — shared by the node tooltip and the sidebar.
+        // Note: no token may be called `value` — Chakra reads any object with a `value` key as a token.
+        syntax: {
+          name: { value: { _light: "{colors.gray.900}", _dark: "{colors.gray.50}" } },
+          type: { value: { _light: "#0f766e", _dark: "{colors.teal.300}" } },
+          literal: { value: { _light: "#b45309", _dark: "{colors.orange.300}" } },
+          keyword: { value: { _light: "{colors.purple.600}", _dark: "{colors.purple.300}" } },
+          punct: { value: { _light: "{colors.gray.400}", _dark: "{colors.gray.500}" } },
+          bg: { value: { _light: "{colors.gray.50}", _dark: "{colors.gray.900}" } },
         },
         canvas: {
           bg: { value: { _light: "{colors.gray.50}", _dark: "{colors.gray.950}" } },
