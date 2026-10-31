@@ -50,8 +50,10 @@ bun run build && tsc -p packages/viewer --noEmit && bun run lint
 ## Test headlessly
 ```bash
 bun run scan packages/fixtures/next-app
-RAE_SNAPSHOTS=packages/fixtures/next-app/.explorer/snapshots bun run dev -- --port 5199 &
+# Dedicated port + PID: the user may have their own `bun run dev` running.
+(cd packages/viewer && RAE_SNAPSHOTS=../fixtures/next-app/.explorer/snapshots node_modules/.bin/vite --port 5199 --strictPort > /tmp/rae-test.log 2>&1 & echo $! > /tmp/rae-test.pid)
 PW_CHROMIUM_PATH=~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell \
   bun --cwd packages/viewer e2e [screenshotDir]
 ```
+Afterwards stop **only that server**: `kill "$(cat /tmp/rae-test.pid)"`. Never `pkill -f "bun --filter @rae/viewer dev"` or `pkill -f vite`: that pattern matches the user's own `bun run dev` and kills their server.
 Pass a screenshot dir and look at the PNG to check layout visually. In dev, `window.__rae` is the zustand store: tests can call `__rae.getState().addNodes([...])` to build big canvases, and you can profile with CDP `Profiler.*` through `page.context().newCDPSession(page)`. Extend `e2e/smoke.ts` when adding user flows. Use accessible names (`getByRole(..., { name })`); every icon button has a label through `ActionIconButton`.
