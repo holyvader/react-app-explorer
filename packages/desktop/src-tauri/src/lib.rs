@@ -16,9 +16,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Sidecar(Mutex::new(None)))
         .setup(|app| {
-            // TypeScript 7's native binary ships as a second sidecar, next to the app's executable.
-            let exe_dir = std::env::current_exe()?.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-            let tsgo = exe_dir.join(format!("rae-tsgo{}", std::env::consts::EXE_SUFFIX));
+            // TypeScript 7's native binary ships as a resource folder, with the lib.*.d.ts files it needs.
+            let tsgo = app.path().resource_dir()?.join("tsgo").join(format!("tsc{}", std::env::consts::EXE_SUFFIX));
             let snapshots = app.path().app_data_dir()?.join("snapshots");
 
             let (mut events, child) = app

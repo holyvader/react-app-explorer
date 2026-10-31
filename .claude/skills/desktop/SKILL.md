@@ -15,10 +15,11 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
 - `packages/server/build.ts` — builds the viewer, generates `src/embedded.generated.ts`
   (git-ignored; one `with { type: "file" }` import per dist file), compiles server + scanner worker
   into one executable and copies TypeScript 7's native `tsc` next to it:
-  `packages/desktop/src-tauri/binaries/rae-server-<rust triple>` and `rae-tsgo-<rust triple>`.
+  `packages/desktop/src-tauri/binaries/rae-server-<rust triple>` and `binaries/tsgo/` (`tsc` + all
+  `lib.*.d.ts`), bundled as the app resource folder `tsgo/`.
 - `packages/desktop/src-tauri` — Rust shell (`src/lib.rs`): spawns the `rae-server` sidecar
   (`tauri-plugin-shell`) with `--snapshots <app data dir>/snapshots` and
-  `RAE_TSGO_PATH=<exe dir>/rae-tsgo`, waits for the URL line, navigates the `main` window there
+  `RAE_TSGO_PATH=<resource dir>/tsgo/tsc`, waits for the URL line, navigates the `main` window there
   (it starts on `loading/index.html`), kills the sidecar on exit. The page gets **no Tauri
   permissions** (`capabilities/default.json` is empty) — it only speaks HTTP to the sidecar.
 
@@ -27,9 +28,14 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   `build.ts`'s plugin rewrites `require('@oxc-*/binding-<platform>')` **and** the
   `require('…/package.json').version` checks (otherwise the binding is rejected with
   "Cannot find native binding").
-- TypeScript 7's Go binary can't run from inside a Bun executable → it ships as a second sidecar,
-  and the scanner takes its path from `RAE_TSGO_PATH` (`types/tsgo.ts`). Its lib `.d.ts` files are
-  built into the binary, so nothing else is needed.
+- TypeScript 7's Go binary can't run from inside a Bun executable → it ships as a resource folder,
+  and the scanner takes its path from `RAE_TSGO_PATH` (`types/tsgo.ts`). The npm build of tsgo does
+  **not** embed its lib files: without `lib.*.d.ts` next to it, it panics on the first request.
+- The tsgo async client never rejects pending requests when its process dies, which used to hang
+  the scan (the UI showed "scanning" forever). `applyTypes` watches the child and races its exit, so a
+  crash becomes a "type pass skipped" warning and the scan finishes without types.
+- Test packaged scans on a folder with **no `.explorer/cache`**: cached files skip parsing and the
+  type pass, which hid the missing lib files (the original bug).
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the
@@ -41,7 +47,7 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   window. Quick macOS-only bundle: `bunx tauri build --bundles app` in packages/desktop.
 - Rust comes from rustup in `~/.cargo` (installed without touching the shell profile); the desktop
   scripts prepend `~/.cargo/bin` to PATH.
-- Test the sidecar alone: `RAE_TSGO_PATH=…/rae-tsgo-<triple> …/rae-server-<triple> --port 5288 --snapshots <dir>`
+- Test the sidecar alone: `RAE_TSGO_PATH=…/binaries/tsgo/tsc …/rae-server-<triple> --port 5288 --snapshots <dir>`
   (never 5173 — that's the user's dev server).
 - **Other platforms:** build on that OS (CI matrix) — Tauri bundles natively per platform, and the
   sidecar needs that platform's `@oxc-parser/binding-*`, `@oxc-resolver/binding-*` and

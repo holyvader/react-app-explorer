@@ -2,7 +2,7 @@
 /**
  * Builds the desktop app's sidecars into packages/desktop/src-tauri/binaries/:
  *   rae-server-<rust triple>  one executable: the local server + scanner + the built viewer
- *   rae-tsgo-<rust triple>    TypeScript 7's native binary (it can't run from inside a Bun executable)
+ *   tsgo/                     TypeScript 7's native binary + lib.*.d.ts (it can't run from inside a Bun executable)
  *
  *   bun run build [--target bun-darwin-arm64|bun-darwin-x64|bun-linux-x64|bun-linux-arm64|bun-windows-x64] [--skip-viewer]
  *
@@ -10,7 +10,7 @@
  * (@oxc-parser/binding-*, @oxc-resolver/binding-*, @typescript/typescript-*), e.g. with
  * `bun install --os=linux --cpu=x64` on a CI machine for that platform.
  */
-import { copyFileSync, chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { copyFileSync, chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -108,10 +108,15 @@ if (!out.success) {
   throw new Error("server compile failed");
 }
 
-// 5. TypeScript 7's native binary, as a second sidecar
+// 5. TypeScript 7's native binary + its lib.*.d.ts files (this tsgo build doesn't embed them and
+//    panics without them next to the executable) → a resource folder of the app.
 const tsPkg = pkgDir(scanner, `@typescript/typescript-${platform.replace(/-(gnu|msvc)$/, "")}`);
-const tsgoOut = join(outDir, `rae-tsgo-${triple}${exe}`);
-copyFileSync(join(tsPkg, "lib", `tsc${exe}`), tsgoOut);
-chmodSync(tsgoOut, 0o755);
+const tsgoDir = join(outDir, "tsgo");
+rmSync(tsgoDir, { recursive: true, force: true });
+mkdirSync(tsgoDir, { recursive: true });
+const libFiles = readdirSync(join(tsPkg, "lib")).filter((f) => f.startsWith("lib.") && f.endsWith(".d.ts"));
+for (const f of [`tsc${exe}`, ...libFiles]) copyFileSync(join(tsPkg, "lib", f), join(tsgoDir, f));
+chmodSync(join(tsgoDir, `tsc${exe}`), 0o755);
+rmSync(join(outDir, `rae-tsgo-${triple}${exe}`), { force: true }); // the old layout
 
-console.log(`✔ ${relative(repo, serverOut)}\n✔ ${relative(repo, tsgoOut)}`);
+console.log(`✔ ${relative(repo, serverOut)}\n✔ ${relative(repo, tsgoDir)}/ (tsc + ${libFiles.length} lib files)`);

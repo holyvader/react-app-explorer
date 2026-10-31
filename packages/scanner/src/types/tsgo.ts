@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { PropDef } from "@rae/schema";
 import { API, SignatureKind, SymbolFlags, type Type } from "typescript/async";
 import type { DeclExtract, FileExtract, RawFn, RawHook } from "../extract/types.ts";
@@ -19,14 +21,52 @@ function clip(s: string): string {
   return s.length > MAX_TYPE ? s.slice(0, MAX_TYPE - 1) + "…" : s;
 }
 
-async function openChecker(rootDir: string, files: string[], tsconfig?: string) {
-  // Packaged apps ship the native TypeScript binary next to the executable (it can't run from inside
-  // a compiled Bun binary): RAE_TSGO_PATH points at it. Otherwise the typescript package finds its own.
-  const api = new API({ cwd: rootDir, ...(process.env.RAE_TSGO_PATH ? { tsserverPath: process.env.RAE_TSGO_PATH } : {}) });
+async function openChecker(api: API, files: string[], tsconfig?: string) {
   const snapshot = await api.createSnapshot(tsconfig ? { openProjects: [tsconfig] } : { openFiles: files });
   const project = snapshot.getProjects()[0];
   if (!project) throw new Error("tsgo: no project loaded");
-  return { api, snapshot, checker: project.checker };
+  return { snapshot, checker: project.checker };
+}
+
+/**
+ * The tsgo client doesn't reject pending requests when its process dies (a crash would leave the
+ * scan waiting forever), so watch the child and fail the type pass when it exits.
+ */
+function watchProcess(api: API): { died: Promise<never>; stop: () => void } {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let child: import("node:child_process").ChildProcess | undefined;
+  let onExit: ((code: number | null, signal: string | null) => void) | undefined;
+  const died = new Promise<never>((_, reject) => {
+    onExit = (code, signal) => reject(new Error(`TypeScript checker exited unexpectedly (${signal ?? `code ${code}`})`));
+    // the process is spawned lazily on the first request: pick it up once it exists
+    timer = setInterval(() => {
+      child = (api as unknown as { client?: { process?: import("node:child_process").ChildProcess } }).client?.process;
+      if (!child) return;
+      clearInterval(timer);
+      if (child.exitCode !== null || child.signalCode !== null) onExit!(child.exitCode, child.signalCode);
+      else child.once("exit", onExit!);
+    }, 50);
+  });
+  died.catch(() => {}); // only observed through Promise.race
+  return {
+    died,
+    stop: () => {
+      clearInterval(timer);
+      if (child && onExit) child.off("exit", onExit);
+    },
+  };
+}
+
+/**
+ * Packaged apps ship TypeScript's native binary outside the Bun executable (it can't run from inside
+ * one): RAE_TSGO_PATH points at it. Its lib.*.d.ts files must sit next to it — that build of tsgo
+ * doesn't embed them and crashes without them.
+ */
+function tsgoPath(): string | undefined {
+  const exe = process.env.RAE_TSGO_PATH;
+  if (!exe) return undefined;
+  if (!existsSync(join(dirname(exe), "lib.d.ts"))) throw new Error(`TypeScript's lib files are missing next to ${exe}`);
+  return exe;
 }
 
 export interface TypesResult {
@@ -43,8 +83,28 @@ export async function applyTypes(
   const res: TypesResult = { queried: 0, skipped: files.length - todo.length, failed: 0 };
   if (!todo.length) return res;
 
-  const { api, snapshot, checker: mainChecker } = await openChecker(
-    opts.rootDir,
+  const exe = tsgoPath();
+  const api = new API({ cwd: opts.rootDir, ...(exe ? { tsserverPath: exe } : {}) });
+  const watch = watchProcess(api);
+  try {
+    return await Promise.race([runTypes(api, todo, res, opts), watch.died]);
+  } finally {
+    watch.stop();
+    // after a crash the client can't close cleanly: don't wait for it
+    void api.close().catch(() => {});
+    const child = (api as unknown as { client?: { process?: import("node:child_process").ChildProcess } }).client?.process;
+    if (child && child.exitCode === null) setTimeout(() => child.exitCode === null && child.kill(), 2000).unref?.();
+  }
+}
+
+async function runTypes(
+  api: API,
+  todo: FileExtract[],
+  res: TypesResult,
+  opts: { tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void },
+): Promise<TypesResult> {
+  const { snapshot, checker: mainChecker } = await openChecker(
+    api,
     todo.map((f) => f.absPath),
     opts.tsconfig,
   );
@@ -74,7 +134,6 @@ export async function applyTypes(
       opts.onWarn?.(`types: fallback projects failed: ${(e as Error).message}`);
     }
   }
-  await api.close();
   return res;
 }
 
