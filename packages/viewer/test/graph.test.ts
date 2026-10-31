@@ -1,0 +1,152 @@
+import { describe, expect, test } from "bun:test";
+import type { Snapshot } from "@rae/schema";
+import { scan } from "../../scanner/src/scan.ts";
+import { drawnGraph } from "../src/graph/drawn.ts";
+import { CARD_HEIGHT, layoutAll, PADDING, type PlacedElement } from "../src/graph/layout.ts";
+import { DEFAULT_EXCLUDED, packageOf } from "../src/graph/packages.ts";
+import { absoluteRect, movedTo, placeLocally } from "../src/graph/placement.ts";
+
+// A fresh snapshot of the Next.js fixture (no cache, no types: fast and independent of files on disk).
+let cached: Promise<Snapshot> | undefined;
+const loadSnapshot = (): Promise<Snapshot> =>
+  (cached ??= scan(new URL("../../fixtures/next-app", import.meta.url).pathname, { cache: false, types: false }));
+
+const ALL = { imports: true, declares: true, renders: true, hooks: true, invokes: true };
+const opts = (o: Partial<{ folders: boolean; excluded: string[]; hideAll: boolean }> = {}) => ({
+  enabled: ALL,
+  folders: o.folders ?? true,
+  filter: { excluded: new Set(o.excluded ?? DEFAULT_EXCLUDED), hideAll: o.hideAll ?? false },
+});
+
+const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+describe("packages", () => {
+  test("packageOf", () => {
+    expect(packageOf("react")).toBe("react");
+    expect(packageOf("next/link")).toBe("next");
+    expect(packageOf("@tanstack/react-query/devtools")).toBe("@tanstack/react-query");
+    expect(packageOf("node:fs")).toBe("node");
+  });
+});
+
+describe("drawnGraph", async () => {
+  const s = await loadSnapshot();
+
+  test("adding a declaration draws just that declaration", () => {
+    const g = drawnGraph(s, ["components/TodoItem.tsx#TodoItem"], opts());
+    expect(g.elements.map((e) => e.id)).toEqual(["components/TodoItem.tsx#TodoItem"]);
+    expect(g.elements[0]!.parent).toBeNull();
+  });
+
+  test("a declaration sits in its file module when that module is drawn, inside its folder", () => {
+    const g = drawnGraph(s, ["components/TodoItem.tsx", "components/TodoItem.tsx#TodoItem"], opts());
+    const byId = new Map(g.elements.map((e) => [e.id, e]));
+    expect(byId.get("components/TodoItem.tsx#TodoItem")!.parent).toBe("components/TodoItem.tsx");
+    expect(byId.get("components/TodoItem.tsx")!.parent).toBe("dir:components");
+    expect(byId.get("dir:components")!.parent).toBeNull();
+  });
+
+  test("folder chains holding one folder are compressed", () => {
+    const g = drawnGraph(s, ["app/dashboard/page.tsx"], opts());
+    const dir = g.elements.find((e) => e.kind === "folder")!;
+    expect(dir.id).toBe("dir:app/dashboard");
+    expect(dir.name).toBe("app/dashboard");
+    // Adding a file in app/ splits the chain; the deep folder keeps its id.
+    const g2 = drawnGraph(s, ["app/dashboard/page.tsx", "app/page.tsx"], opts());
+    const deep = g2.elements.find((e) => e.id === "dir:app/dashboard")!;
+    expect(deep.name).toBe("dashboard");
+    expect(deep.parent).toBe("dir:app");
+  });
+
+  test("without folders, files are top level", () => {
+    const g = drawnGraph(s, ["components/TodoItem.tsx"], opts({ folders: false }));
+    expect(g.elements.find((e) => e.id === "components/TodoItem.tsx")!.parent).toBeNull();
+    expect(g.elements.some((e) => e.kind === "folder")).toBe(false);
+  });
+
+  test("library filter: react hidden by default, others shown unless hideAll", () => {
+    expect(drawnGraph(s, ["ext:react"], opts()).elements).toHaveLength(0);
+    expect(drawnGraph(s, ["ext:clsx"], opts()).elements).toHaveLength(1);
+    expect(drawnGraph(s, ["ext:clsx"], opts({ hideAll: true })).elements).toHaveLength(0);
+    expect(drawnGraph(s, ["ext:react"], opts({ excluded: [] })).elements).toHaveLength(1);
+  });
+
+  test("containment is not drawn as edges", () => {
+    const g = drawnGraph(s, ["components/TodoItem.tsx", "components/TodoItem.tsx#TodoItem"], opts());
+    expect(g.relations.some((r) => r.edge.kind === "declares")).toBe(false);
+  });
+});
+
+describe("placement", async () => {
+  const s = await loadSnapshot();
+  const visible = ["app/page.tsx", "app/page.tsx#HomePage", "components/TodoList.tsx", "components/TodoList.tsx#TodoList"];
+  const g1 = drawnGraph(s, visible, opts());
+  const p1 = await layoutAll(g1);
+
+  test("ELK sizes frames around what they hold", () => {
+    const file = p1.find((p) => p.element.id === "app/page.tsx")!;
+    const decl = p1.find((p) => p.element.id === "app/page.tsx#HomePage")!;
+    expect(file.holds).toBe(true);
+    expect(decl.x).toBeGreaterThanOrEqual(PADDING.left);
+    expect(decl.y).toBeGreaterThanOrEqual(PADDING.top);
+    expect(file.height).toBeGreaterThanOrEqual(decl.y + CARD_HEIGHT + PADDING.bottom - 1);
+  });
+
+  test("adding a sibling grows the frame and keeps the rest in place", () => {
+    const g2 = drawnGraph(s, [...visible, "components/TodoItem.tsx"], opts());
+    const p2 = placeLocally(p1, g2, "components/TodoList.tsx#TodoList")!;
+    expect(p2).not.toBeNull();
+    // The page file didn't move.
+    expect(absoluteRect(p2, "app/page.tsx")).toEqual(absoluteRect(p1, "app/page.tsx")!);
+    // New file landed inside the components folder, which grew around it.
+    const folder = absoluteRect(p2, "dir:components")!;
+    const item = absoluteRect(p2, "components/TodoItem.tsx")!;
+    expect(item.x).toBeGreaterThanOrEqual(folder.x);
+    expect(item.x + item.width).toBeLessThanOrEqual(folder.x + folder.width);
+    expect(item.y + item.height).toBeLessThanOrEqual(folder.y + folder.height);
+    // Siblings at the same level never overlap.
+    const tops = p2.filter((p) => p.element.parent === null).map((p) => absoluteRect(p2, p.element.id)!);
+    for (let i = 0; i < tops.length; i++) for (let j = i + 1; j < tops.length; j++) expect(overlap(tops[i]!, tops[j]!)).toBe(false);
+  });
+
+  test("a declaration without its file drawn goes into the nearest drawn folder", () => {
+    const g = drawnGraph(s, ["components/TodoList.tsx", "components/TodoItem.tsx#TodoItem"], opts());
+    expect(g.elements.find((e) => e.id === "components/TodoItem.tsx#TodoItem")!.parent).toBe("dir:components");
+  });
+
+  test("a card dropped into another frame lands just outside it", () => {
+    // TodoList's file module dropped onto the app/ page frame → stays out of it.
+    const target = absoluteRect(p1, "app/page.tsx")!;
+    const moved = movedTo(p1, g1, "components/TodoList.tsx", { x: target.x + 10, y: target.y + 10 })!;
+    expect(moved).not.toBeNull();
+    const file = moved.find((p) => p.element.id === "components/TodoList.tsx")!;
+    expect(file.element.parent).toBe("dir:components");
+    const abs = absoluteRect(moved, "components/TodoList.tsx")!;
+    const page = absoluteRect(moved, "app/page.tsx")!;
+    expect(overlap(abs, page)).toBe(false);
+  });
+
+  test("moving a child refits its parent (grows, and shrinks back)", () => {
+    const decl = "components/TodoList.tsx#TodoList";
+    const before = absoluteRect(p1, "components/TodoList.tsx")!;
+    const d = absoluteRect(p1, decl)!;
+    const grown = movedTo(p1, g1, decl, { x: d.x + 300, y: d.y + 200 })!;
+    const after = absoluteRect(grown, "components/TodoList.tsx")!;
+    expect(after.width).toBeGreaterThan(before.width);
+    expect(after.height).toBeGreaterThan(before.height);
+    expect(after.x).toBe(before.x); // top-left corner stays
+    const back = movedTo(grown, g1, decl, d)!;
+    expect(absoluteRect(back, "components/TodoList.tsx")!.width).toBe(before.width);
+  });
+
+  test("removing a declaration leaves the frame a card again", () => {
+    const g3 = drawnGraph(s, ["app/page.tsx", "components/TodoList.tsx", "components/TodoList.tsx#TodoList"], opts());
+    const p3 = placeLocally(p1, g3, null)!;
+    const file = p3.find((p) => p.element.id === "app/page.tsx")!;
+    expect(file.holds).toBe(false);
+    expect(file.height).toBe(CARD_HEIGHT);
+  });
+});
+
+export type { PlacedElement };

@@ -3,21 +3,20 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "scan": "bun packages/scanner/src/cli.ts",
+    "dev": "bun --filter @rae/viewer dev",
+    "build": "bun --filter @rae/viewer build",
+    "test": "bun test packages/scanner packages/viewer/test",
     "lint": "oxlint",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "typecheck": "tsc -p packages/schema --noEmit && tsc -p packages/scanner --noEmit && tsc -p packages/design-system --noEmit && tsc -p packages/viewer --noEmit"
   },
   "devDependencies": {
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@types/bun": "latest",
     "oxlint": "^1.89.0",
-    "vite": "^8.3.5"
+    "typescript": "7.1.0-beta"
   }
 }

@@ -1,8 +1,27 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "oxc"],
+  "plugins": ["react", "typescript", "oxc", "import"],
+  "ignorePatterns": ["**/dist/**", "**/.explorer/**", "packages/fixtures/**"],
   "rules": {
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["packages/viewer/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@chakra-ui/*", "@emotion/*", "lucide-react", "@ark-ui/*"],
+                "message": "UI comes from @rae/design-system (icons: @rae/design-system/icons). Add/wrap the component there instead."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

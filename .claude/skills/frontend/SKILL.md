@@ -1,0 +1,55 @@
+---
+name: frontend
+description: General conventions for the viewer app (packages/viewer, Vite + React 19 + zustand) — file layout, state patterns, import rules, snapshot loading, running and testing it headlessly. Use for any change in packages/viewer that isn't specifically about React Flow internals or the design system.
+---
+
+# Viewer frontend (`packages/viewer`)
+
+## Layout
+```
+vite.config.ts / vite-plugin-snapshots.ts   dev API (dir = RAE_SNAPSHOTS):
+                        GET /api/snapshots, /api/snapshots/:file · GET /api/fs?path= (folder picker)
+                        POST /api/scan {path, types} → spawns `bun packages/scanner/src/cli.ts <path> --out <dir>`
+                        (the dev server runs under Node, the scanner needs Bun; RAE_BUN overrides the binary,
+                        RAE_BROWSE_ROOT the initial picker folder). Dev-only: it exposes the local filesystem.
+src/main.tsx            DesignSystemProvider + App
+src/App.tsx             shell: Toolbar, Canvas, DetailsPanel, SearchModal, ScanModal, LibrariesModal, ConfirmExpansion; ⌘K opens search
+src/store.ts            zustand store (single source of UI state)
+src/graph/              pure graph logic (drawn graph, relations, ELK layout, placement engine, library filter), no React; tests in test/
+src/lib/                pure helpers (api, conditions formatting, editor URLs, kind metadata)
+src/components/         React components
+e2e/smoke.ts            headless smoke test (playwright-core)
+```
+
+## Import rules (lint-enforced)
+- UI comes from `@rae/design-system`, icons from `@rae/design-system/icons`.
+- **Never** import `@chakra-ui/*`, `@emotion/*`, `lucide-react` or `@ark-ui/*` in the viewer. `no-restricted-imports` in `.oxlintrc.json` fails the lint. If a component is missing, add it to the design system first (design-system skill).
+- Otherwise import only from the viewer's own `src/`, `@rae/schema` (types), `@xyflow/react`, and small libs (`zustand`, `fuse.js`, `@dagrejs/dagre`).
+
+## State
+- Read with granular selectors: `useExplorer((s) => s.visible)`. Never select the whole store.
+- Call actions via `useExplorer.getState().action` (stable, no re-render), or select them individually.
+- Keep derived data in `useMemo` near its use (e.g. Fuse index, relations). Store only the minimal state.
+- No `setState` in effects. Derive during render, or update from the event handler.
+
+## Data
+- 3rd-party filter: `excluded` packages (default `react`, `react-dom`) and `hideAllLibraries` live in the store and persist in localStorage. Anything listing nodes or relations must respect it: use `relationFilterOf(state)` or `isFiltered(node, …)`.
+- Types come from `@rae/schema`. The snapshot is read-only in the UI.
+- Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
+- "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
+
+## Run
+```bash
+bun run scan <path-to-app>                                 # writes <app>/.explorer/snapshots
+RAE_SNAPSHOTS=<app>/.explorer/snapshots bun run dev        # http://localhost:5173
+bun run build && tsc -p packages/viewer --noEmit && bun run lint
+```
+
+## Test headlessly
+```bash
+bun run scan packages/fixtures/next-app
+RAE_SNAPSHOTS=packages/fixtures/next-app/.explorer/snapshots bun run dev -- --port 5199 &
+PW_CHROMIUM_PATH=~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell \
+  bun --cwd packages/viewer e2e [screenshotDir]
+```
+Pass a screenshot dir and look at the PNG to check layout visually. In dev, `window.__rae` is the zustand store: tests can call `__rae.getState().addNodes([...])` to build big canvases, and you can profile with CDP `Profiler.*` through `page.context().newCDPSession(page)`. Extend `e2e/smoke.ts` when adding user flows. Use accessible names (`getByRole(..., { name })`); every icon button has a label through `ActionIconButton`.

@@ -1,16 +1,44 @@
-# React + Vite
+# React App Explorer
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Static analysis + interactive diagram for React / Next.js codebases.
 
-Currently, two official plugins are available:
+- **`packages/scanner`**: a Bun CLI. It uses oxc (Rust) for parsing and resolution and TypeScript 7 (Go, `tsgo`) for types. It scans a folder or an entry file and records:
+  - server and client components, server actions, hooks and functions
+  - static, lazy and `next/dynamic` imports
+  - the JSX render tree, including native elements, with the conditions each element needs to render
+  - props, signatures, hooks with their return types, and file locations
+  
+  Output is a timestamped JSON snapshot.
+- **`packages/viewer`**: Vite + React Flow app. The canvas starts empty. Use **Add** (⌘K) to search for any scanned node, then expand parents or children step by step or all the way to the root or leaves.
+  - Elements are nested: folder frames contain file modules, and file modules contain their components, hooks and functions.
+  - Layout uses ELK. Local placement and drag rules follow the noesis system model explorer: frames grow, shrink and push neighbours aside.
+  - 3rd-party libraries can be filtered out. React is hidden by default.
+  - Relations include imports, renders, hooks and **invokes** (calls, `new`, handler references, module-level calls; server actions are highlighted).
+  - Undo/redo (⌘Z / ⇧⌘Z). Delete removes the selected element. The current diagram is stored per project and comes back on reload. The graph itself is read-only: nodes can't be connected by hand.
+  - The sidebar shows details and an "Open in editor" link. You can also **Scan…** a project straight from the UI.
+- **`packages/design-system`**: Chakra UI v3 wrapper, the only place Chakra is imported.
+- **`packages/schema`**: snapshot types shared by the scanner and the viewer.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Usage
 
-## React Compiler
+```bash
+bun install
+bun run scan /path/to/app            # or an entry file: /path/to/app/src/main.tsx
+RAE_SNAPSHOTS=/path/to/app/.explorer/snapshots bun run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Scanner options: `--no-types` (oxc-only, fastest), `--no-cache`, `--out <dir>`, `--tsconfig <path>`, `--include/--exclude <glob>`, `--stats`.
+Snapshots live in `<root>/.explorer/snapshots/<timestamp>.json`, and `index.json` keeps the history. The incremental cache lives in `<root>/.explorer/cache`.
 
-## Expanding the Oxlint configuration
+Performance (shadcn/ui `apps/v4`, 3.6k files, M-series Mac): about 0.6s without types, about 1.7s with types, a few ms for a warm rescan.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Development
+
+```bash
+bun run test                   # scanner fixtures + viewer placement engine
+bun run typecheck              # tsc = TypeScript 7
+bun run lint                   # oxlint (enforces the design-system import rule)
+bun --cwd packages/viewer e2e  # headless smoke test (see .claude/skills/frontend)
+```
+
+Project skills for Claude Code are in `.claude/skills` (scanner, react-flow, frontend, design-system).

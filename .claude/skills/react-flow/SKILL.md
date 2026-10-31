@@ -1,0 +1,64 @@
+---
+name: react-flow
+description: Work on the viewer's React Flow (@xyflow/react v12) diagram — canvas, nested frames (folder → file → declarations), ELK layout + noesis-style local placement/drag/resize rules, custom nodes/edges, parent/child expansion, viewport focus/fit, performance with large graphs. Use when editing packages/viewer/src/components/{Canvas,ConditionEdge}.tsx, components/nodes/* or packages/viewer/src/graph/*.
+---
+
+# React Flow in the viewer
+
+## Model
+- The **snapshot graph is the source of truth**. The store (`src/store.ts`) holds `visible: string[]` (ids the user put on the canvas), the derived `graph` (what is drawn) and `placed` (where).
+- `graph/drawn.ts` → `drawnGraph()` derives the **containment tree** plus edges:
+  - folder frame (`dir:<path>`, optional, toggled by "Folders") → file **module** frame → declarations (component/hook/function/action).
+  - Only what the user added is drawn. A declaration sits inside its file module **when that module is on the canvas too**. Otherwise it goes into the nearest drawn folder, or the top level. A module with nothing drawn inside is a plain card.
+  - A folder chain that holds only one folder is compressed into one frame (`src/components`). The frame id is the deepest path, so it keeps its place when the chain splits.
+  - Containment is never an edge (`declares` is skipped, and so are edges between an element and its own container).
+  - The library filter (`graph/packages.ts`) removes 3rd-party externals. `react` and `react-dom` are excluded by default.
+- `Canvas.tsx` maps `placed` → React Flow nodes (`type: "frame" | "card"`, `parentId`, fixed `width`/`height`, `dragHandle` = frame header). Local `nodes` state exists only for drag and measurements. It re-syncs with the "adjust state during render" pattern; never call setState inside effects.
+
+## Placement engine (after noesis' system model explorer)
+- `graph/layout.ts`: **ELK** layered DOWN with `hierarchyHandling: INCLUDE_CHILDREN`, frames padded (`PADDING`) and sized around their children. Used for the first placement, "Re-layout everything", folder toggling, any change adding more than `LOCAL_LIMIT` (12) elements, and whenever local placement returns `null`.
+- `graph/placement.ts` (pure, unit-tested in `packages/viewer/test/graph.test.ts`):
+  - `placeLocally(prev, graph, anchor)`: what stays keeps its place. New cards go in the nearest free spot beside the anchor, inside their container's room. The container `fit`s (grows, top-left fixed), `pushAround` moves the siblings it now covers, and this cascades up the parents. A container appearing around already-drawn children is drawn around them. Containers that lost children `lift` (close the top gap) and `refit` (shrink).
+  - `movedTo(prev, graph, id, point)` on drag stop: the element stays at its own level. Dropped inside a foreign frame (`refusingFrames`), it lands at that frame's nearest free side. Overlapped siblings are `shove`d (cascading), and the parent `refit`s (grows or shrinks).
+  - `arrangeWithin` + `layoutWithin`: the frame's "Tidy up inside" action (ELK on that subtree only).
+  - Work happens in absolute coordinates and is converted back to container-relative positions at the end. `absoluteRect()` helps with focus and drag origins.
+- Interactions: frames drag by their header (`FRAME_HANDLE`) and children move with them. The dragged element is raised (`zIndex`). A frame that would refuse it is marked (`data.refused`, red dashed). Nodes glide with a CSS transform transition, except while dragging.
+
+## Relations (`graph/relations.ts`)
+- `CHILD_KINDS[nodeKind]` decides which outgoing edge kinds count as children. An edge X→Y is a parent link of Y iff it is a child link of X.
+  - module: imports, declares, renders, invokes · component: renders, usesHook, invokes, invokesAction · hook/function/action: invokes, usesHook, invokesAction · external: none
+- Every relation query takes a `RelationFilter` (enabled edge groups + library filter): `relationFilterOf(state)`.
+- `reachable(…, deep)` is a BFS with a visited set. Expansions above `LARGE_EXPANSION` (300) ask first.
+
+## Editing model
+- The diagram is read-only as a graph: `nodesConnectable={false}`, hidden non-interactive handles (`HIDDEN_HANDLE`), `deleteKeyCode={null}`. The app handles Delete/Backspace (removes the selection) in `App.tsx`.
+- Every diagram change (`addNodes`, `hideNode`, `clear`, `dropAt`, `arrange`, `relayout`) calls `record()` first. It pushes `{visible, placed, selectedId}` onto `past` (max 100) and clears `future`. `undo`/`redo` (⌘Z / ⇧⌘Z / Ctrl+Y, toolbar) `restore()` a step: the stored positions are reconciled with `placeLocally(…, null)`, falling back to ELK.
+- The current diagram is stored per project (`rae.diagram:<rootDir>` in localStorage, debounced subscription) and restored in `setSnapshot`. The last opened snapshot is remembered (`rae.lastSnapshot`).
+
+## Performance rules (measured on a 300-node canvas)
+- Node objects must keep their identity when their source didn't change. The sync step in `Canvas.tsx` reuses the local node (with React Flow's `measured`). Replacing all nodes makes React Flow re-measure everything and re-render every card (selection went from ~500 ms to ~30 ms after this fix).
+- Selection is applied on top of the memoized `derived` nodes (`selectedNodes`). Don't put `selectedId` into `derived`.
+- No rich tooltips inside nodes or edges: `ActionIconButton tooltip="native"`, and `title` on edge labels. A Chakra tooltip machine per button dominated render time.
+- `drawnGraph(…, index)` walks only the drawn nodes' edges, never all snapshot edges.
+- Viewport changes right after adding many nodes go through `whenReady()`, because React Flow's lookup can lag a frame and `fitView` would silently do nothing.
+- Dev builds expose the store as `window.__rae` for headless profiling (see the frontend skill).
+
+## Viewport
+- Single add (search, links): `addNodes(ids, { focus, anchor })` → `setCenter` once placed. Search anchors at the viewport centre; sidebar links anchor at the selected node.
+- Expansion: `addNodes(ids, { fit: true, anchor: id })` → `fitView({ nodes })`.
+
+## Conventions
+- Define `nodeTypes` and `edgeTypes` at **module scope** and wrap node components in `memo`.
+- Card/frame sizes come from `widthOf`/`frameWidthOf`/`CARD_HEIGHT`/`PADDING`. If node content grows, update those so ELK and the placement agree.
+- Interactive elements inside nodes need `className="nodrag nopan"` and `stopPropagation` (see `NodeActions`).
+- Colors come from design-system tokens through CSS vars (`cssVar("kind.component.solid")`).
+- Keep `onlyRenderVisibleElements` on. Leave the React Flow attribution visible.
+
+## Adding a node kind / edge kind / container level
+1. Schema + scanner (see the scanner skill).
+2. `KIND_META` (`src/lib/kinds.tsx`) icon/label, plus a `kind.<name>` token in `packages/design-system/src/theme.ts`.
+3. Edges: `EDGE_GROUP_OF`, `EDGE_GROUPS`, `CHILD_KINDS`, `EDGE_STYLE`.
+4. New container level: give elements a `parent` in `drawnGraph()`. ELK and the placement engine handle any depth.
+
+## Verify
+`bun test packages/viewer/test` (engine), `bun --cwd packages/viewer e2e` (see the frontend skill), and `tsc -p packages/viewer --noEmit`.
