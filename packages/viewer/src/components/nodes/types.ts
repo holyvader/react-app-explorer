@@ -12,6 +12,8 @@ export type ElementNodeData = {
   children: number;
   hiddenParents: number;
   hiddenChildren: number;
+  /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
+  scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */
   undrawnContents?: number;
   /** Frame refuses the card being dragged over it. */

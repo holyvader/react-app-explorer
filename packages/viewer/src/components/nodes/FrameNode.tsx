@@ -11,11 +11,11 @@ const CLICK_SLOP = 4;
 
 /**
  * A frame's room is the canvas to the reader: dragged, it pans the view; double-clicked, it zooms
- * in around the pointer; clicked (not dragged), it clears the selection, as a click on the empty
- * canvas does (the frame is selected from its header). React Flow blocks both
+ * in around the pointer; clicked (not dragged), it selects the file module it belongs to (a folder,
+ * not selectable, clears the selection as the empty canvas does). React Flow blocks both
  * panning and zooming on nodes, so they're done here, on the room itself (not what's inside).
  */
-function useRoomAsCanvas() {
+function useRoomAsCanvas(selectId: string | undefined) {
   const { getViewport, setViewport } = useReactFlow();
   const store = useStoreApi();
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
@@ -39,7 +39,7 @@ function useRoomAsCanvas() {
     const end = (to: globalThis.PointerEvent) => {
       cancelAnimationFrame(frame);
       if (to.type === "pointerup" && Math.hypot(to.clientX - from.x, to.clientY - from.y) < CLICK_SLOP) {
-        useExplorer.getState().select(undefined);
+        useExplorer.getState().select(selectId, to.ctrlKey || to.metaKey);
       } else {
         // Final position from the release itself: fast drags can deliver their (coalesced) moves late.
         void setViewport({ ...from.view, x: from.view.x + to.clientX - from.x, y: from.view.y + to.clientY - from.y });
@@ -72,11 +72,11 @@ function useRoomAsCanvas() {
  * A container drawn around what it holds: a file module (its declarations inside) or a folder
  * (files inside). Dragged by its header; what it holds moves with it.
  */
-function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
+function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
   const { node, element, refused } = data;
   const folder = element.kind === "folder";
   const Icon = folder ? IconFolder : KIND_META.module.icon;
-  const room = useRoomAsCanvas();
+  const room = useRoomAsCanvas(node ? id : undefined);
   return (
     <div className="rae-frame" data-kind={folder ? "folder" : "module"} data-refused={refused || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
@@ -89,6 +89,7 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
             {element.name}
           </div>
           {!folder && node && <div className="rae-sub">{node.filePath}</div>}
+          {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
         {node?.nextRole && <span className="rae-badge rae-badge--outline">{node.nextRole}</span>}
         {node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}

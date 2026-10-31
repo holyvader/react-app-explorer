@@ -142,6 +142,19 @@ export function Canvas() {
 
   const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries }), [enabled, excluded, hideAllLibraries]);
 
+  // Scanned elements (files + declarations) under each folder, for folder headers.
+  const scannedUnder = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of Object.values(snapshot?.nodes ?? {})) {
+      if (n.kind === "external") continue;
+      for (let i = n.filePath.lastIndexOf("/"); i > 0; i = n.filePath.lastIndexOf("/", i - 1)) {
+        const dir = n.filePath.slice(0, i);
+        counts.set(dir, (counts.get(dir) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [snapshot]);
+
   const derived = useMemo<ElementFlowNode[]>(() => {
     if (!snapshot || !index) return [];
     const drawn = new Set(placed.map((p) => p.element.id));
@@ -165,6 +178,7 @@ export function Canvas() {
           element: p.element,
           node,
           path: id.startsWith(FOLDER_PREFIX) ? id.slice(FOLDER_PREFIX.length) : undefined,
+          scannedCount: id.startsWith(FOLDER_PREFIX) ? scannedUnder.get(id.slice(FOLDER_PREFIX.length)) : undefined,
           parents: distinct(parents.map((e) => e.from)),
           children: distinct(children.map((e) => e.to)),
           hiddenParents: distinct(parents.filter((e) => !drawn.has(e.from)).map((e) => e.from)),
@@ -174,7 +188,7 @@ export function Canvas() {
         },
       } as ElementFlowNode;
     });
-  }, [snapshot, index, placed, filter]);
+  }, [snapshot, index, placed, filter, scannedUnder]);
 
   // What the selection relates to: the other ends of its edges, and its containers / contents.
   const related = useMemo(() => {
@@ -433,11 +447,13 @@ export function Canvas() {
         multiSelectionKeyCode={null}
         edgesFocusable={false}
         onNodeClick={(e, n) => {
-          // A frame is selected from its header; its room acts as empty canvas (handled in FrameNode).
+          // A frame's room handles its own clicks (FrameNode: selects the module, pans on drag).
           if (n.data.node && !(e.target as HTMLElement).closest(".rae-frame__room")) select(n.id, e.metaKey || e.ctrlKey);
         }}
         onNodeMouseEnter={(e, n) => {
           clearTimeout(tipTimer.current);
+          // Folders have no tooltip: their header says what's inside.
+          if (!n.data.node) return;
           const at = { x: e.clientX, y: e.clientY };
           tipTimer.current = setTimeout(() => setTip({ id: n.id, ...at }), 450);
         }}

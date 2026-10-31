@@ -1,6 +1,5 @@
 import type { GraphNode, Snapshot } from "@rae/schema";
 import type { ReactNode } from "react";
-import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import type { GraphIndex } from "../graph/relations.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 
@@ -33,16 +32,6 @@ const sig = (n: GraphNode) =>
 
 /** What a node's tooltip says, by kind. */
 function content(id: string, s: Snapshot, index: GraphIndex): ReactNode {
-  if (id.startsWith(FOLDER_PREFIX)) {
-    const dir = id.slice(FOLDER_PREFIX.length);
-    const files = Object.values(s.nodes).filter((n) => n.kind === "module" && n.filePath.startsWith(dir + "/")).length;
-    return (
-      <>
-        <div className="rae-tip__title">{dir}/</div>
-        <div className="rae-tip__sub">Folder · {files} scanned files</div>
-      </>
-    );
-  }
   const n = s.nodes[id];
   if (!n) return null;
   const out = index.out.get(id) ?? [];
