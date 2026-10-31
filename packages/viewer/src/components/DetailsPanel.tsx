@@ -34,6 +34,8 @@ import { editorUrl } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
+import { isFolder } from "../graph/drawn.ts";
+import { FolderDetails } from "./FolderDetails.tsx";
 import { RenderTree } from "./RenderTree.tsx";
 
 /**
@@ -60,6 +62,8 @@ export function DetailsPanel() {
     };
   }, [snapshot, index, node, enabled, excluded, hideAllLibraries]);
 
+  // Folders aren't scanned nodes: they get their own details (what they contain).
+  if (selectedId && isFolder(selectedId)) return <FolderDetails id={selectedId} />;
   if (!snapshot || !node || !index) return null;
 
   const meta = KIND_META[node.kind];

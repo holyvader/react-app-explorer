@@ -2,6 +2,7 @@ import type { Snapshot } from "@rae/schema";
 import { create } from "zustand";
 import { type DrawnGraph, drawnGraph, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
+import { folderExpansion, folderPath } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, placeLocally } from "./graph/placement.ts";
 import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
@@ -77,6 +78,8 @@ interface ExplorerState {
   clear: () => void;
   select: (id: string | undefined, adding?: boolean) => void;
   expand: (id: string, dir: "parents" | "children", deep: boolean) => void;
+  /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
+  expandFolder: (id: string, deep: boolean) => void;
   confirmPending: () => void;
   cancelPending: () => void;
   toggleGroup: (g: EdgeGroup) => void;
@@ -270,6 +273,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         return;
       }
       get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id });
+    },
+
+    expandFolder: (id, deep) => {
+      const s = get();
+      if (!s.snapshot) return;
+      const path = folderPath(id);
+      s.requestAdd(folderExpansion(s.snapshot, path, deep), `${deep ? "Everything" : "Files"} inside ${path}`, id);
     },
 
     confirmPending: () => {

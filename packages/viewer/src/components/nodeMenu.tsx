@@ -16,6 +16,7 @@ import {
   IconUnwrap,
 } from "@rae/design-system/icons";
 import { isFolder } from "../graph/drawn.ts";
+import { folderExpansion, folderPath } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { hasUndrawn } from "../graph/relations.ts";
 import { editorUrl } from "../lib/editor.ts";
@@ -85,7 +86,17 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   const entries: MenuEntry[] = [];
 
   if (isFolder(id)) {
+    const path = folderPath(id);
+    const drawnNow = new Set(st.graph.elements.map((e) => e.id));
+    const canFiles = folderExpansion(s, path, false).some((x) => !drawnNow.has(x));
+    const canAll = folderExpansion(s, path, true).some((x) => !drawnNow.has(x));
     return [
+      { type: "item", value: "select", label: "Select", icon: <IconSelect size={I} />, onSelect: () => st.selectMany([id]) },
+      { type: "item", value: "center", label: "Center on canvas", icon: <IconFocus size={I} />, onSelect: () => addNodes([], { focus: id }) },
+      { type: "separator" },
+      { type: "item", value: "files", label: "Show the files inside", icon: <IconArrowDown size={I} />, disabled: !canFiles, onSelect: () => st.expandFolder(id, false) },
+      { type: "item", value: "all", label: "Show everything inside", icon: <IconChevronsDown size={I} />, disabled: !canAll, onSelect: () => st.expandFolder(id, true) },
+      { type: "separator" },
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
       { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemoveWithContents size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
     ];

@@ -11,11 +11,11 @@ const CLICK_SLOP = 4;
 
 /**
  * A frame's room is the canvas to the reader: dragged, it pans the view; double-clicked, it zooms
- * in around the pointer; clicked (not dragged), it selects the file module it belongs to (a folder,
- * not selectable, clears the selection as the empty canvas does). React Flow blocks both
+ * in around the pointer; clicked (not dragged), it clears the selection as the empty canvas does.
+ * The frame itself is selected, dragged and hovered from its header only. React Flow blocks both
  * panning and zooming on nodes, so they're done here, on the room itself (not what's inside).
  */
-function useRoomAsCanvas(selectId: string | undefined) {
+function useRoomAsCanvas() {
   const { getViewport, setViewport } = useReactFlow();
   const store = useStoreApi();
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
@@ -39,7 +39,7 @@ function useRoomAsCanvas(selectId: string | undefined) {
     const end = (to: globalThis.PointerEvent) => {
       cancelAnimationFrame(frame);
       if (to.type === "pointerup" && Math.hypot(to.clientX - from.x, to.clientY - from.y) < CLICK_SLOP) {
-        useExplorer.getState().select(selectId, to.ctrlKey || to.metaKey);
+        useExplorer.getState().select(undefined);
       } else {
         // Final position from the release itself: fast drags can deliver their (coalesced) moves late.
         void setViewport({ ...from.view, x: from.view.x + to.clientX - from.x, y: from.view.y + to.clientY - from.y });
@@ -72,11 +72,11 @@ function useRoomAsCanvas(selectId: string | undefined) {
  * A container drawn around what it holds: a file module (its declarations inside) or a folder
  * (files inside). Dragged by its header; what it holds moves with it.
  */
-function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
+function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
   const { node, element, refused } = data;
   const folder = element.kind === "folder";
   const Icon = folder ? IconFolder : KIND_META.module.icon;
-  const room = useRoomAsCanvas(node ? id : undefined);
+  const room = useRoomAsCanvas();
   return (
     <div className="rae-frame" data-kind={folder ? "folder" : "module"} data-refused={refused || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />

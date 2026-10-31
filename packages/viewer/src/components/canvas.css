@@ -267,10 +267,12 @@
   transition: opacity 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .rae-frame[data-kind="folder"]::after { border-style: dashed; }
-.react-flow__node-frame:hover > .rae-frame:not([data-kind="folder"])::after { opacity: 1; }
-/* folders: hover only on the top bar (where they're dragged) — not over their content */
-.rae-frame[data-kind="folder"]:has(> .rae-frame__header:hover)::after { opacity: 1; }
-.rae-frame[data-kind="folder"] .rae-frame__header { transition: background-color 260ms cubic-bezier(0.22, 1, 0.36, 1); border-radius: 3px 11px 0 0; }
+/* frames (files holding elements, folders): hover only on the header — where they're selected and
+   dragged — never over their content */
+.rae-frame:has(> .rae-frame__header:hover)::after { opacity: 1; }
+.rae-frame__header { transition: background-color 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.rae-frame[data-kind="folder"] .rae-frame__header { border-radius: 3px 11px 0 0; }
+.rae-frame__header:hover { background: color-mix(in srgb, var(--k) 8%, var(--panel)); }
 .rae-frame[data-kind="folder"] .rae-frame__header:hover { background: color-mix(in srgb, var(--k) 7%, transparent); }
 .react-flow__node.selected > .rae-frame::after,
 .rae-frame[data-refused]::after { border-color: transparent; }

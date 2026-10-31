@@ -15,6 +15,7 @@ import {
 } from "@xyflow/react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
+import { folderExpansion, folderPath } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
 import { childEdges, hasUndrawn, parentEdges } from "../graph/relations.ts";
@@ -206,7 +207,15 @@ export function Canvas() {
                 children: children.some((e) => !drawn.has(e.to)),
                 allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn),
               }
-            : { parents: false, allParents: false, children: false, allChildren: false },
+            : id.startsWith(FOLDER_PREFIX)
+              ? // folders: "children" = the files inside, "all children" = files and their declarations
+                {
+                  parents: false,
+                  allParents: false,
+                  children: folderExpansion(snapshot, folderPath(id), false).some((x) => !drawn.has(x)),
+                  allChildren: folderExpansion(snapshot, folderPath(id), true).some((x) => !drawn.has(x)),
+                }
+              : { parents: false, allParents: false, children: false, allChildren: false },
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
@@ -228,9 +237,18 @@ export function Canvas() {
       }
     }
     const parentOf = new Map(graph.elements.map((e) => [e.id, e.parent]));
+    const kids = new Map<string, string[]>();
+    for (const e of graph.elements) if (e.parent) kids.set(e.parent, [...(kids.get(e.parent) ?? []), e.id]);
+    const addInside = (id: string) => {
+      for (const k of kids.get(id) ?? []) {
+        nodes.add(k);
+        addInside(k);
+      }
+    };
     for (const id of selection) {
       for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) nodes.add(p);
-      for (const e of graph.elements) if (e.parent === id) nodes.add(e.id);
+      // a selected frame (file or folder) highlights everything inside it
+      addInside(id);
     }
     for (const id of selection) nodes.delete(id);
     return { nodes, edges };
@@ -476,8 +494,12 @@ export function Canvas() {
         multiSelectionKeyCode={null}
         edgesFocusable={false}
         onNodeClick={(e, n) => {
-          // A frame's room handles its own clicks (FrameNode: selects the module, pans on drag).
-          if (n.data.node && !(e.target as HTMLElement).closest(".rae-frame__room")) select(n.id, e.metaKey || e.ctrlKey);
+          // Cards select anywhere; frames (files holding elements, folders) only from their header —
+          // where they're dragged. Their room acts as empty canvas (FrameNode: click clears, drag pans).
+          const target = e.target as HTMLElement;
+          if (target.closest(".rae-icon-btn, .rae-contains")) return;
+          if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
+          select(n.id, e.metaKey || e.ctrlKey);
         }}
         onNodeMouseEnter={(e, n) => {
           clearTimeout(tipTimer.current);
