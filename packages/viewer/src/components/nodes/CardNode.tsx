@@ -1,3 +1,4 @@
+import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
 import { KIND_META } from "../../lib/kinds.tsx";
@@ -13,6 +14,28 @@ import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
  */
 function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   const { node, element } = data;
+  // An added folder with nothing drawn inside yet: a dashed folder card.
+  if (element.kind === "folder") {
+    return (
+      <div className="rae-card" data-kind="folder">
+        <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
+        <CardShape kind="folder" width={width ?? 0} height={height ?? 0} />
+        <div className="rae-card__body">
+          <span className="rae-card__tile" aria-hidden>
+            <IconFolder size={16} strokeWidth={2.2} />
+          </span>
+          <div className="rae-card__text">
+            <div className="rae-name">{element.name}</div>
+            <div className="rae-card__caption">Folder{data.scannedCount !== undefined ? ` · ${data.scannedCount} scanned elements` : ""}</div>
+          </div>
+        </div>
+        <div className="rae-card__actions">
+          <NodeActions data={data} />
+        </div>
+        <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
+      </div>
+    );
+  }
   if (!node) return null;
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;

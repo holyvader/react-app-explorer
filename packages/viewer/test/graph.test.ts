@@ -59,6 +59,16 @@ describe("drawnGraph", async () => {
     expect(deep.parent).toBe("dir:app");
   });
 
+  test("an explicitly added folder is drawn even with nothing inside, and holds files added later", () => {
+    const alone = drawnGraph(s, ["dir:components"], opts());
+    expect(alone.elements).toEqual([{ id: "dir:components", kind: "folder", name: "components", parent: null }]);
+    const withFile = drawnGraph(s, ["dir:components", "components/TodoList.tsx"], opts());
+    expect(withFile.elements.find((e) => e.id === "components/TodoList.tsx")!.parent).toBe("dir:components");
+    // an explicit folder isn't collapsed into a chain: app/ stays its own frame around app/dashboard
+    const chain = drawnGraph(s, ["dir:app", "app/dashboard/page.tsx"], opts());
+    expect(chain.elements.find((e) => e.id === "dir:app/dashboard")!.parent).toBe("dir:app");
+  });
+
   test("without folders, files are top level", () => {
     const g = drawnGraph(s, ["components/TodoItem.tsx"], opts({ folders: false }));
     expect(g.elements.find((e) => e.id === "components/TodoItem.tsx")!.parent).toBeNull();

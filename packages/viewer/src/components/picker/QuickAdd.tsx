@@ -6,7 +6,7 @@ import { ElementTree } from "./ElementTree.tsx";
 
 /**
  * Right-click on the empty canvas: the model's tree under a filter box, right there. A row clicked
- * puts that element on the diagram at that point. What's drawn already is left out — or greyed,
+ * (a folder too) puts that element on the diagram at that point. What's drawn already is left out — or greyed,
  * to be opened, when something inside it isn't (after noesis' quick add).
  */
 export function QuickAdd() {
@@ -16,8 +16,13 @@ export function QuickAdd() {
   const input = useRef<HTMLInputElement>(null);
   const shown = useMemo(() => new Set(visible), [visible]);
 
+  const graph = useExplorer((s) => s.graph);
+  const onCanvas = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
   const keep = useCallback((n: TreeNode) => !n.id || n.children.length > 0 || !shown.has(n.id), [shown]);
-  const inactive = useCallback((n: TreeNode) => (n.id && shown.has(n.id) ? "on the diagram" : null), [shown]);
+  const inactive = useCallback(
+    (n: TreeNode) => ((n.id && shown.has(n.id)) || (n.kind === "folder" && onCanvas.has(n.key)) ? "on the diagram" : null),
+    [shown, onCanvas],
+  );
 
   return (
     <Popover
@@ -37,8 +42,10 @@ export function QuickAdd() {
         inactive={inactive}
         placeholder="Add here: filter by name or path…"
         onActivate={(n) => {
-          if (!quick || !n.id) return;
-          addNodes([n.id], { anchor: quick.anchor, select: n.id });
+          // folders are added by their id (`dir:<path>`), like any element
+          const id = n.kind === "folder" ? n.key : n.id;
+          if (!quick || !id) return;
+          addNodes([id], { anchor: quick.anchor, select: id });
           setQuickAdd(null);
         }}
       />

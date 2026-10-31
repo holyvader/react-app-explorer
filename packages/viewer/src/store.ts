@@ -1,6 +1,6 @@
 import type { Snapshot } from "@rae/schema";
 import { create } from "zustand";
-import { type DrawnGraph, drawnGraph, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
+import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
@@ -115,6 +115,14 @@ export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" |
 
 const EMPTY: DrawnGraph = { elements: [], relations: [] };
 
+/** A scanned node, or a folder (`dir:<path>`) that holds scanned files. */
+const isKnown = (s: Snapshot | undefined, id: string) => {
+  if (!s) return false;
+  if (!isFolder(id)) return !!s.nodes[id];
+  const prefix = id.slice(FOLDER_PREFIX.length) + "/";
+  return Object.values(s.nodes).some((n) => n.kind === "module" && n.filePath.startsWith(prefix));
+};
+
 export const useExplorer = create<ExplorerState>((set, get) => {
   /**
    * Applies a state change that may alter what is drawn: derives the new drawn graph
@@ -145,10 +153,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
   const restore = (entry: DiagramState, extra: Partial<ExplorerState> = {}) => {
     const s = get();
     if (!s.snapshot) return;
-    const visible = entry.visible.filter((id) => s.snapshot!.nodes[id]);
+    const visible = entry.visible.filter((id) => isKnown(s.snapshot, id));
     const f = relationFilterOf(s);
     const graph = drawnGraph(s.snapshot, visible, { enabled: s.enabled, filter: f.libraries, folders: s.folders }, s.index);
-    const selectedId = entry.selectedId && s.snapshot.nodes[entry.selectedId] ? entry.selectedId : undefined;
+    const selectedId = entry.selectedId && isKnown(s.snapshot, entry.selectedId) ? entry.selectedId : undefined;
     const selection = selectedId ? [selectedId] : [];
     if (!graph.elements.length) return set({ ...extra, visible, selectedId, selection, graph, placed: [] });
     const local = entry.placed.length ? placeLocally(entry.placed, graph, null) : null;
@@ -195,7 +203,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
 
     addNodes: (ids, opts) => {
       const s = get();
-      const known = ids.filter((id) => s.snapshot?.nodes[id]);
+      const known = ids.filter((id) => isKnown(s.snapshot, id));
       const present = new Set(s.visible);
       const added = known.filter((id) => !present.has(id));
       const patch: Partial<ExplorerState> = {
@@ -217,7 +225,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       record();
       const gone = new Set<string>();
       for (const id of ids) {
-        if (isFolder(id)) for (const v of nodesUnderFolder(s.snapshot, s.visible, id)) gone.add(v);
+        if (isFolder(id)) {
+          // the folder (if added explicitly), its subfolders, and everything drawn inside
+          const dir = id.slice(FOLDER_PREFIX.length);
+          gone.add(id);
+          for (const v of s.visible) if (isFolder(v) && v.slice(FOLDER_PREFIX.length).startsWith(dir + "/")) gone.add(v);
+          for (const v of nodesUnderFolder(s.snapshot, s.visible, id)) gone.add(v);
+        }
         else if (s.snapshot.nodes[id]?.kind === "module" && !opts?.keepContents) {
           // A file block goes with everything drawn in it.
           gone.add(id);

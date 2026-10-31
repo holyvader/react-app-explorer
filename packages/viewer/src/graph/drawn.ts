@@ -45,7 +45,13 @@ export interface DrawOptions {
 export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts: DrawOptions, index?: GraphIndex): DrawnGraph {
   const nodes = snapshot.nodes;
   const shown = new Set<string>();
+  // Folders the user added explicitly (from the picker / quick add): drawn even with nothing inside.
+  const explicitFolders = new Set<string>();
   for (const id of visible) {
+    if (isFolder(id)) {
+      explicitFolders.add(id.slice(FOLDER_PREFIX.length));
+      continue;
+    }
     const n = nodes[id];
     if (!n || isFiltered(n, opts.filter)) continue;
     shown.add(id);
@@ -59,7 +65,7 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
 
   const elements: DrawnElement[] = [];
   if (opts.folders) {
-    const { frames, nearest } = foldersFor(snapshot, shown);
+    const { frames, nearest } = foldersFor(snapshot, shown, explicitFolders);
     for (const f of frames) {
       elements.push(f.element);
       for (const file of f.files) parentOf.set(file, f.element.id);
@@ -71,6 +77,10 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
       const slash = n.filePath.lastIndexOf("/");
       if (slash > 0) parentOf.set(id, nearest(n.filePath.slice(0, slash)));
     }
+  }
+  else {
+    // Without folder frames, an added folder is a card of its own.
+    for (const dir of explicitFolders) elements.push({ id: FOLDER_PREFIX + dir, kind: "folder", name: dir, parent: null });
   }
   for (const id of shown) {
     const n = nodes[id]!;
@@ -104,7 +114,7 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
  * folder is drawn as one frame named by the whole chain (`src/components`).
  * The frame's id is its deepest path, so it keeps its place when the chain splits.
  */
-function foldersFor(snapshot: Snapshot, shown: Set<string>) {
+function foldersFor(snapshot: Snapshot, shown: Set<string>, explicit: ReadonlySet<string> = new Set()) {
   const fileDirs = new Map<string, string[]>(); // dir → module ids
   for (const id of shown) {
     const n = snapshot.nodes[id]!;
@@ -117,7 +127,7 @@ function foldersFor(snapshot: Snapshot, shown: Set<string>) {
   // Every ancestor directory of a drawn file, with its child directories.
   const childDirs = new Map<string, Set<string>>();
   const all = new Set<string>();
-  for (const dir of fileDirs.keys()) {
+  for (const dir of [...fileDirs.keys(), ...explicit]) {
     let cur = dir;
     while (cur) {
       all.add(cur);
@@ -127,8 +137,8 @@ function foldersFor(snapshot: Snapshot, shown: Set<string>) {
       cur = up;
     }
   }
-  // A directory is drawn unless it holds exactly one directory and no files.
-  const collapsed = (dir: string) => !fileDirs.has(dir) && (childDirs.get(dir)?.size ?? 0) === 1;
+  // A directory is drawn unless it holds exactly one directory and no files (and wasn't added explicitly).
+  const collapsed = (dir: string) => !fileDirs.has(dir) && !explicit.has(dir) && (childDirs.get(dir)?.size ?? 0) === 1;
   const drawnAncestor = (dir: string): string | null => {
     let up = dir.includes("/") ? dir.slice(0, dir.lastIndexOf("/")) : "";
     while (up && collapsed(up)) up = up.includes("/") ? up.slice(0, up.lastIndexOf("/")) : "";

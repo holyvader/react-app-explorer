@@ -104,6 +104,7 @@
 }
 .rae-card[data-kind="function"] .rae-card__tile,
 .rae-card[data-kind="external"] .rae-card__tile { border-radius: 999px; }
+.rae-card[data-kind="folder"] .rae-card__tile { background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg-muted); box-shadow: inset 0 0 0 1px var(--chakra-colors-border); }
 .rae-card[data-kind="external"] .rae-card__tile { background: color-mix(in srgb, var(--k) 18%, var(--panel)); color: var(--k-fg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 40%, transparent); }
 .rae-card__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .rae-card .rae-name { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 18px; }

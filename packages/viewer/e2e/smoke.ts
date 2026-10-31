@@ -100,7 +100,7 @@ if (before && hb) {
 
 // Folders are selectable from their header (like dragging); details show what they contain.
 await page.locator('.react-flow__node[data-id="dir:components"] .rae-frame__header').click({ position: { x: 120, y: 20 } });
-await page.getByText(/^Folder · \d+ files/).waitFor();
+await page.getByText(/^Folder · \d+ files?/).waitFor();
 // …and a frame's content area acts as empty canvas: a click there clears the selection.
 {
   // (the sidebar is open on the right now: click near the room's bottom-left, clear of it)

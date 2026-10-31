@@ -3,6 +3,7 @@ import { IconClose, IconPlus } from "@rae/design-system/icons";
 import { useReactFlow } from "@xyflow/react";
 import { useCallback, useMemo, useRef } from "react";
 import type { TreeNode } from "../../graph/tree.ts";
+import { folderExpansion, folderPath } from "../../graph/folder.ts";
 import { isFiltered } from "../../graph/packages.ts";
 import { relationFilterOf, useExplorer } from "../../store.ts";
 import { ElementTree, type TickState } from "./ElementTree.tsx";
@@ -29,15 +30,23 @@ export function ExplorationPicker() {
     return Object.values(snapshot.nodes).filter((n) => !n.id.startsWith("asset:") && !isFiltered(n, f.libraries)).length;
   }, [snapshot, excluded, hideAll]);
 
+  const graph = useExplorer((s) => s.graph);
+  const onCanvas = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
   const tickOf = useCallback(
     (n: TreeNode): TickState | null => {
+      if (n.kind === "folder") {
+        // drawn? and is every file inside drawn too?
+        if (!onCanvas.has(n.key)) return "off";
+        const files = snapshot ? folderExpansion(snapshot, folderPath(n.key), false) : [];
+        return files.every((f) => shown.has(f)) ? "all" : "file";
+      }
       if (n.kind === "decl" || n.kind === "library") return shown.has(n.id!) ? "on" : "off";
       if (n.kind !== "file") return null;
       const inside = n.children.filter((c) => shown.has(c.id!)).length;
       if (!shown.has(n.id!)) return inside ? "partial" : "off";
       return inside === n.children.length ? "all" : "file";
     },
-    [shown],
+    [shown, onCanvas, snapshot],
   );
 
   // New elements go near the middle of what the user is looking at.
@@ -47,6 +56,14 @@ export function ExplorationPicker() {
   };
 
   const onActivate = (n: TreeNode) => {
+    if (n.kind === "folder") {
+      // Once: the folder. Again: with the files inside. Once more: off (with what's inside).
+      const state = tickOf(n);
+      if (state === "off") addNodes([n.key], { anchor: anchor() });
+      else if (state === "file") useExplorer.getState().expandFolder(n.key, false);
+      else hideNode(n.key);
+      return;
+    }
     const id = n.id!;
     if (n.kind === "file") {
       // Once: the file. Again: with all inside it. Once more: off.
@@ -80,7 +97,7 @@ export function ExplorationPicker() {
     >
       <ElementTree mode="toggle" onActivate={onActivate} tickOf={tickOf} inputRef={input} />
       <div className="rae-picker-foot">
-        <span style={{ flex: 1 }}>Click once to draw, again for all inside a file, once more to take them off.</span>
+        <span style={{ flex: 1 }}>Click once to draw, again for all inside a file or folder, once more to take them off.</span>
         <output>
           <b>{visible.length}</b> of {total} drawn
         </output>

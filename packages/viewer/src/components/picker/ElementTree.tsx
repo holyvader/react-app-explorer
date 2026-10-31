@@ -25,7 +25,7 @@ const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: 
 
 /**
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
- * →/← open/close, Enter or Space activates the row.
+ * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
 export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
@@ -54,7 +54,8 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
 
   const activate = (n: TreeNode) => {
     const note = inactive?.(n);
-    if (n.kind === "folder" || n.kind === "libraries" || note) return toggleOpen(n.key);
+    // Folders are addable too (the chevron / → opens them); the Libraries group only opens.
+    if (n.kind === "libraries" || note) return toggleOpen(n.key);
     onActivate(n);
   };
 
@@ -99,7 +100,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
             } else if (e.key === "Enter") {
               // The first match that can be added (not a folder, not already drawn).
               const q = query.trim().toLowerCase();
-              const addable = (r: (typeof rows)[number]) => !!r.node.id && !inactive?.(r.node);
+              const addable = (r: (typeof rows)[number]) => (!!r.node.id || r.node.kind === "folder") && !inactive?.(r.node);
               const first = rows.find((r) => addable(r) && r.node.name.toLowerCase().includes(q)) ?? rows.find(addable);
               if (!first) return;
               e.preventDefault();
@@ -133,6 +134,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               title={n.path || n.name}
             >
               <span
+                aria-hidden
                 className="rae-tree__chev"
                 onClick={(e) => {
                   if (!n.children.length) return;
@@ -142,7 +144,11 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               >
                 {n.children.length ? r.open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} /> : null}
               </span>
-              {tick && <span className="rae-tree__tick" data-state={tick}>{TICK[tick]}</span>}
+              {tick && (
+                <span className="rae-tree__tick" data-state={tick} aria-hidden>
+                  {TICK[tick]}
+                </span>
+              )}
               <span className="rae-tree__icon" data-kind={n.kind === "folder" || n.kind === "libraries" ? n.kind : node?.kind}>
                 <Icon size={14} />
               </span>

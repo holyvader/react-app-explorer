@@ -52,7 +52,7 @@ export function FolderDetails({ id }: { id: string }) {
               {name}
             </Text>
             <Text fontSize="xs" color="fg.muted" mt="0.5">
-              Folder · {c.files.length} files · {total} scanned elements
+              Folder · {c.files.length} {c.files.length === 1 ? "file" : "files"} · {total} scanned {total === 1 ? "element" : "elements"}
             </Text>
           </Box>
           <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={() => select(undefined)} />
@@ -86,7 +86,7 @@ export function FolderDetails({ id }: { id: string }) {
             return (
               <TagChip key={k} color={`kind.${k}.solid`}>
                 <Icon size={12} strokeWidth={2.4} />
-                {c.countsByKind[k]} {k === "module" ? "files" : KIND_META[k].label.toLowerCase() + (c.countsByKind[k]! > 1 ? "s" : "")}
+                {c.countsByKind[k]} {k === "module" ? (c.countsByKind[k] === 1 ? "file" : "files") : KIND_META[k].label.toLowerCase() + (c.countsByKind[k]! > 1 ? "s" : "")}
               </TagChip>
             );
           })}

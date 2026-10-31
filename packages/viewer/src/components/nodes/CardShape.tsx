@@ -55,7 +55,7 @@ export function CardShape({ kind, width, height }: { kind: string; width: number
       {/* tinted glass fill, a soft top sheen, then the outline */}
       <path d={d} fill={`url(#${id}g)`} />
       <path d={d} fill={`url(#${id}h)`} />
-      <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || undefined} />
+      <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || kind === "folder" || undefined} />
       {fold && <path d={fold} className="rae-card__stroke rae-card__fold" />}
     </svg>
     {/* hover layer: its own SVG (no filter), faded in by opacity only — cheap, never recolours */}
