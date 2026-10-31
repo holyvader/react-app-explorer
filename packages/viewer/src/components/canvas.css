@@ -120,6 +120,26 @@
 .react-flow__node-card:hover .rae-card__boundary,
 .react-flow__node-card.selected .rae-card__boundary { opacity: 0; }
 
+/* hover: a subtle outline + wash in the node's own colour, faded in by opacity only (no filter
+   or colour transitions, so nothing re-rasterises or blinks) */
+.rae-card__hover {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.rae-card__hover path {
+  fill: color-mix(in srgb, var(--k) 7%, transparent);
+  stroke: color-mix(in srgb, var(--k) 52%, transparent);
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+.react-flow__node-card:hover .rae-card__hover { opacity: 1; }
+/* selection keeps its blue outline on top */
+.react-flow__node.selected .rae-card__hover path { stroke: none; }
+
 /* actions: a small glass toolbar floating in on the right on hover / when selected */
 .rae-card__actions {
   position: absolute;
@@ -233,6 +253,23 @@
 .react-flow__node.rae-related > .rae-frame { border-color: var(--sel-soft); }
 .react-flow__node.selected > .rae-frame { border-color: var(--sel); border-width: 2.5px; box-shadow: 0 0 0 4px rgb(59 130 246 / 0.15); }
 .rae-frame[data-refused] { border: 2px dashed var(--chakra-colors-red-solid); background: color-mix(in srgb, var(--chakra-colors-red-subtle) 50%, transparent); }
+
+/* frame hover: same idea, in the file's / folder's colour */
+.rae-frame::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  border: 1.5px solid color-mix(in srgb, var(--k) 55%, transparent);
+  background: color-mix(in srgb, var(--k) 4%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.rae-frame[data-kind="folder"]::after { border-style: dashed; }
+.react-flow__node-frame:hover > .rae-frame::after { opacity: 1; }
+.react-flow__node.selected > .rae-frame::after,
+.rae-frame[data-refused]::after { border-color: transparent; }
 
 .rae-frame__header {
   height: 48px;

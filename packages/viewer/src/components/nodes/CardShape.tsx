@@ -39,6 +39,7 @@ export function CardShape({ kind, width, height }: { kind: string; width: number
   const id = useId();
   const { d, fold } = outline(kind, width, height);
   return (
+    <>
     <svg className="rae-card__svg" width={width} height={height} aria-hidden>
       <defs>
         <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
@@ -57,5 +58,10 @@ export function CardShape({ kind, width, height }: { kind: string; width: number
       <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || undefined} />
       {fold && <path d={fold} className="rae-card__stroke rae-card__fold" />}
     </svg>
+    {/* hover layer: its own SVG (no filter), faded in by opacity only — cheap, never recolours */}
+    <svg className="rae-card__hover" width={width} height={height} aria-hidden>
+      <path d={d} />
+    </svg>
+    </>
   );
 }
