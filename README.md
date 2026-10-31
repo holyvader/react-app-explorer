@@ -14,6 +14,7 @@ Static analysis + interactive diagram for React / Next.js codebases.
   - Layout uses ELK. Local placement and drag rules follow the noesis system model explorer: frames grow, shrink and push neighbours aside.
   - 3rd-party libraries can be filtered out. React is hidden by default.
   - Relations include imports, renders, hooks and **invokes** (calls, `new`, handler references, module-level calls; server actions are highlighted).
+  - Each element kind has its own shape, and each relation its own animated line style. Clicking selects (blue) and highlights related elements; ⌘-click adds to the selection. Right-click opens every action plus relation submenus (imports / imported by, renders / rendered by, …). Dragging inside a frame pans. Keyboard shortcuts follow the noesis explorer (see the legend on the canvas).
   - Undo/redo (⌘Z / ⇧⌘Z). Delete removes the selected element. The current diagram is stored per project and comes back on reload. The graph itself is read-only: nodes can't be connected by hand.
   - The sidebar shows details and an "Open in editor" link. You can also **Scan…** a project straight from the UI.
 - **`packages/design-system`**: Chakra UI v3 wrapper, the only place Chakra is imported.

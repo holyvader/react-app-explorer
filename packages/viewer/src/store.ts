@@ -35,7 +35,10 @@ interface ExplorerState {
   index?: GraphIndex;
   /** Node ids the user put on the canvas (containers are derived from them). */
   visible: string[];
+  /** Primary selection (the one the sidebar shows): the last of `selection`. */
   selectedId?: string;
+  /** Everything selected (⌘/Ctrl+click adds), in the order taken. */
+  selection: string[];
   enabled: EnabledGroups;
   /** Library filter: packages hidden everywhere (canvas, search, relations). */
   excluded: string[];
@@ -44,6 +47,8 @@ interface ExplorerState {
   folders: boolean;
   editor: EditorKind;
   searchOpen: boolean;
+  /** Where nodes picked in search go (right-click on the canvas); viewport centre otherwise. */
+  searchAnchor?: CanvasPoint;
   pending?: PendingExpansion;
   focusId?: string;
   fitIds?: string[];
@@ -60,10 +65,13 @@ interface ExplorerState {
   setSnapshot: (snapshot: Snapshot, name: string) => void;
   addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor }) => void;
   hideNode: (id: string, opts?: { keepContents?: boolean }) => void;
+  /** Removes several elements in one undoable step. */
+  hideNodes: (ids: string[], opts?: { keepContents?: boolean }) => void;
+  selectMany: (ids: string[]) => void;
   undo: () => void;
   redo: () => void;
   clear: () => void;
-  select: (id: string | undefined) => void;
+  select: (id: string | undefined, adding?: boolean) => void;
   expand: (id: string, dir: "parents" | "children", deep: boolean) => void;
   confirmPending: () => void;
   cancelPending: () => void;
@@ -75,7 +83,7 @@ interface ExplorerState {
   dropAt: (id: string, to: CanvasPoint) => void;
   arrange: (id: string) => Promise<void>;
   setEditor: (e: EditorKind) => void;
-  setSearchOpen: (open: boolean) => void;
+  setSearchOpen: (open: boolean, anchor?: CanvasPoint) => void;
   consumeFocus: () => void;
 }
 
@@ -130,14 +138,16 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const f = relationFilterOf(s);
     const graph = drawnGraph(s.snapshot, visible, { enabled: s.enabled, filter: f.libraries, folders: s.folders }, s.index);
     const selectedId = entry.selectedId && s.snapshot.nodes[entry.selectedId] ? entry.selectedId : undefined;
-    if (!graph.elements.length) return set({ ...extra, visible, selectedId, graph, placed: [] });
+    const selection = selectedId ? [selectedId] : [];
+    if (!graph.elements.length) return set({ ...extra, visible, selectedId, selection, graph, placed: [] });
     const placed = entry.placed.length ? placeLocally(entry.placed, graph, null) : null;
-    if (placed) set({ ...extra, visible, selectedId, graph, placed });
-    else set({ ...extra, visible, selectedId, graph, placed: [], layoutToken: s.layoutToken + 1 });
+    if (placed) set({ ...extra, visible, selectedId, selection, graph, placed });
+    else set({ ...extra, visible, selectedId, selection, graph, placed: [], layoutToken: s.layoutToken + 1 });
   };
 
   return {
     visible: [],
+    selection: [],
     past: [],
     future: [],
     enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true },
@@ -157,6 +167,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         index: buildIndex(snapshot),
         visible: [],
         selectedId: undefined,
+        selection: [],
         pending: undefined,
         graph: EMPTY,
         placed: [],
@@ -175,6 +186,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       const added = known.filter((id) => !present.has(id));
       const patch: Partial<ExplorerState> = {
         selectedId: opts?.select ?? s.selectedId,
+        selection: opts?.select ? [opts.select] : s.selection,
         focusId: opts?.focus ?? s.focusId,
         fitIds: opts?.fit ? known : s.fitIds,
       };
@@ -183,28 +195,30 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       redraw({ ...patch, visible: [...s.visible, ...added] }, opts?.anchor ?? opts?.focus ?? null);
     },
 
-    hideNode: (id, opts) => {
+    hideNode: (id, opts) => get().hideNodes([id], opts),
+
+    hideNodes: (ids, opts) => {
       const s = get();
-      if (!s.snapshot) return;
+      if (!s.snapshot || !ids.length) return;
       record();
-      let gone: Set<string>;
-      if (isFolder(id)) gone = new Set(nodesUnderFolder(s.snapshot, s.visible, id));
-      else if (s.snapshot.nodes[id]?.kind === "module" && !opts?.keepContents) {
-        // A file block goes with everything drawn in it.
-        gone = new Set([id, ...s.visible.filter((v) => s.snapshot!.nodes[v]?.moduleId === id)]);
-      } else gone = new Set([id]);
-      redraw(
-        {
-          visible: s.visible.filter((v) => !gone.has(v)),
-          selectedId: s.selectedId && gone.has(s.selectedId) ? undefined : s.selectedId,
-        },
-        null,
-      );
+      const gone = new Set<string>();
+      for (const id of ids) {
+        if (isFolder(id)) for (const v of nodesUnderFolder(s.snapshot, s.visible, id)) gone.add(v);
+        else if (s.snapshot.nodes[id]?.kind === "module" && !opts?.keepContents) {
+          // A file block goes with everything drawn in it.
+          gone.add(id);
+          for (const v of s.visible) if (s.snapshot.nodes[v]?.moduleId === id) gone.add(v);
+        } else gone.add(id);
+      }
+      const selection = s.selection.filter((x) => !gone.has(x));
+      redraw({ visible: s.visible.filter((v) => !gone.has(v)), selection, selectedId: selection.at(-1) }, null);
     },
+
+    selectMany: (ids) => set({ selection: ids, selectedId: ids.at(-1) }),
 
     clear: () => {
       record();
-      set({ visible: [], selectedId: undefined, graph: EMPTY, placed: [] });
+      set({ visible: [], selectedId: undefined, selection: [], graph: EMPTY, placed: [] });
     },
 
     undo: () => {
@@ -223,7 +237,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       restore(entry, { past: [...s.past, current], future: s.future.slice(1) });
     },
 
-    select: (id) => set({ selectedId: id }),
+    select: (id, adding) => {
+      if (id === undefined) return set({ selection: [], selectedId: undefined });
+      const s = get();
+      if (!adding) return set({ selection: [id], selectedId: id });
+      // ⌘/Ctrl+click: joins the selection, or leaves it.
+      const selection = s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id];
+      set({ selection, selectedId: selection.at(-1) });
+    },
 
     expand: (id, dir, deep) => {
       const s = get();
@@ -297,7 +318,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       set({ editor });
     },
 
-    setSearchOpen: (searchOpen) => set({ searchOpen }),
+    setSearchOpen: (searchOpen, searchAnchor) => set({ searchOpen, ...(searchOpen ? { searchAnchor } : {}) }),
     consumeFocus: () => set({ focusId: undefined, fitIds: undefined }),
   };
 });

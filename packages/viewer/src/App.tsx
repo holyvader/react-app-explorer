@@ -59,27 +59,12 @@ export function App() {
     void refreshList();
   }, [refreshList]);
 
-  // Keyboard: ⌘K search · ⌘Z / ⇧⌘Z / Ctrl+Y undo-redo · Delete/Backspace removes the selection.
+  // ⌘K opens search anywhere (diagram shortcuts live in the Canvas).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const s = useExplorer.getState();
-      const target = e.target as HTMLElement | null;
-      const typing = !!target?.closest("input, textarea, select, [contenteditable=true], [role=dialog]");
-      const mod = e.metaKey || e.ctrlKey;
-      const key = e.key.toLowerCase();
-      if (mod && key === "k" && s.snapshot) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && useExplorer.getState().snapshot) {
         e.preventDefault();
         setSearchOpen(true);
-        return;
-      }
-      if (typing) return;
-      if (mod && !e.altKey && (key === "z" || key === "y")) {
-        e.preventDefault();
-        if (key === "z" && !e.shiftKey) s.undo();
-        else s.redo();
-      } else if ((e.key === "Delete" || e.key === "Backspace") && s.selectedId && !mod) {
-        e.preventDefault();
-        s.hideNode(s.selectedId);
       }
     };
     window.addEventListener("keydown", onKey);

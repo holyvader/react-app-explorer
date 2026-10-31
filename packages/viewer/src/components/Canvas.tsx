@@ -1,5 +1,5 @@
 import type { Edge as GraphEdge } from "@rae/schema";
-import { Box } from "@rae/design-system";
+import { ContextMenu, ShortcutLegend, type Shortcut } from "@rae/design-system";
 import {
   applyNodeChanges,
   Background,
@@ -18,8 +18,11 @@ import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
 import { childEdges, parentEdges } from "../graph/relations.ts";
+import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
+import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
+import { nodeMenuEntries } from "./nodeMenu.tsx";
 import { CardNode } from "./nodes/CardNode.tsx";
 import { FrameNode } from "./nodes/FrameNode.tsx";
 import { type ElementFlowNode, FRAME_HANDLE } from "./nodes/types.ts";
@@ -27,18 +30,47 @@ import { type ElementFlowNode, FRAME_HANDLE } from "./nodes/types.ts";
 const nodeTypes = { card: CardNode, frame: FrameNode };
 const edgeTypes = { condition: ConditionEdge };
 
-const cssVar = (token: string) => `var(--chakra-colors-${token.replaceAll(".", "-")})`;
+/** Chakra exposes tokens as CSS variables: `kind.serverAction.solid` → `--chakra-colors-kind-server-action-solid`. */
+const cssVar = (token: string) => `var(--chakra-colors-${token.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).replaceAll(".", "-")})`;
 
-const EDGE_STYLE: Record<GraphEdge["kind"], { color: string; dash?: string; width?: number }> = {
-  imports: { color: cssVar("kind.module.solid") },
-  declares: { color: cssVar("kind.module.muted"), dash: "2 4" },
-  renders: { color: cssVar("kind.component.solid"), width: 1.75 },
-  usesHook: { color: cssVar("kind.hook.solid") },
-  invokes: { color: cssVar("kind.function.solid") },
-  invokesAction: { color: cssVar("kind.serverAction.solid"), width: 1.75 },
-};
+/** CSS class (colour, dash shape, speed: canvas.css) and arrow colour of each relation. */
+function edgeLook(e: GraphEdge): { className: string; color: string } {
+  switch (e.kind) {
+    case "imports":
+      if (e.importType === "type-only") return { className: "rae-edge rae-edge--imports-type", color: cssVar("kind.module.muted") };
+      if (e.importType === "lazy" || e.importType === "dynamic" || e.importType === "next-dynamic")
+        return { className: "rae-edge rae-edge--imports-lazy", color: cssVar("kind.module.solid") };
+      return { className: "rae-edge rae-edge--imports", color: cssVar("kind.module.solid") };
+    case "renders":
+      return { className: "rae-edge rae-edge--renders", color: cssVar("kind.component.solid") };
+    case "usesHook":
+      return { className: "rae-edge rae-edge--usesHook", color: cssVar("kind.hook.solid") };
+    case "invokes":
+      return { className: "rae-edge rae-edge--invokes", color: cssVar("kind.function.solid") };
+    case "invokesAction":
+      return { className: "rae-edge rae-edge--invokesAction", color: cssVar("kind.serverAction.solid") };
+    case "declares":
+      return { className: "rae-edge rae-edge--declares", color: cssVar("kind.module.muted") };
+  }
+}
+
+const SHORTCUTS: Shortcut[] = [
+  { keys: ["Space"], does: "Add to the diagram" },
+  { keys: ["⌘ K", "Ctrl K"], does: "Search and add" },
+  { keys: ["Right-click"], does: "On the empty canvas, add an element there" },
+  { keys: ["Right-click"], does: "On an element, all its actions and relations" },
+  { keys: ["Double-click"], does: "Zoom in (also inside a frame)" },
+  { keys: ["Drag"], does: "Pan, also inside a file or folder frame" },
+  { keys: ["⌘", "Ctrl"], does: "With a click, add to the selection" },
+  { keys: ["⌘ A", "Ctrl A"], does: "Select every element in sight" },
+  { keys: ["Delete", "⌫"], does: "Remove the selected elements" },
+  { keys: ["⌘ Z", "Ctrl Z"], does: "Undo a step" },
+  { keys: ["⇧ ⌘ Z", "Ctrl Y"], does: "Redo it" },
+  { keys: ["Esc"], does: "Clear the selection, close the menu" },
+];
 
 const RAISED_Z = 1000;
+const FIT = { padding: 0.15, maxZoom: 1, duration: 350 } as const;
 
 /**
  * Runs a viewport change once React Flow knows the nodes: with hundreds of new nodes its
@@ -51,7 +83,9 @@ function whenReady(attempt: () => boolean | Promise<boolean>, tries = 10) {
     });
   });
 }
-const FIT = { padding: 0.15, maxZoom: 1, duration: 350 } as const;
+
+const isTyping = (t: EventTarget | null) =>
+  !!(t as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable=true], [role=dialog], [role=menu]");
 
 interface Holding {
   id: string;
@@ -72,12 +106,13 @@ export function Canvas() {
   const enabled = useExplorer((s) => s.enabled);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
-  const selectedId = useExplorer((s) => s.selectedId);
+  const selection = useExplorer((s) => s.selection);
   const focusId = useExplorer((s) => s.focusId);
   const fitIds = useExplorer((s) => s.fitIds);
   const { select, consumeFocus, applyLayout, dropAt } = useExplorer.getState();
   const flow = useReactFlow();
   const [dragging, setDragging] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
 
   // Full ELK layout when the store asks for one.
   useEffect(() => {
@@ -129,11 +164,40 @@ export function Canvas() {
     });
   }, [snapshot, index, placed, filter]);
 
-  // Selection is applied on top, so selecting re-creates only the two nodes involved.
-  const selectedNodes = useMemo(
-    () => derived.map((n) => (n.id === selectedId ? ({ ...n, selected: true } as ElementFlowNode) : n)),
-    [derived, selectedId],
-  );
+  // What the selection relates to: the other ends of its edges, and its containers / contents.
+  const related = useMemo(() => {
+    const nodes = new Set<string>();
+    const edges = new Set<string>();
+    if (!selection.length) return { nodes, edges };
+    const sel = new Set(selection);
+    for (const r of graph.relations) {
+      if (sel.has(r.source) || sel.has(r.target)) {
+        edges.add(r.id);
+        nodes.add(r.source);
+        nodes.add(r.target);
+      }
+    }
+    const parentOf = new Map(graph.elements.map((e) => [e.id, e.parent]));
+    for (const id of selection) {
+      for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) nodes.add(p);
+      for (const e of graph.elements) if (e.parent === id) nodes.add(e.id);
+    }
+    for (const id of selection) nodes.delete(id);
+    return { nodes, edges };
+  }, [selection, graph]);
+
+  // Selection and relatedness are applied on top, so only the nodes involved are re-created.
+  const selectedNodes = useMemo(() => {
+    if (!selection.length) return derived;
+    const sel = new Set(selection);
+    return derived.map((n) =>
+      sel.has(n.id)
+        ? ({ ...n, selected: true } as ElementFlowNode)
+        : related.nodes.has(n.id)
+          ? ({ ...n, className: "rae-related" } as ElementFlowNode)
+          : n,
+    );
+  }, [derived, selection, related]);
 
   // React Flow applies drags and measurements locally; re-sync when the placement or selection
   // changes ("adjust state during render"). A node whose source didn't change keeps its local
@@ -235,39 +299,90 @@ export function Canvas() {
     );
   }, [focusId, placed, flow, consumeFocus]);
 
-  const edges = useMemo<ConditionFlowEdge[]>(() => {
+  const baseEdges = useMemo<ConditionFlowEdge[]>(() => {
     const drawn = new Set(placed.map((p) => p.element.id));
     return graph.relations
       .filter((r) => drawn.has(r.source) && drawn.has(r.target))
       .map(({ id, source, target, edge: e }) => {
-        const st = EDGE_STYLE[e.kind];
-        const lazy = e.importType === "lazy" || e.importType === "dynamic" || e.importType === "next-dynamic";
-        const typeOnly = e.importType === "type-only";
+        const look = edgeLook(e);
         return {
           id,
           source,
           target,
           type: "condition",
+          className: look.className,
           data: { edge: e },
-          animated: e.kind === "invokesAction",
           zIndex: 1,
-          markerEnd: { type: MarkerType.ArrowClosed, color: st.color, width: 16, height: 16 },
-          style: {
-            stroke: st.color,
-            strokeWidth: st.width ?? 1.25,
-            strokeDasharray: lazy ? "6 4" : typeOnly ? "1 4" : st.dash,
-            opacity: typeOnly ? 0.6 : 1,
-          },
+          markerEnd: { type: MarkerType.ArrowClosed, color: look.color, width: 16, height: 16 },
         };
       });
   }, [graph, placed]);
 
+  const edges = useMemo<ConditionFlowEdge[]>(
+    () =>
+      related.edges.size
+        ? baseEdges.map((e) =>
+            related.edges.has(e.id) ? { ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } } : e,
+          )
+        : baseEdges,
+    [baseEdges, related],
+  );
+
+  // Keyboard shortcuts on the diagram (noesis-style).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTyping(e.target)) return;
+      const s = useExplorer.getState();
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (e.key === " " && !mod && !e.repeat && s.snapshot) {
+        e.preventDefault();
+        s.setSearchOpen(true);
+      } else if (mod && key === "a" && !e.altKey) {
+        // Every element in sight.
+        e.preventDefault();
+        const { x, y, zoom } = flow.getViewport();
+        const box = document.querySelector(".rae-canvas")?.getBoundingClientRect();
+        if (!box) return;
+        const view = { x: -x / zoom, y: -y / zoom, w: box.width / zoom, h: box.height / zoom };
+        const ids = s.placed
+          .filter((p) => s.snapshot?.nodes[p.element.id])
+          .filter((p) => {
+            const r = absoluteRect(s.placed, p.element.id)!;
+            return r.x + r.width > view.x && r.x < view.x + view.w && r.y + r.height > view.y && r.y < view.y + view.h;
+          })
+          .map((p) => p.element.id);
+        s.selectMany(ids);
+      } else if (mod && !e.altKey && (key === "z" || key === "y")) {
+        e.preventDefault();
+        if (key === "z" && !e.shiftKey) s.undo();
+        else s.redo();
+      } else if ((e.key === "Delete" || e.key === "Backspace") && !mod && s.selection.length) {
+        e.preventDefault();
+        s.hideNodes(s.selection);
+      } else if (e.key === "Escape") {
+        setMenu(null);
+        s.select(undefined);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [flow]);
+
+  const menuNode = menu ? snapshot?.nodes[menu.id] : undefined;
+  const menuEntries = useMemo(() => (menu ? nodeMenuEntries(menu.id) : []), [menu]);
+
   return (
-    <Box
-      h="full"
-      w="full"
-      // Elements glide to a new placement — never while dragging, or a frame's content would trail.
-      css={dragging ? undefined : { "& .react-flow__node": { transition: "transform 240ms ease, width 240ms ease, height 240ms ease" } }}
+    <div
+      className="rae-canvas"
+      tabIndex={-1}
+      data-selection={selection.length ? "" : undefined}
+      data-dragging={dragging ? "" : undefined}
+      // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
+      onPointerDown={(e) => {
+        const active = document.activeElement as HTMLElement | null;
+        if (active && active !== e.currentTarget && active.matches("input, textarea, select")) e.currentTarget.focus({ preventScroll: true });
+      }}
     >
       <ReactFlow<ElementFlowNode, Edge>
         nodes={nodes}
@@ -275,11 +390,25 @@ export function Canvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
-        // Read-only diagram: no drawing connections, no React Flow deletion (Delete is handled by the app).
+        // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
         nodesConnectable={false}
         deleteKeyCode={null}
+        selectionKeyCode={null}
+        // Space adds to the diagram (noesis); panning is a plain drag.
+        panActivationKeyCode={null}
+        multiSelectionKeyCode={null}
         edgesFocusable={false}
-        onNodeClick={(_, n) => n.data.node && select(n.id)}
+        onNodeClick={(e, n) => n.data.node && select(n.id, e.metaKey || e.ctrlKey)}
+        onNodeContextMenu={(e, n) => {
+          e.preventDefault();
+          if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
+          setMenu({ x: e.clientX, y: e.clientY, id: n.id });
+        }}
+        onPaneContextMenu={(e) => {
+          e.preventDefault();
+          const s = useExplorer.getState();
+          if (s.snapshot) s.setSearchOpen(true, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+        }}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
@@ -303,6 +432,22 @@ export function Canvas() {
           nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
         />
       </ReactFlow>
-    </Box>
+      <div className="rae-legend">
+        <ShortcutLegend shortcuts={SHORTCUTS} />
+      </div>
+      <ContextMenu
+        at={menu && { x: menu.x, y: menu.y }}
+        onClose={() => setMenu(null)}
+        entries={menuEntries}
+        title={
+          menu && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{menuNode?.name ?? menu.id.replace(FOLDER_PREFIX, "")}</div>
+              <div style={{ fontSize: 11, opacity: 0.7 }}>{menuNode ? `${KIND_META[menuNode.kind].label} · ${menuNode.filePath}` : "Folder"}</div>
+            </div>
+          )
+        }
+      />
+    </div>
   );
 }

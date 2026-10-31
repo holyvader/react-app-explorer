@@ -16,7 +16,8 @@ src/provider.tsx      DesignSystemProvider (wrap the app root once)
 src/icons.ts          curated lucide icons, renamed Icon<Name> (IconPlus, IconComponent…)
 src/components/       composed components: Modal, Tooltip, ActionIconButton, SearchInput, Select,
                       Panel/PanelHeader/PanelSection, EmptyState, PropertyList, DataTable, KindChip/BoundaryChip/CodeChip,
-                      Switch, Checkbox, Alert
+                      Switch, Checkbox, Alert, ContextMenu (point-anchored, nested submenus),
+                      ShortcutLegend
 ```
 
 ## Tokens
@@ -33,6 +34,9 @@ src/components/       composed components: Modal, Tooltip, ActionIconButton, Sea
 4. Export the component and its props type from `src/index.ts`.
 5. New icon: add an aliased export to `icons.ts` (`Foo as IconFoo`). Apps never import lucide directly.
 6. Run `tsc -p packages/design-system --noEmit`, then `tsc -p packages/viewer --noEmit` and `bun run lint`.
+
+## Performance rule
+Design-system components are for chrome (toolbar, sidebar, dialogs, menus). Things rendered by the hundred and re-rendered per frame (diagram nodes/edges) are plain HTML/CSS in the app, styled with the token CSS variables. Dialogs and menus use `lazyMount unmountOnExit`, so nothing stays mounted (and focused) while closed.
 
 ## Chakra v3 notes
 - Theming uses `createSystem`/`defineConfig`, not `extendTheme`. Provider: `<ChakraProvider value={system}>`.

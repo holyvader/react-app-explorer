@@ -66,7 +66,8 @@ export function SearchModal() {
 
   const pick = (n: GraphNode) => {
     // New nodes go near the middle of what the user is looking at.
-    const anchor = flow.screenToFlowPosition({ x: (window.innerWidth - 420) / 2, y: window.innerHeight / 2 });
+    const anchor =
+      useExplorer.getState().searchAnchor ?? flow.screenToFlowPosition({ x: (window.innerWidth - 420) / 2, y: window.innerHeight / 2 });
     addNodes([n.id], { select: n.id, focus: n.id, anchor });
     setSearchOpen(false);
     setQuery("");

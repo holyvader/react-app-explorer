@@ -1,0 +1,273 @@
+/*
+ * Diagram styles — plain CSS on purpose: nodes and edges re-render on every drag frame, so they
+ * avoid runtime CSS-in-JS. Colors come from the design-system tokens via Chakra's CSS variables.
+ */
+
+.rae-canvas {
+  --sel: var(--chakra-colors-blue-500);
+  --sel-soft: var(--chakra-colors-blue-300);
+  --panel: var(--chakra-colors-bg-panel);
+  --fg: var(--chakra-colors-fg);
+  --fg-muted: var(--chakra-colors-fg-muted);
+  --line: var(--chakra-colors-border);
+  width: 100%;
+  height: 100%;
+  font-family: var(--chakra-fonts-body);
+  color: var(--fg);
+  outline: none;
+}
+
+/* Elements glide to a new placement — never while dragging (a frame's content would trail). */
+.rae-canvas:not([data-dragging]) .react-flow__node {
+  transition: transform 220ms ease, width 220ms ease, height 220ms ease, opacity 150ms ease;
+}
+
+/* Selection: everything not selected or related fades. */
+.rae-canvas[data-selection] .react-flow__node:not(.selected):not(.rae-related) {
+  opacity: 0.32;
+}
+.rae-canvas[data-selection] .react-flow__edge:not(.rae-edge--related) {
+  opacity: 0.12;
+}
+
+/* ---- node kinds: colors ---------------------------------------------------------------- */
+[data-kind="module"] { --k: var(--chakra-colors-kind-module-solid); --k-soft: var(--chakra-colors-kind-module-subtle); --k-mid: var(--chakra-colors-kind-module-muted); --k-fg: var(--chakra-colors-kind-module-fg); }
+[data-kind="component"] { --k: var(--chakra-colors-kind-component-solid); --k-soft: var(--chakra-colors-kind-component-subtle); --k-mid: var(--chakra-colors-kind-component-muted); --k-fg: var(--chakra-colors-kind-component-fg); }
+[data-kind="hook"] { --k: var(--chakra-colors-kind-hook-solid); --k-soft: var(--chakra-colors-kind-hook-subtle); --k-mid: var(--chakra-colors-kind-hook-muted); --k-fg: var(--chakra-colors-kind-hook-fg); }
+[data-kind="serverAction"] { --k: var(--chakra-colors-kind-server-action-solid); --k-soft: var(--chakra-colors-kind-server-action-subtle); --k-mid: var(--chakra-colors-kind-server-action-muted); --k-fg: var(--chakra-colors-kind-server-action-fg); }
+[data-kind="function"] { --k: var(--chakra-colors-kind-function-solid); --k-soft: var(--chakra-colors-kind-function-subtle); --k-mid: var(--chakra-colors-kind-function-muted); --k-fg: var(--chakra-colors-kind-function-fg); }
+[data-kind="external"] { --k: var(--chakra-colors-kind-external-solid); --k-soft: var(--chakra-colors-kind-external-subtle); --k-mid: var(--chakra-colors-kind-external-muted); --k-fg: var(--chakra-colors-kind-external-fg); }
+[data-kind="folder"] { --k: var(--chakra-colors-fg-subtle); --k-soft: var(--chakra-colors-bg-subtle); --k-mid: var(--chakra-colors-border-emphasized); --k-fg: var(--chakra-colors-fg-muted); }
+
+/* ---- cards: one shape per kind -------------------------------------------------------- */
+/* The shape is two clipped layers: the outer one is the border colour, the inner one (inset) the fill. */
+.rae-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  --border: var(--k-mid);
+  --bw: 1.5px;
+  --shape: inset(0 round 10px);
+}
+.react-flow__node.rae-related .rae-card { --border: var(--sel-soft); --bw: 2px; }
+.react-flow__node.selected .rae-card { --border: var(--sel); --bw: 2.5px; filter: drop-shadow(0 4px 10px rgb(59 130 246 / 0.35)); }
+
+.rae-card__shape,
+.rae-card__shape::after {
+  position: absolute;
+  inset: 0;
+  clip-path: var(--shape);
+}
+.rae-card__shape { background: var(--border); }
+.rae-card__shape::after {
+  content: "";
+  inset: var(--bw);
+  /* a strip in the kind's colour on the leading edge, then the panel */
+  background: linear-gradient(90deg, var(--k) 0 5px, var(--k-soft) 5px, var(--panel) 40%);
+}
+
+/* component: rounded rectangle */
+.rae-card[data-kind="component"] { --shape: inset(0 round 12px); }
+/* hook: hexagon */
+.rae-card[data-kind="hook"] { --shape: polygon(14px 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 14px 100%, 0 50%); }
+.rae-card[data-kind="hook"] .rae-card__body { padding-left: 18px; padding-right: 16px; }
+/* function: chamfered rectangle */
+.rae-card[data-kind="function"] { --shape: polygon(9px 0, calc(100% - 9px) 0, 100% 9px, 100% calc(100% - 9px), calc(100% - 9px) 100%, 9px 100%, 0 calc(100% - 9px), 0 9px); }
+/* server action: arrow pointing right */
+.rae-card[data-kind="serverAction"] { --shape: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%); }
+.rae-card[data-kind="serverAction"] .rae-card__body { padding-right: 22px; }
+/* module (file without contents drawn): sheet with a folded corner */
+.rae-card[data-kind="module"] { --shape: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%); }
+.rae-card[data-kind="module"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(225deg, transparent 50%, var(--border) 50%);
+  z-index: 1;
+}
+/* external library: dashed pill */
+.rae-card[data-kind="external"] .rae-card__shape { clip-path: none; background: var(--panel); border: var(--bw) dashed var(--border); border-radius: 999px; }
+.rae-card[data-kind="external"] .rae-card__shape::after { display: none; }
+.rae-card[data-kind="external"] .rae-card__body { padding: 0 18px; }
+
+.rae-card__body {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  padding: 6px 10px 6px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.rae-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rae-icon { color: var(--k-fg); flex-shrink: 0; display: inline-flex; }
+.rae-name {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.rae-sub {
+  font-family: var(--chakra-fonts-mono);
+  font-size: 10px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rae-spacer { flex: 1; }
+.rae-badges { display: flex; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.rae-badge {
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: var(--k-soft);
+  color: var(--k-fg);
+  font-weight: 500;
+}
+.rae-badge--outline { background: transparent; color: var(--fg-muted); box-shadow: inset 0 0 0 1px var(--line); }
+.rae-chip {
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.rae-chip[data-boundary="server"] { background: var(--chakra-colors-boundary-server-subtle); color: var(--chakra-colors-boundary-server-fg); }
+.rae-chip[data-boundary="client"] { background: var(--chakra-colors-boundary-client-subtle); color: var(--chakra-colors-boundary-client-fg); }
+.rae-chip[data-boundary="shared"] { background: var(--chakra-colors-boundary-shared-subtle); color: var(--chakra-colors-boundary-shared-fg); }
+
+/* ---- icon buttons --------------------------------------------------------------------- */
+.rae-actions { display: flex; flex-shrink: 0; }
+.rae-icon-btn {
+  all: unset;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.rae-icon-btn:hover { background: var(--chakra-colors-bg-muted); color: var(--fg); }
+.rae-icon-btn:focus-visible { outline: 2px solid var(--sel); outline-offset: 1px; }
+.rae-icon-btn:disabled { opacity: 0.35; cursor: default; background: none; }
+
+/* ---- frames (file modules, folders) --------------------------------------------------- */
+.rae-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1.5px solid var(--k-mid);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--k-soft) 55%, transparent);
+}
+.rae-frame[data-kind="folder"] { border-style: dashed; background: color-mix(in srgb, var(--k-soft) 45%, transparent); border-radius: 4px 12px 12px 12px; }
+.react-flow__node.rae-related > .rae-frame { border-color: var(--sel-soft); }
+.react-flow__node.selected > .rae-frame { border-color: var(--sel); border-width: 2.5px; box-shadow: 0 0 0 4px rgb(59 130 246 / 0.15); }
+.rae-frame[data-refused] { border: 2px dashed var(--chakra-colors-red-solid); background: color-mix(in srgb, var(--chakra-colors-red-subtle) 50%, transparent); }
+
+.rae-frame__header {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--k-mid);
+  background: color-mix(in srgb, var(--panel) 75%, transparent);
+  border-radius: 9px 9px 0 0;
+  cursor: grab;
+}
+.rae-frame[data-kind="folder"] .rae-frame__header { background: transparent; border-bottom-style: dashed; }
+/* folder tab */
+.rae-frame[data-kind="folder"]::before {
+  content: "";
+  position: absolute;
+  left: -1.5px;
+  top: -9px;
+  width: 64px;
+  height: 9px;
+  border: 1.5px dashed var(--k-mid);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.rae-frame__title { min-width: 0; flex: 1; }
+.rae-frame__room { flex: 1; cursor: default; }
+.rae-frame__room[data-panning] { cursor: grabbing; }
+
+/* ---- edges: every relation has its own colour, dash shape and speed ------------------- */
+.react-flow__edge.rae-edge path.react-flow__edge-path {
+  stroke: var(--e);
+  stroke-width: var(--ew, 1.5px);
+  stroke-dasharray: var(--dash);
+  stroke-linecap: round;
+  animation: var(--anim) var(--speed) linear infinite;
+}
+.rae-edge--imports        { --e: var(--chakra-colors-kind-module-solid); --dash: 8 6; --anim: rae-dash-14; --speed: 1.8s; }
+.rae-edge--imports-lazy   { --e: var(--chakra-colors-kind-module-solid); --dash: 3 6; --anim: rae-dash-9; --speed: 2.4s; }
+.rae-edge--imports-type   { --e: var(--chakra-colors-kind-module-muted); --dash: 1 5; --anim: rae-dash-6; --speed: 3.2s; --ew: 1.25px; }
+.rae-edge--renders        { --e: var(--chakra-colors-kind-component-solid); --dash: 12 5; --anim: rae-dash-17; --speed: 0.9s; --ew: 2px; }
+.rae-edge--usesHook       { --e: var(--chakra-colors-kind-hook-solid); --dash: 2 5; --anim: rae-dash-7; --speed: 1.3s; --ew: 2px; }
+.rae-edge--invokes        { --e: var(--chakra-colors-kind-function-solid); --dash: 10 3 2 3; --anim: rae-dash-18; --speed: 0.7s; --ew: 1.75px; }
+.rae-edge--invokesAction  { --e: var(--chakra-colors-kind-server-action-solid); --dash: 6 3; --anim: rae-dash-9; --speed: 0.45s; --ew: 2.25px; }
+.rae-edge--declares       { --e: var(--chakra-colors-kind-module-muted); --dash: 2 4; --anim: rae-dash-6; --speed: 2.5s; }
+.rae-edge--related path.react-flow__edge-path { --ew: 3px; }
+
+@keyframes rae-dash-6 { to { stroke-dashoffset: -6; } }
+@keyframes rae-dash-7 { to { stroke-dashoffset: -7; } }
+@keyframes rae-dash-9 { to { stroke-dashoffset: -9; } }
+@keyframes rae-dash-14 { to { stroke-dashoffset: -14; } }
+@keyframes rae-dash-17 { to { stroke-dashoffset: -17; } }
+@keyframes rae-dash-18 { to { stroke-dashoffset: -18; } }
+
+/* Edges hold still while something is dragged, so the frames stay smooth. */
+.rae-canvas[data-dragging] .react-flow__edge-path { animation-play-state: paused; }
+.rae-canvas[data-still] .react-flow__edge-path { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path { animation: none !important; }
+  .rae-canvas .react-flow__node { transition: none !important; }
+}
+
+.rae-edge-label {
+  position: absolute;
+  pointer-events: all;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 6px;
+  font: 10px/16px var(--chakra-fonts-mono);
+  color: var(--fg-muted);
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rae-canvas[data-selection] .rae-edge-label:not([data-related]) { opacity: 0.15; }
+
+.rae-legend {
+  position: absolute;
+  left: 56px;
+  bottom: 12px;
+  z-index: 5;
+}

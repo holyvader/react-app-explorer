@@ -14,3 +14,5 @@ export { Tooltip, type TooltipProps } from "./components/Tooltip.tsx";
 export { Alert, type AlertProps } from "./components/Alert.tsx";
 export { Switch, type SwitchProps } from "./components/Switch.tsx";
 export { Checkbox, type CheckboxProps } from "./components/Checkbox.tsx";
+export { ContextMenu, type ContextMenuProps, type MenuEntry } from "./components/ContextMenu.tsx";
+export { ShortcutLegend, type Shortcut } from "./components/ShortcutLegend.tsx";

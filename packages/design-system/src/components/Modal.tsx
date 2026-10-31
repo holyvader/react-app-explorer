@@ -19,6 +19,9 @@ export function Modal({ open, onOpenChange, title, children, footer, size = "lg"
       size={size}
       placement="top"
       initialFocusEl={initialFocusEl ? () => initialFocusEl.current : undefined}
+      // Closed dialogs leave nothing mounted (no stray focused inputs swallowing shortcuts).
+      lazyMount
+      unmountOnExit
     >
       <Portal>
         <Dialog.Backdrop />

@@ -30,6 +30,15 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 - Every relation query takes a `RelationFilter` (enabled edge groups + library filter): `relationFilterOf(state)`.
 - `reachable(…, deep)` is a BFS with a visited set. Expansions above `LARGE_EXPANSION` (300) ask first.
 
+## Nodes and edges are plain HTML/CSS (no Chakra on the canvas)
+- `components/nodes/{CardNode,FrameNode,NodeActions}.tsx`, `ConditionEdge.tsx` and `components/canvas.css` render with plain elements and `rae-*` classes. They re-render on every drag frame, and Chakra's runtime styling dropped frames. Colors come from design-system tokens via Chakra CSS variables (`--chakra-colors-kind-server-action-solid`: camelCase becomes kebab-case; see `cssVar()` in Canvas.tsx). The design-system import rule still holds: nothing imports Chakra here.
+- Shapes per kind (`.rae-card[data-kind]`): component = rounded rect, hook = hexagon, function = chamfered rect, server action = arrow, module card = folded sheet, library = dashed pill. Polygon shapes are two clipped layers (`.rae-card__shape` = border colour, `::after` inset = fill). Frames are file modules (solid) and folders (dashed with a tab).
+- Edges: each relation has its own colour, dash pattern and animation speed (`.rae-edge--imports|imports-lazy|imports-type|renders|usesHook|invokes|invokesAction`, CSS `stroke-dashoffset` keyframes). Animations pause while dragging (`[data-dragging]`) and honour `prefers-reduced-motion`.
+- Selection: `select(id, adding)`, with ⌘/Ctrl+click adding to it. The canvas gets `data-selection`, selected nodes `selected`, related nodes (edge ends, containers, contents) `rae-related`, related edges `rae-edge--related`. CSS fades the rest. Only the involved nodes are re-created.
+- Frame room (`.rae-frame__room`) acts as canvas, after noesis: drag pans (rAF-throttled, final position from the pointerup), double-click zooms ×2 around the pointer, click selects the frame. The header is the drag handle.
+- Right-click: `onNodeContextMenu` opens the design-system `ContextMenu` with `nodeMenuEntries(id)` (`components/nodeMenu.tsx`). It holds every action plus relation submenus in both directions (Imports/Imported by, Declares/Declared in, Renders/Rendered by, Uses hooks/Hook used by, Invokes/Invoked by), each with "Show all" and the individual targets. Right-click on the pane opens search anchored at that point.
+- Shortcuts (Canvas keydown, noesis set): Space add, ⌘K search, ⌘/Ctrl+click multi-select, ⌘A select all in sight, Delete/⌫ remove the selection, ⌘Z/⇧⌘Z/Ctrl+Y undo/redo, Esc clear. React Flow's own key bindings are off (`deleteKeyCode`, `selectionKeyCode`, `multiSelectionKeyCode`, `panActivationKeyCode` = null). The legend is in the bottom-left corner (`ShortcutLegend`). Pressing on the canvas takes focus from fields, so the shortcuts apply.
+
 ## Editing model
 - The diagram is read-only as a graph: `nodesConnectable={false}`, hidden non-interactive handles (`HIDDEN_HANDLE`), `deleteKeyCode={null}`. The app handles Delete/Backspace (removes the selection) in `App.tsx`.
 - Every diagram change (`addNodes`, `hideNode`, `clear`, `dropAt`, `arrange`, `relayout`) calls `record()` first. It pushes `{visible, placed, selectedId}` onto `past` (max 100) and clears `future`. `undo`/`redo` (⌘Z / ⇧⌘Z / Ctrl+Y, toolbar) `restore()` a step: the stored positions are reconciled with `placeLocally(…, null)`, falling back to ELK.
@@ -38,7 +47,7 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 ## Performance rules (measured on a 300-node canvas)
 - Node objects must keep their identity when their source didn't change. The sync step in `Canvas.tsx` reuses the local node (with React Flow's `measured`). Replacing all nodes makes React Flow re-measure everything and re-render every card (selection went from ~500 ms to ~30 ms after this fix).
 - Selection is applied on top of the memoized `derived` nodes (`selectedNodes`). Don't put `selectedId` into `derived`.
-- No rich tooltips inside nodes or edges: `ActionIconButton tooltip="native"`, and `title` on edge labels. A Chakra tooltip machine per button dominated render time.
+- No component-library components inside nodes or edges: plain HTML + `canvas.css`, native `title` tooltips. Measured: 0 dropped frames dragging cards or frames and panning, with 355 elements placed (212 rendered).
 - `drawnGraph(…, index)` walks only the drawn nodes' edges, never all snapshot edges.
 - Viewport changes right after adding many nodes go through `whenReady()`, because React Flow's lookup can lag a frame and `fitView` would silently do nothing.
 - Dev builds expose the store as `window.__rae` for headless profiling (see the frontend skill).

@@ -73,6 +73,38 @@ if (before && cb) {
   if (!after || after.width * after.height <= before.width * before.height || Math.abs(after.x - before.x) > 1) fail(`frame did not grow around the dragged card: ${JSON.stringify({ before, after })}`);
 }
 
+// Selecting highlights related nodes and edges; the rest fades.
+await card.click();
+await page.waitForTimeout(200);
+if ((await page.locator(".rae-canvas[data-selection]").count()) !== 1) fail("selection should mark the canvas");
+if ((await page.locator(".react-flow__node.rae-related").count()) === 0) fail("selecting should highlight related nodes");
+
+// Right-click: actions and relations (e.g. "Rendered by"), each listing related elements.
+await card.click({ button: "right" });
+await page.getByRole("menuitem", { name: /^Rendered by/ }).hover();
+await page.getByRole("menuitem", { name: /^Show all|^All shown/ }).first().waitFor();
+await page.keyboard.press("Escape");
+await page.keyboard.press("Escape");
+
+// Dragging inside a folder frame's empty room pans the diagram.
+const room = page.locator('.react-flow__node-frame[data-id^="dir:"] .rae-frame__room').first();
+const rb = await room.boundingBox();
+const viewport = () => page.evaluate(() => document.querySelector(".react-flow__viewport")!.getAttribute("style"));
+if (rb) {
+  const v0 = await viewport();
+  await page.mouse.move(rb.x + 6, rb.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(rb.x + 106, rb.y + 56, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+  if ((await viewport()) === v0) fail("dragging inside a frame should pan the diagram");
+}
+
+// Space opens search (noesis shortcut).
+await page.keyboard.press(" ");
+await page.getByPlaceholder(/Search components/).waitFor();
+await page.keyboard.press("Escape");
+
 // Delete removes the selection; undo brings it back, redo removes it again.
 const count = () => page.locator(".react-flow__node").count();
 await card.click();
@@ -89,12 +121,14 @@ if ((await count()) >= withCard) fail("redo should remove it again");
 await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
 await page.waitForTimeout(400);
 
-// The diagram is stored: a reload brings back the same nodes.
-const stored = await count();
+// The diagram is stored: a reload brings back the same elements (compared in the store, since
+// only elements in the viewport are rendered).
+const drawnIds = () => page.evaluate(() => (window as unknown as { __rae: { getState: () => { visible: string[] } } }).__rae.getState().visible.slice().sort().join(","));
+const stored = await drawnIds();
 await page.reload();
 await page.locator(".react-flow__node").first().waitFor();
 await page.waitForTimeout(500);
-if ((await count()) !== stored) fail(`diagram not restored after reload: ${await count()} vs ${stored}`);
+if ((await drawnIds()) !== stored) fail("diagram not restored after reload");
 
 // Libraries filter: showing react brings it back into relation lists.
 await page.getByRole("button", { name: /Libraries/ }).click();

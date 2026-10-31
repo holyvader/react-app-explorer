@@ -1,66 +1,42 @@
-import { Badge, BoundaryChip, Box, Flex, HStack, Text } from "@rae/design-system";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
 import { KIND_META } from "../../lib/kinds.tsx";
 import { NodeActions } from "./NodeActions.tsx";
-import { HIDDEN_HANDLE } from "./types.ts";
-import type { CardFlowNode } from "./types.ts";
+import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
-/** A single element: component, hook, function, action, external, or a file module with nothing drawn inside. */
-function CardNodeImpl({ data, selected, width, height }: NodeProps<CardFlowNode>) {
+/**
+ * A single element, its shape telling its kind: component (rounded), hook (hexagon), function
+ * (chamfered), server action (arrow), file module (folded sheet), library (dashed pill).
+ * Plain HTML + canvas.css: it re-renders on every drag frame.
+ */
+function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
   const { node, element } = data;
   if (!node) return null;
-  const k = node.kind;
-  const Icon = KIND_META[k].icon;
+  const Icon = KIND_META[node.kind].icon;
   return (
-    <Box
-      w={`${width}px`}
-      h={`${height}px`}
-      bg="bg.panel"
-      borderWidth={selected ? "2px" : "1px"}
-      borderColor={selected ? `kind.${k}.solid` : `kind.${k}.muted`}
-      borderLeftWidth="4px"
-      borderLeftColor={`kind.${k}.solid`}
-      rounded="md"
-      shadow={selected ? "lg" : "xs"}
-      px="2.5"
-      py="1.5"
-      display="flex"
-      flexDirection="column"
-      justifyContent="space-between"
-      title={node.filePath}
-    >
+    <div className="rae-card" data-kind={node.kind} title={node.filePath}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
-      <Flex align="center" gap="1.5" minW="0">
-        <Box color={`kind.${k}.fg`} flexShrink={0}>
-          <Icon size={14} />
-        </Box>
-        <Text fontWeight="semibold" fontSize="sm" truncate>
-          {element.name}
-        </Text>
-        <Box flex="1" />
-        {node.moduleType && element.parent === null && <BoundaryChip boundary={node.moduleType} />}
-      </Flex>
-      <Flex align="center" gap="1">
-        <HStack gap="1" flex="1" minW="0" overflow="hidden">
-          <Badge size="xs" bg={`kind.${k}.subtle`} color={`kind.${k}.fg`}>
-            {KIND_META[k].label}
-          </Badge>
-          {node.nextRole && (
-            <Badge size="xs" variant="outline">
-              {node.nextRole}
-            </Badge>
-          )}
-          {node.isAsync && (
-            <Badge size="xs" variant="outline">
-              async
-            </Badge>
-          )}
-        </HStack>
-        <NodeActions data={data} />
-      </Flex>
+      <div className="rae-card__shape" />
+      <div className="rae-card__body">
+        <div className="rae-row">
+          <span className="rae-icon">
+            <Icon size={14} />
+          </span>
+          <span className="rae-name">{element.name}</span>
+          <span className="rae-spacer" />
+          {node.moduleType && element.parent === null && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
+        </div>
+        <div className="rae-row">
+          <span className="rae-badges">
+            <span className="rae-badge">{KIND_META[node.kind].label}</span>
+            {node.nextRole && <span className="rae-badge rae-badge--outline">{node.nextRole}</span>}
+            {node.isAsync && <span className="rae-badge rae-badge--outline">async</span>}
+          </span>
+          <NodeActions data={data} />
+        </div>
+      </div>
       <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
-    </Box>
+    </div>
   );
 }
 
