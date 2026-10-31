@@ -159,9 +159,11 @@ export function Canvas() {
     if (!snapshot || !index) return [];
     const drawn = new Set(placed.map((p) => p.element.id));
     const distinct = (ids: string[]) => new Set(ids).size;
-    // How many elements each container holds: a container's only element can't be moved inside it.
+    // A file module's only element is placed automatically (autoPlaceSoleChildren) and can't be
+    // dragged; inside folders everything moves freely.
     const held = new Map<string, number>();
     for (const p of placed) if (p.element.parent) held.set(p.element.parent, (held.get(p.element.parent) ?? 0) + 1);
+    const kindOf = new Map(placed.map((p) => [p.element.id, p.element.kind]));
     return placed.map((p) => {
       const id = p.element.id;
       const node = snapshot.nodes[id];
@@ -175,7 +177,7 @@ export function Canvas() {
         height: p.height,
         parentId: p.element.parent ?? undefined,
         dragHandle: p.holds ? `.${FRAME_HANDLE}` : undefined,
-        draggable: !(p.element.parent && held.get(p.element.parent) === 1),
+        draggable: !(p.element.parent && kindOf.get(p.element.parent) === "module" && held.get(p.element.parent) === 1),
         selected: false,
         // React Flow's own selection stays off (it flips its internal node state on click, out of
         // the store's reach); selection is the store's, passed in via `selected`.

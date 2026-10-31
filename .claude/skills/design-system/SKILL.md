@@ -24,7 +24,7 @@ src/components/       composed components: Modal, Tooltip, ActionIconButton, Sea
 - `kind.<module|component|hook|serverAction|function|external>.{solid,subtle,muted,fg}`
 - `boundary.<server|client|shared>.{solid,subtle,muted,fg}` (server gray, client cyan, shared pink)
 - `relation.imports`, `relation.importsMuted` (dark grey import edges)
-- Kinds: module gray, component **magenta** (custom palette), hook purple, server action orange, function teal, library yellow. **Blue is reserved for selected nodes** (relations always keep their own colours); don't use it for anything else.
+- Kinds: module gray, component **#429cb5** (custom `component` palette), hook purple, server action orange, function teal, library yellow. **Blue is reserved for selected nodes** (relations always keep their own colours); don't use it for anything else.
 - `canvas.bg`, `canvas.dot`
 - Use them as Chakra style props (`bg="kind.hook.subtle"`). Outside Chakra (React Flow SVG), use CSS vars: `var(--chakra-colors-kind-hook-solid)`.
 - Prefer Chakra semantic tokens (`bg.panel`, `bg.muted`, `fg.muted`, `border`) over raw palette colors so light/dark both work.

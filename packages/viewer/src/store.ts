@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { type DrawnGraph, drawnGraph, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
-import { absoluteRect, arrangeWithin, type CanvasPoint, movedTo, placeLocally } from "./graph/placement.ts";
+import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, placeLocally } from "./graph/placement.ts";
 import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
@@ -127,7 +127,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const placedIds = new Set(next.placed.map((p) => p.element.id));
     const added = graph.elements.filter((e) => !placedIds.has(e.id)).length;
     const local = !full && next.placed.length && added <= LOCAL_LIMIT ? placeLocally(next.placed, graph, anchor) : null;
-    if (local) set({ ...patch, graph, placed: local });
+    if (local) set({ ...patch, graph, placed: autoPlaceSoleChildren(local) });
     else set({ ...patch, graph, layoutToken: next.layoutToken + 1 });
   };
 
@@ -148,7 +148,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const selectedId = entry.selectedId && s.snapshot.nodes[entry.selectedId] ? entry.selectedId : undefined;
     const selection = selectedId ? [selectedId] : [];
     if (!graph.elements.length) return set({ ...extra, visible, selectedId, selection, graph, placed: [] });
-    const placed = entry.placed.length ? placeLocally(entry.placed, graph, null) : null;
+    const local = entry.placed.length ? placeLocally(entry.placed, graph, null) : null;
+    const placed = local && autoPlaceSoleChildren(local);
     if (placed) set({ ...extra, visible, selectedId, selection, graph, placed });
     else set({ ...extra, visible, selectedId, selection, graph, placed: [], layoutToken: s.layoutToken + 1 });
   };
@@ -297,14 +298,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     applyLayout: (graph, placed) => {
-      if (get().graph === graph) set({ placed });
+      if (get().graph === graph) set({ placed: autoPlaceSoleChildren(placed) });
     },
 
     dropAt: (id, to) => {
       const { placed, graph } = get();
       record();
       const moved = movedTo(placed, graph, id, to);
-      if (moved) return set({ placed: moved });
+      if (moved) return set({ placed: autoPlaceSoleChildren(moved) });
       // Couldn't settle what it pushes: it stays alone where it was let go.
       const parent = placed.find((p) => p.element.id === id)?.element.parent ?? null;
       const origin = parent ? absoluteRect(placed, parent) : undefined;
@@ -320,7 +321,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       if (get().graph !== graph) return;
       const res = arrangeWithin(get().placed, graph, id, inside);
       record();
-      if (res) set({ placed: res });
+      if (res) set({ placed: autoPlaceSoleChildren(res) });
       else redraw({}, null, true);
     },
 

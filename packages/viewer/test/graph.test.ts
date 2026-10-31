@@ -4,7 +4,7 @@ import { scan } from "../../scanner/src/scan.ts";
 import { drawnGraph } from "../src/graph/drawn.ts";
 import { CARD_HEIGHT, layoutAll, PADDING, type PlacedElement } from "../src/graph/layout.ts";
 import { DEFAULT_EXCLUDED, packageOf } from "../src/graph/packages.ts";
-import { absoluteRect, movedTo, placeLocally } from "../src/graph/placement.ts";
+import { absoluteRect, autoPlaceSoleChildren, movedTo, placeLocally } from "../src/graph/placement.ts";
 
 // A fresh snapshot of the Next.js fixture (no cache, no types: fast and independent of files on disk).
 let cached: Promise<Snapshot> | undefined;
@@ -150,3 +150,23 @@ describe("placement", async () => {
 });
 
 export type { PlacedElement };
+
+describe("auto-placement", () => {
+  test("sole element moves to the room's corner and the frame shrinks around it", () => {
+    const el = (id: string, kind: "module" | "function" | "folder", parent: string | null) => ({ id, kind, name: id, parent });
+    const placed: PlacedElement[] = [
+      { element: el("dir:lib", "folder", null), holds: true, x: 0, y: 0, width: 900, height: 600 },
+      { element: el("lib/data.ts", "module", "dir:lib"), holds: true, x: 16, y: 60, width: 800, height: 500 },
+      { element: el("lib/data.ts#getUser", "function", "lib/data.ts"), holds: false, x: 400, y: 300, width: 230, height: CARD_HEIGHT },
+      // a folder with one file: left alone
+      { element: el("dir:other", "folder", null), holds: true, x: 1000, y: 0, width: 600, height: 400 },
+      { element: el("other/x.ts", "module", "dir:other"), holds: false, x: 200, y: 200, width: 230, height: CARD_HEIGHT },
+    ];
+    const out = autoPlaceSoleChildren(placed);
+    const by = new Map(out.map((p) => [p.element.id, p]));
+    expect(by.get("lib/data.ts#getUser")).toMatchObject({ x: PADDING.left, y: PADDING.top });
+    expect(by.get("lib/data.ts")!.height).toBe(CARD_HEIGHT + PADDING.top + PADDING.bottom);
+    expect(by.get("lib/data.ts")).toMatchObject({ x: 16, y: 60 }); // top-left corner kept
+    expect(by.get("other/x.ts")).toMatchObject({ x: 200, y: 200 }); // folders aren't touched
+  });
+});

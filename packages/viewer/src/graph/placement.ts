@@ -412,3 +412,24 @@ export function absoluteRect(placed: readonly PlacedElement[], id: string): Rect
   }
   return r;
 }
+
+/**
+ * A file module holding a single element places it automatically: at the top-left of its room,
+ * the frame fitted around it (keeping its top-left corner). The frame only ever shrinks here,
+ * so nothing around it needs pushing. Folders are left alone (their contents move freely).
+ */
+export function autoPlaceSoleChildren(placed: PlacedElement[]): PlacedElement[] {
+  const kids = new Map<string, PlacedElement[]>();
+  for (const p of placed) if (p.element.parent) kids.set(p.element.parent, [...(kids.get(p.element.parent) ?? []), p]);
+  const fixed = new Map<string, PlacedElement>();
+  for (const p of placed) {
+    const inside = kids.get(p.element.id);
+    if (p.element.kind !== "module" || inside?.length !== 1) continue;
+    const only = inside[0]!;
+    const width = Math.max(frameWidthOf(p.element.name), only.width + PADDING.left + PADDING.right);
+    const height = only.height + PADDING.top + PADDING.bottom;
+    if (only.x !== PADDING.left || only.y !== PADDING.top) fixed.set(only.element.id, { ...only, x: PADDING.left, y: PADDING.top });
+    if (p.width !== width || p.height !== height) fixed.set(p.element.id, { ...p, width, height });
+  }
+  return fixed.size ? placed.map((p) => fixed.get(p.element.id) ?? p) : placed;
+}

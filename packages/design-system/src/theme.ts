@@ -20,19 +20,19 @@ const config = defineConfig({
   theme: {
     tokens: {
       colors: {
-        // Magenta for components (not in Chakra's default palette).
-        magenta: {
-          50: { value: "#fdf4ff" },
-          100: { value: "#fae8ff" },
-          200: { value: "#f5d0fe" },
-          300: { value: "#f0abfc" },
-          400: { value: "#e879f9" },
-          500: { value: "#d946ef" },
-          600: { value: "#c026d3" },
-          700: { value: "#a21caf" },
-          800: { value: "#86198f" },
-          900: { value: "#701a75" },
-          950: { value: "#4a044e" },
+        // Components and their "renders" relation: #429cb5 at 500, tints and shades around it.
+        component: {
+          50: { value: "#eef8fb" },
+          100: { value: "#d6eef4" },
+          200: { value: "#b0deea" },
+          300: { value: "#82c8da" },
+          400: { value: "#5cb2c8" },
+          500: { value: "#429cb5" },
+          600: { value: "#367f94" },
+          700: { value: "#2e6878" },
+          800: { value: "#285563" },
+          900: { value: "#234754" },
+          950: { value: "#142c35" },
         },
       },
       fonts: {
@@ -46,7 +46,7 @@ const config = defineConfig({
         kind: {
           module: kind("gray"),
           // Blue is reserved for selection; nothing else uses it.
-          component: kind("magenta"),
+          component: kind("component"),
           hook: kind("purple"),
           serverAction: kind("orange"),
           function: kind("teal"),

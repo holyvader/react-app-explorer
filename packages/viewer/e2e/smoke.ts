@@ -60,21 +60,40 @@ await page.locator("dl").getByRole("button", { name: "TodoItem.tsx", exact: true
 await page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"]').waitFor();
 if ((await page.locator('.react-flow__node-frame[data-id^="dir:"]').count()) === 0) fail("expected a folder frame around the file");
 
-// Dragging a card inside its file frame grows the frame (top-left corner fixed).
-await page.locator(".react-flow__controls-fitview").click();
-await page.waitForTimeout(500);
 const frame = page.locator('.react-flow__node[data-id="components/TodoItem.tsx"]');
 const card = page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]');
-const before = await frame.boundingBox();
-const cb = await card.boundingBox();
-if (before && cb) {
-  await page.mouse.move(cb.x + 40, cb.y + 12);
+await page.locator(".react-flow__controls-fitview").click();
+await page.waitForTimeout(500);
+
+// A file's only element is placed automatically and can't be dragged: dragging it pans instead.
+{
+  const f0 = (await frame.boundingBox())!;
+  const c0 = (await card.boundingBox())!;
+  await page.mouse.move(c0.x + 40, c0.y + 12);
   await page.mouse.down();
-  await page.mouse.move(cb.x + 220, cb.y + 140, { steps: 12 });
+  await page.mouse.move(c0.x + 140, c0.y + 80, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  const f1 = (await frame.boundingBox())!;
+  const c1 = (await card.boundingBox())!;
+  if (Math.abs(c1.x - f1.x - (c0.x - f0.x)) > 1 || Math.abs(c1.y - f1.y - (c0.y - f0.y)) > 1) fail("the only element in a file should not move inside it");
+  await page.locator(".react-flow__controls-fitview").click();
+  await page.waitForTimeout(500);
+}
+
+// Dragging a frame (by its header) inside its folder grows the folder (top-left corner fixed).
+const folder = page.locator('.react-flow__node[data-id="dir:components"]');
+const before = await folder.boundingBox();
+const hb = await frame.locator(".rae-frame__header").boundingBox();
+if (before && hb) {
+  await page.mouse.move(hb.x + 20, hb.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + 260, hb.y + 200, { steps: 12 });
   await page.mouse.up();
   await page.waitForTimeout(500);
-  const after = await frame.boundingBox();
-  if (!after || after.width * after.height <= before.width * before.height || Math.abs(after.x - before.x) > 1) fail(`frame did not grow around the dragged card: ${JSON.stringify({ before, after })}`);
+  const after = await folder.boundingBox();
+  if (!after || after.width * after.height <= before.width * before.height || Math.abs(after.x - before.x) > 1)
+    fail(`folder did not grow around the dragged file: ${JSON.stringify({ before, after })}`);
 }
 
 // Selecting highlights related nodes and edges; the rest fades.
