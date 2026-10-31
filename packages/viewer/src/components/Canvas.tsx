@@ -159,6 +159,9 @@ export function Canvas() {
     if (!snapshot || !index) return [];
     const drawn = new Set(placed.map((p) => p.element.id));
     const distinct = (ids: string[]) => new Set(ids).size;
+    // How many elements each container holds: a container's only element can't be moved inside it.
+    const held = new Map<string, number>();
+    for (const p of placed) if (p.element.parent) held.set(p.element.parent, (held.get(p.element.parent) ?? 0) + 1);
     return placed.map((p) => {
       const id = p.element.id;
       const node = snapshot.nodes[id];
@@ -172,8 +175,11 @@ export function Canvas() {
         height: p.height,
         parentId: p.element.parent ?? undefined,
         dragHandle: p.holds ? `.${FRAME_HANDLE}` : undefined,
+        draggable: !(p.element.parent && held.get(p.element.parent) === 1),
         selected: false,
-        selectable: !!node,
+        // React Flow's own selection stays off (it flips its internal node state on click, out of
+        // the store's reach); selection is the store's, passed in via `selected`.
+        selectable: false,
         data: {
           element: p.element,
           node,
@@ -252,10 +258,12 @@ export function Canvas() {
     );
   }
 
-  const onNodesChange = useCallback(
-    (changes: NodeChange<ElementFlowNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
-    [],
-  );
+  // Selection is entirely the store's: React Flow's own "select" changes (it marks clicked nodes
+  // selected internally) are dropped, or a node deselected by the app would keep its outline.
+  const onNodesChange = useCallback((changes: NodeChange<ElementFlowNode>[]) => {
+    const kept = changes.filter((c) => c.type !== "select");
+    if (kept.length) setNodes((ns) => applyNodeChanges(kept, ns));
+  }, []);
 
   // Dragging: the element is raised over everything; a frame it would be refused by is marked.
   const holding = useRef<Holding | null>(null);
@@ -448,6 +456,9 @@ export function Canvas() {
         onNodesChange={onNodesChange}
         // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
         nodesConnectable={false}
+        // Selection is the store's alone: React Flow's own selection (which also flips its internal
+        // node state on click) is off; `selected` is passed in and clicks still reach onNodeClick.
+        elementsSelectable={false}
         deleteKeyCode={null}
         selectionKeyCode={null}
         // Space adds to the diagram (noesis); panning is a plain drag.

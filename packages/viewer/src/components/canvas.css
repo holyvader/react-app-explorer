@@ -266,6 +266,8 @@
 .rae-canvas .react-flow__pane { cursor: grab; }
 .rae-canvas .react-flow__pane.dragging { cursor: grabbing; }
 .rae-canvas .react-flow__node-card { cursor: grab; }                 /* drag to move, click to select */
+.rae-canvas .react-flow__node-card:not(.draggable) { cursor: pointer; } /* only element in its container: click only */
+.rae-canvas .react-flow__node-frame:not(.draggable) .rae-frame__header { cursor: pointer; }
 .rae-canvas .rae-frame__header { cursor: grab; }                      /* frames move by their header */
 .rae-canvas .rae-frame__room { cursor: grab; }                        /* the room pans, like the canvas */
 .rae-canvas .rae-frame__room[data-panning] { cursor: grabbing; }
