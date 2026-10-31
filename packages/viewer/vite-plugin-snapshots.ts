@@ -16,6 +16,26 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * These endpoints expose the local filesystem and run the scanner, so they only answer the
+ * viewer itself: the Host must be a loopback name (blocks DNS rebinding) and a present Origin
+ * must be the same host (blocks cross-site requests from other pages open in the browser).
+ */
+function isTrusted(req: IncomingMessage): boolean {
+  const host = req.headers.host ?? "";
+  const hostname = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+  if (!LOCAL_HOSTS.has(hostname)) return false;
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
@@ -85,6 +105,11 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
     configureServer(server) {
       server.config.logger.info(`  ➜  Snapshots: ${dir}`);
 
+      server.middlewares.use("/api", (req, res, next) => {
+        if (!isTrusted(req)) return json(res, 403, { error: "Forbidden: the snapshot API only serves the local viewer" });
+        next();
+      });
+
       server.middlewares.use("/api/fs", (req, res) => {
         const q = new URL(req.url ?? "/", "http://x").searchParams.get("path");
         const path = q ? resolve(q) : (process.env.RAE_BROWSE_ROOT ?? dirname(repoRoot));
@@ -98,6 +123,8 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
 
       server.middlewares.use("/api/scan", async (req, res) => {
         if (req.method !== "POST") return json(res, 405, { error: "POST only" });
+        // JSON only: a cross-site form/text POST can't send this without a CORS preflight.
+        if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return json(res, 415, { error: "Content-Type must be application/json" });
         if (running) return json(res, 409, { error: "A scan is already running" });
         let body: { path?: string; types?: boolean };
         try {
