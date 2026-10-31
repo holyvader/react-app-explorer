@@ -13,7 +13,7 @@ import {
   ReactFlow,
   useReactFlow,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
@@ -164,6 +164,13 @@ export function Canvas() {
     const held = new Map<string, number>();
     for (const p of placed) if (p.element.parent) held.set(p.element.parent, (held.get(p.element.parent) ?? 0) + 1);
     const kindOf = new Map(placed.map((p) => [p.element.id, p.element.kind]));
+    // Nesting depth: deeper elements float higher (bigger shadows), so the diagram reads in layers.
+    const parentOf = new Map(placed.map((p) => [p.element.id, p.element.parent]));
+    const depthOf = (id: string) => {
+      let d = 0;
+      for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) d++;
+      return d;
+    };
     return placed.map((p) => {
       const id = p.element.id;
       const node = snapshot.nodes[id];
@@ -178,6 +185,7 @@ export function Canvas() {
         parentId: p.element.parent ?? undefined,
         dragHandle: p.holds ? `.${FRAME_HANDLE}` : undefined,
         draggable: !(p.element.parent && kindOf.get(p.element.parent) === "module" && held.get(p.element.parent) === 1),
+        style: { "--depth": depthOf(id) } as CSSProperties,
         selected: false,
         // React Flow's own selection stays off (it flips its internal node state on click, out of
         // the store's reach); selection is the store's, passed in via `selected`.

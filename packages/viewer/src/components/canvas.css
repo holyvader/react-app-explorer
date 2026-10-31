@@ -50,10 +50,17 @@
 }
 .react-flow__node.rae-related .rae-card { --border: var(--sel-soft); --bw: 2px; }
 .react-flow__node.selected .rae-card { --border: var(--sel); --bw: 2.5px; }
-.react-flow__node.selected .rae-card__svg { filter: drop-shadow(0 4px 10px rgb(59 130 246 / 0.35)); }
+.react-flow__node.selected .rae-card__svg {
+  filter: drop-shadow(0 calc(4px + var(--depth, 0) * 1.5px) calc(10px + var(--depth, 0) * 3px) rgb(59 130 246 / 0.4));
+}
 
 .rae-card__svg { position: absolute; inset: 0; overflow: visible; }
-.rae-card__fill { fill: color-mix(in srgb, var(--panel) 70%, transparent); }
+/* see-through: frames, edges and the canvas show behind it */
+.rae-card__fill { fill: color-mix(in srgb, var(--panel) 58%, transparent); }
+/* elevation grows with nesting depth: elements float above their frames */
+.rae-card__svg {
+  filter: drop-shadow(0 calc(2px + var(--depth, 0) * 1.5px) calc(4px + var(--depth, 0) * 3px) rgb(15 23 42 / 0.13));
+}
 .rae-card__tint { stop-color: var(--k-soft); }
 .rae-card__strip { fill: var(--k); }
 .rae-card__stroke { fill: none; stroke: var(--border); stroke-width: var(--bw); stroke-linejoin: round; }
@@ -155,11 +162,20 @@
   flex-direction: column;
   border: 1.5px solid var(--k-mid);
   border-radius: 10px;
-  /* translucent: nested frames stack their tint, cards and edges behind show through */
-  background: color-mix(in srgb, var(--k-soft) 38%, transparent);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 18px rgb(0 0 0 / 0.06);
+  /* translucent: nested frames stack their tint (deeper = denser), what's behind shows through */
+  background: color-mix(in srgb, var(--k-soft) 30%, transparent);
+  /* layered shadow, bigger the deeper the frame sits: each level reads as a raised sheet */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 1px 2px rgb(15 23 42 / 0.06),
+    0 calc(4px + var(--depth, 0) * 4px) calc(12px + var(--depth, 0) * 8px) rgb(15 23 42 / 0.09);
 }
-.rae-frame[data-kind="folder"] { border-style: dashed; background: color-mix(in srgb, var(--k-soft) 30%, transparent); border-radius: 4px 12px 12px 12px; box-shadow: none; }
+.rae-frame[data-kind="folder"] {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--k-soft) 22%, transparent);
+  border-radius: 4px 12px 12px 12px;
+  box-shadow: 0 calc(2px + var(--depth, 0) * 3px) calc(10px + var(--depth, 0) * 6px) rgb(15 23 42 / 0.06);
+}
 .react-flow__node.rae-related > .rae-frame { border-color: var(--sel-soft); }
 .react-flow__node.selected > .rae-frame { border-color: var(--sel); border-width: 2.5px; box-shadow: 0 0 0 4px rgb(59 130 246 / 0.15); }
 .rae-frame[data-refused] { border: 2px dashed var(--chakra-colors-red-solid); background: color-mix(in srgb, var(--chakra-colors-red-subtle) 50%, transparent); }
@@ -172,7 +188,7 @@
   gap: 8px;
   padding: 0 10px;
   border-bottom: 1px solid var(--k-mid);
-  background: color-mix(in srgb, var(--panel) 60%, transparent);
+  background: color-mix(in srgb, var(--panel) 50%, transparent);
   border-radius: 9px 9px 0 0;
   cursor: grab;
 }
