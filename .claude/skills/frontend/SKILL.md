@@ -13,7 +13,8 @@ vite.config.ts / vite-plugin-snapshots.ts   dev API (dir = RAE_SNAPSHOTS):
                         (the dev server runs under Node, the scanner needs Bun; RAE_BUN overrides the binary,
                         RAE_BROWSE_ROOT the initial picker folder). Dev-only: it exposes the local filesystem.
 src/main.tsx            DesignSystemProvider + App
-src/App.tsx             shell: Toolbar, Canvas, DetailsPanel, SearchModal, ScanModal, LibrariesModal, ConfirmExpansion; ⌘K opens search
+src/App.tsx             shell: Toolbar, Canvas, DetailsPanel, ScanModal, LibrariesModal, ConfirmExpansion; ⌘K opens the picker
+src/components/picker/  noesis-style adding: ExplorationPicker (tree picker), QuickAdd (right-click), ElementTree
 src/store.ts            zustand store (single source of UI state)
 src/graph/              pure graph logic (drawn graph, relations, ELK layout, placement engine, library filter), no React; tests in test/
 src/lib/                pure helpers (api, conditions formatting, editor URLs, kind metadata)
@@ -24,12 +25,13 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 ## Import rules (lint-enforced)
 - UI comes from `@rae/design-system`, icons from `@rae/design-system/icons`.
 - **Never** import `@chakra-ui/*`, `@emotion/*`, `lucide-react` or `@ark-ui/*` in the viewer. `no-restricted-imports` in `.oxlintrc.json` fails the lint. If a component is missing, add it to the design system first (design-system skill).
-- Otherwise import only from the viewer's own `src/`, `@rae/schema` (types), `@xyflow/react`, and small libs (`zustand`, `fuse.js`, `@dagrejs/dagre`).
+- Otherwise import only from the viewer's own `src/`, `@rae/schema` (types), `@xyflow/react`, and small libs (`zustand`, `elkjs`).
+- Hot-path canvas UI (nodes, edges, labels, tooltip, tree rows) is plain HTML + CSS (`components/canvas.css`, `picker/picker.css`) using the design-system token CSS variables. That doesn't break the rule: nothing there imports Chakra.
 
 ## State
 - Read with granular selectors: `useExplorer((s) => s.visible)`. Never select the whole store.
 - Call actions via `useExplorer.getState().action` (stable, no re-render), or select them individually.
-- Keep derived data in `useMemo` near its use (e.g. Fuse index, relations). Store only the minimal state.
+- Keep derived data in `useMemo` near its use (e.g. the picker tree, relations). Store only the minimal state.
 - No `setState` in effects. Derive during render, or update from the event handler.
 
 ## Data

@@ -338,7 +338,15 @@ export function Canvas() {
     () =>
       related.edges.size
         ? baseEdges.map((e) =>
-            related.edges.has(e.id) ? { ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } } : e,
+            related.edges.has(e.id)
+              ? {
+                  ...e,
+                  className: `${e.className} rae-edge--related`,
+                  zIndex: 2,
+                  markerEnd: { type: MarkerType.ArrowClosed, color: cssVar("blue.500"), width: 16, height: 16 },
+                  data: { ...e.data!, related: true },
+                }
+              : e,
           )
         : baseEdges,
     [baseEdges, related],

@@ -129,6 +129,18 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
     if (a) relations.push(a);
     if (b) relations.push(b);
   }
+  // Declarations don't import themselves: their file does. Show the file's imports, and who imports
+  // this declaration specifically (importers naming its export, or the whole module via `* as`).
+  if (node.kind !== "module" && node.kind !== "external" && node.moduleId) {
+    const names = node.exportNames ?? [];
+    const namesIt = (e: { specifiers?: string[] }) =>
+      (e.specifiers ?? []).some((sp) => sp.startsWith("* as ") || names.some((n) => sp === n || sp.startsWith(`${n} as `)));
+    const fileImports = (index.out.get(node.moduleId) ?? []).filter((e) => e.kind === "imports" && keep(e.to));
+    const importedBy = names.length ? (index.in.get(node.moduleId) ?? []).filter((e) => e.kind === "imports" && keep(e.from) && namesIt(e)) : [];
+    const a = relationMenu("Imports (its file)", fileImports, "to", id, s, onCanvas);
+    const b = relationMenu("Imported by", importedBy, "from", id, s, onCanvas);
+    relations.unshift(...[a, b].filter((x): x is MenuEntry => !!x));
+  }
   if (relations.length) {
     entries.push({ type: "separator" });
     entries.push({ type: "label", label: "Relations" });

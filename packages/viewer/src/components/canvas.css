@@ -208,7 +208,8 @@
 .rae-edge--invokes        { --e: var(--chakra-colors-kind-function-solid); --dash: 10 3 2 3; --anim: rae-dash-18; --speed: 0.7s; --ew: 1.75px; }
 .rae-edge--invokesAction  { --e: var(--chakra-colors-kind-server-action-solid); --dash: 6 3; --anim: rae-dash-9; --speed: 0.45s; --ew: 2.25px; }
 .rae-edge--declares       { --e: var(--chakra-colors-kind-module-muted); --dash: 2 4; --anim: rae-dash-6; --speed: 2.5s; }
-.rae-edge--related path.react-flow__edge-path { --ew: 3px; }
+/* The selection's edges are blue (blue means selected, nothing else uses it). */
+.react-flow__edge.rae-edge--related path.react-flow__edge-path { --e: var(--sel); --ew: 3px; }
 
 @keyframes rae-dash-6 { to { stroke-dashoffset: -6; } }
 @keyframes rae-dash-7 { to { stroke-dashoffset: -7; } }
@@ -248,7 +249,7 @@
 .rae-edge-label[data-kind="usesHook"] { --e: var(--chakra-colors-kind-hook-solid); }
 .rae-edge-label[data-kind="invokes"] { --e: var(--chakra-colors-kind-function-solid); }
 .rae-edge-label[data-kind="invokesAction"] { --e: var(--chakra-colors-kind-server-action-solid); }
-.rae-edge-label[data-related] { border-color: var(--sel); box-shadow: 0 0 0 2px rgb(59 130 246 / 0.18); }
+.rae-edge-label[data-related] { --e: var(--sel); border-color: var(--sel); box-shadow: 0 0 0 2px rgb(59 130 246 / 0.18); }
 .rae-canvas[data-selection] .rae-edge-label:not([data-related]) { opacity: 0.15; }
 
 .rae-legend {
