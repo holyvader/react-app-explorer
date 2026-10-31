@@ -15,16 +15,19 @@ function outline(kind: string, w: number, h: number): { d: string; fold?: string
   };
   switch (kind) {
     case "hook": // hexagon
-      return { d: `M14,${I} H${w - 14} L${w - I},${h / 2} L${w - 14},${h - I} H14 L${I},${h / 2} Z` };
+      return { d: `M16,${I} H${w - 16} Q${w - 13},${I} ${w - 11},${I + 4} L${w - I - 1},${h / 2 - 3} Q${w - I},${h / 2} ${w - I - 1},${h / 2 + 3} L${w - 11},${h - I - 4} Q${w - 13},${h - I} ${w - 16},${h - I} H16 Q13,${h - I} 11,${h - I - 4} L${I + 1},${h / 2 + 3} Q${I},${h / 2} ${I + 1},${h / 2 - 3} L11,${I + 4} Q13,${I} 16,${I} Z` };
     case "serverAction": // arrow
-      return { d: `M${I},${I} H${w - 18} L${w - I},${h / 2} L${w - 18},${h - I} H${I} Z` };
+      return { d: `M${I + 12},${I} H${w - 20} Q${w - 16},${I} ${w - 13},${I + 4} L${w - I - 1},${h / 2 - 3} Q${w - I},${h / 2} ${w - I - 1},${h / 2 + 3} L${w - 13},${h - I - 4} Q${w - 16},${h - I} ${w - 20},${h - I} H${I + 12} A12,12 0 0 1 ${I},${h - I - 12} V${I + 12} A12,12 0 0 1 ${I + 12},${I} Z` };
     case "module": // sheet with a folded corner
-      return { d: `M${I},${I} H${w - 16} L${w - I},16 V${h - I} H${I} Z`, fold: `M${w - 16},${I} V16 H${w - I}` };
+      return {
+        d: `M${I + 10},${I} H${w - 18} L${w - I},18 V${h - I - 10} A10,10 0 0 1 ${w - I - 10},${h - I} H${I + 10} A10,10 0 0 1 ${I},${h - I - 10} V${I + 10} A10,10 0 0 1 ${I + 10},${I} Z`,
+        fold: `M${w - 18},${I} V12 Q${w - 18},18 ${w - 12},18 H${w - I}`,
+      };
     case "function": // solid pill
     case "external": // dashed pill
       return { d: r(h) };
     default: // component: rounded rectangle
-      return { d: r(12) };
+      return { d: r(16) };
   }
 }
 
@@ -38,19 +41,19 @@ export function CardShape({ kind, width, height }: { kind: string; width: number
   return (
     <svg className="rae-card__svg" width={width} height={height} aria-hidden>
       <defs>
-        <clipPath id={`${id}c`}>
-          <path d={d} />
-        </clipPath>
-        <linearGradient id={`${id}g`} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" className="rae-card__tint" />
-          <stop offset="1" className="rae-card__tint" stopOpacity="0" />
+        <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" className="rae-card__grad-a" />
+          <stop offset="0.55" className="rae-card__grad-b" />
+          <stop offset="1" className="rae-card__grad-c" />
+        </linearGradient>
+        <linearGradient id={`${id}h`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" className="rae-card__shine" />
+          <stop offset="0.35" className="rae-card__shine" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <path d={d} className="rae-card__fill" />
-      <g clipPath={`url(#${id}c)`}>
-        <rect x="0" y="0" width={width * 0.45} height={height} fill={`url(#${id}g)`} />
-        {kind !== "external" && <rect x="0" y="0" width="5" height={height} className="rae-card__strip" />}
-      </g>
+      {/* tinted glass fill, a soft top sheen, then the outline */}
+      <path d={d} fill={`url(#${id}g)`} />
+      <path d={d} fill={`url(#${id}h)`} />
       <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || undefined} />
       {fold && <path d={fold} className="rae-card__stroke rae-card__fold" />}
     </svg>

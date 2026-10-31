@@ -40,58 +40,116 @@
 [data-kind="folder"] { --k: var(--chakra-colors-fg-subtle); --k-soft: var(--chakra-colors-bg-subtle); --k-mid: var(--chakra-colors-border-emphasized); --k-fg: var(--chakra-colors-fg-muted); }
 
 /* ---- cards: one shape per kind -------------------------------------------------------- */
-/* The shape is SVG (CardShape.tsx): stroked outline + translucent fill (what's behind shows through). */
+/* The shape is SVG (CardShape.tsx): tinted glass fill + soft sheen + outline. Modern leaf card:
+   icon tile, name, quiet caption; actions float in on hover / selection. */
 .rae-card {
   position: relative;
   width: 100%;
   height: 100%;
-  --border: var(--k-mid);
-  --bw: 1.5px;
+  --border: color-mix(in srgb, var(--k) 38%, transparent);
+  --bw: 1.25px;
 }
 .react-flow__node.rae-related .rae-card { --border: var(--sel-soft); --bw: 2px; }
-.react-flow__node.selected .rae-card { --border: var(--sel); --bw: 2.5px; }
-.react-flow__node.selected .rae-card__svg {
-  filter: drop-shadow(0 calc(4px + var(--depth, 0) * 1.5px) calc(10px + var(--depth, 0) * 3px) rgb(59 130 246 / 0.4));
-}
+.react-flow__node.selected .rae-card { --border: var(--sel); --bw: 2px; }
 
-.rae-card__svg { position: absolute; inset: 0; overflow: visible; }
-/* see-through: frames, edges and the canvas show behind it */
-.rae-card__fill { fill: color-mix(in srgb, var(--panel) 58%, transparent); }
-/* elevation grows with nesting depth: elements float above their frames */
 .rae-card__svg {
-  filter: drop-shadow(0 calc(2px + var(--depth, 0) * 1.5px) calc(4px + var(--depth, 0) * 3px) rgb(15 23 42 / 0.13));
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  /* elevation grows with nesting depth: elements float above their frames */
+  filter: drop-shadow(0 calc(2px + var(--depth, 0) * 1.5px) calc(5px + var(--depth, 0) * 3px) rgb(15 23 42 / 0.12));
+  transition: filter 160ms ease;
 }
-.rae-card__tint { stop-color: var(--k-soft); }
-.rae-card__strip { fill: var(--k); }
-.rae-card__stroke { fill: none; stroke: var(--border); stroke-width: var(--bw); stroke-linejoin: round; }
+.react-flow__node-card:hover .rae-card__svg {
+  filter: drop-shadow(0 calc(4px + var(--depth, 0) * 1.5px) calc(12px + var(--depth, 0) * 3px) color-mix(in srgb, var(--k) 32%, transparent));
+}
+.react-flow__node.selected .rae-card__svg {
+  filter: drop-shadow(0 calc(4px + var(--depth, 0) * 1.5px) calc(12px + var(--depth, 0) * 3px) rgb(59 130 246 / 0.38));
+}
+/* see-through glass, tinted towards the kind's colour in the top-left corner */
+.rae-card__grad-a { stop-color: color-mix(in srgb, var(--k-soft) 92%, transparent); }
+.rae-card__grad-b { stop-color: color-mix(in srgb, var(--panel) 62%, transparent); }
+.rae-card__grad-c { stop-color: color-mix(in srgb, var(--panel) 52%, transparent); }
+.rae-card__shine { stop-color: rgb(255 255 255 / 0.55); }
+.rae-card__stroke { fill: none; stroke: var(--border); stroke-width: var(--bw); stroke-linejoin: round; transition: stroke 160ms ease; }
+.react-flow__node-card:hover .rae-card:not(:where(.selected *)) { --border: color-mix(in srgb, var(--k) 60%, transparent); }
 .rae-card__stroke[data-dashed] { stroke-dasharray: 5 4; }
-.rae-card__fold { stroke-width: 1.25px; }
-
-/* text clear of the shapes' slanted / rounded ends */
-.rae-card[data-kind="hook"] .rae-card__body { padding-left: 18px; padding-right: 16px; }
-.rae-card[data-kind="serverAction"] .rae-card__body { padding-right: 22px; }
-.rae-card[data-kind="function"] .rae-card__body,
-.rae-card[data-kind="external"] .rae-card__body { padding-left: 18px; padding-right: 16px; }
-.rae-card[data-kind="module"] .rae-card__body { padding-right: 18px; }
-
+.rae-card__fold { stroke-width: 1.1px; }
 
 .rae-card__body {
   position: relative;
   z-index: 1;
   height: 100%;
-  padding: 6px 10px 6px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.rae-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  padding: 0 12px 0 12px;
   min-width: 0;
 }
+/* text clear of the shapes' slanted / rounded ends */
+.rae-card[data-kind="hook"] .rae-card__body { padding: 0 18px; }
+.rae-card[data-kind="serverAction"] .rae-card__body { padding-right: 24px; }
+.rae-card[data-kind="function"] .rae-card__body,
+.rae-card[data-kind="external"] .rae-card__body { padding: 0 18px 0 14px; }
+.rae-card[data-kind="module"] .rae-card__body { padding-right: 22px; }
+
+.rae-card__tile {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--k) 82%, white), color-mix(in srgb, var(--k) 88%, black));
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--k) 38%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+.rae-card[data-kind="function"] .rae-card__tile,
+.rae-card[data-kind="external"] .rae-card__tile { border-radius: 999px; }
+.rae-card[data-kind="external"] .rae-card__tile { background: color-mix(in srgb, var(--k) 18%, var(--panel)); color: var(--k-fg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--k) 40%, transparent); }
+.rae-card__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.rae-card .rae-name { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 18px; }
+.rae-card__caption {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rae-card__boundary { flex-shrink: 0; align-self: flex-start; margin-top: 10px; transition: opacity 140ms ease; }
+/* the action toolbar takes its place on hover / selection */
+.react-flow__node-card:hover .rae-card__boundary,
+.react-flow__node-card.selected .rae-card__boundary { opacity: 0; }
+
+/* actions: a small glass toolbar floating in on the right on hover / when selected */
+.rae-card__actions {
+  position: absolute;
+  z-index: 2;
+  right: 8px;
+  top: 50%;
+  transform: translate(4px, -50%);
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: 0 4px 14px rgb(15 23 42 / 0.14), 0 0 0 1px var(--line);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.react-flow__node-card:hover .rae-card__actions,
+.react-flow__node-card:focus-within .rae-card__actions,
+.react-flow__node-card.selected .rae-card__actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+  backdrop-filter: blur(6px);
+}
+.rae-card__actions .rae-icon-btn { width: 22px; height: 22px; border-radius: 7px; }
+
+/* ---- shared text, badges and chips (cards and frames) ----------------------------------- */
+.rae-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .rae-icon { color: var(--k-fg); flex-shrink: 0; display: inline-flex; }
 .rae-name {
   font-weight: 600;
@@ -126,14 +184,14 @@
 .rae-chip {
   font-size: 10px;
   line-height: 16px;
-  padding: 0 6px;
+  padding: 0 7px;
   border-radius: 999px;
   font-weight: 500;
   white-space: nowrap;
 }
-.rae-chip[data-boundary="server"] { background: var(--chakra-colors-boundary-server-subtle); color: var(--chakra-colors-boundary-server-fg); }
-.rae-chip[data-boundary="client"] { background: var(--chakra-colors-boundary-client-subtle); color: var(--chakra-colors-boundary-client-fg); }
-.rae-chip[data-boundary="shared"] { background: var(--chakra-colors-boundary-shared-subtle); color: var(--chakra-colors-boundary-shared-fg); }
+.rae-chip[data-boundary="server"] { background: var(--chakra-colors-boundary-server-subtle); color: var(--chakra-colors-boundary-server-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-boundary-server-muted); }
+.rae-chip[data-boundary="client"] { background: var(--chakra-colors-boundary-client-subtle); color: var(--chakra-colors-boundary-client-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-boundary-client-muted); }
+.rae-chip[data-boundary="shared"] { background: var(--chakra-colors-boundary-shared-subtle); color: var(--chakra-colors-boundary-shared-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-boundary-shared-muted); }
 
 /* ---- icon buttons --------------------------------------------------------------------- */
 .rae-actions { display: flex; flex-shrink: 0; }
