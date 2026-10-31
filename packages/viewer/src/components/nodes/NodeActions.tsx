@@ -1,4 +1,4 @@
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconHide, IconLayout, IconUngroup } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRemoveWithContents, IconUnwrap } from "@rae/design-system/icons";
 import type { MouseEvent, ReactNode } from "react";
 import { useExplorer } from "../../store.ts";
 import type { ElementNodeData } from "./types.ts";
@@ -27,23 +27,26 @@ const I = 13;
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
   const { expand, hideNode, arrange } = useExplorer.getState();
-  const { element, node, parents, children, hiddenParents, hiddenChildren } = data;
+  const { element, node, parents, children, hiddenParents, hiddenChildren, can } = data;
   const id = element.id;
   return (
     <span className="rae-actions nodrag nopan">
-      {node && (
-        <>
-          <IconBtn label={`Show parents (${hiddenParents} of ${parents} not drawn)`} icon={<IconArrowUp size={I} />} disabled={!parents} onClick={() => expand(id, "parents", false)} />
-          <IconBtn label="Show all parents up to the root" icon={<IconChevronsUp size={I} />} disabled={!parents} onClick={() => expand(id, "parents", true)} />
-          <IconBtn label={`Show children (${hiddenChildren} of ${children} not drawn)`} icon={<IconArrowDown size={I} />} disabled={!children} onClick={() => expand(id, "children", false)} />
-          <IconBtn label="Show all children down to the leaves" icon={<IconChevronsDown size={I} />} disabled={!children} onClick={() => expand(id, "children", true)} />
-        </>
+      {/* Only what would add something: no parents/children, or all of them drawn → no button. */}
+      {node && can.parents && (
+        <IconBtn label={`Show parents (${hiddenParents} of ${parents} not drawn)`} icon={<IconArrowUp size={I} />} onClick={() => expand(id, "parents", false)} />
+      )}
+      {node && can.allParents && <IconBtn label="Show all parents up to the root" icon={<IconChevronsUp size={I} />} onClick={() => expand(id, "parents", true)} />}
+      {node && can.children && (
+        <IconBtn label={`Show children (${hiddenChildren} of ${children} not drawn)`} icon={<IconArrowDown size={I} />} onClick={() => expand(id, "children", false)} />
+      )}
+      {node && can.allChildren && (
+        <IconBtn label="Show all children down to the leaves" icon={<IconChevronsDown size={I} />} onClick={() => expand(id, "children", true)} />
       )}
       {frame && <IconBtn label="Tidy up inside" icon={<IconLayout size={I} />} onClick={() => void arrange(id)} />}
       {frame && node?.kind === "module" && (
-        <IconBtn label="Remove only this file, keep what it holds" icon={<IconUngroup size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
+        <IconBtn label="Remove only this file, keep what it holds" icon={<IconUnwrap size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
       )}
-      <IconBtn label={frame ? "Remove with everything inside" : "Remove from the diagram"} icon={<IconHide size={I} />} onClick={() => hideNode(id)} />
+      <IconBtn label={frame ? "Remove with everything inside" : "Remove from the diagram"} icon={frame ? <IconRemoveWithContents size={I} /> : <IconRemove size={I} />} onClick={() => hideNode(id)} />
     </span>
   );
 }

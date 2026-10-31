@@ -7,15 +7,17 @@ import {
   IconChevronsUp,
   IconCopy,
   IconFocus,
-  IconHide,
+  IconRemove,
+  IconRemoveWithContents,
   IconLayout,
   IconOpen,
   IconRelations,
   IconSelect,
-  IconUngroup,
+  IconUnwrap,
 } from "@rae/design-system/icons";
 import { isFolder } from "../graph/drawn.ts";
 import { isFiltered } from "../graph/packages.ts";
+import { hasUndrawn } from "../graph/relations.ts";
 import { editorUrl } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
@@ -85,7 +87,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   if (isFolder(id)) {
     return [
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
-      { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconHide size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
+      { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemoveWithContents size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
     ];
   }
   if (!node) return [];
@@ -110,11 +112,15 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   }
   entries.push({ type: "item", value: "center", label: "Center on canvas", icon: <IconFocus size={I} />, onSelect: () => addNodes([id], { focus: id }) });
 
+  // Expand actions that would add nothing (no parents/children, or all drawn) are disabled.
+  const drawnNow = new Set(st.graph.elements.map((e) => e.id));
+  const rf = relationFilterOf(st);
+  const can = (dir: "parents" | "children", deep: boolean) => hasUndrawn(s, index, id, dir, deep, rf, drawnNow);
   entries.push({ type: "separator" });
-  entries.push({ type: "item", value: "parents", label: "Show parents", icon: <IconArrowUp size={I} />, onSelect: () => expand(id, "parents", false) });
-  entries.push({ type: "item", value: "parents-all", label: "Show all parents up to the root", icon: <IconChevronsUp size={I} />, onSelect: () => expand(id, "parents", true) });
-  entries.push({ type: "item", value: "children", label: "Show children", icon: <IconArrowDown size={I} />, onSelect: () => expand(id, "children", false) });
-  entries.push({ type: "item", value: "children-all", label: "Show all children down to the leaves", icon: <IconChevronsDown size={I} />, onSelect: () => expand(id, "children", true) });
+  entries.push({ type: "item", value: "parents", label: "Show parents", icon: <IconArrowUp size={I} />, disabled: !can("parents", false), onSelect: () => expand(id, "parents", false) });
+  entries.push({ type: "item", value: "parents-all", label: "Show all parents up to the root", icon: <IconChevronsUp size={I} />, disabled: !can("parents", true), onSelect: () => expand(id, "parents", true) });
+  entries.push({ type: "item", value: "children", label: "Show children", icon: <IconArrowDown size={I} />, disabled: !can("children", false), onSelect: () => expand(id, "children", false) });
+  entries.push({ type: "item", value: "children-all", label: "Show all children down to the leaves", icon: <IconChevronsDown size={I} />, disabled: !can("children", true), onSelect: () => expand(id, "children", true) });
 
   // Relations, both ways, with "show all" or one by one. Libraries hidden by the filter stay hidden.
   const { libraries } = relationFilterOf(st);
@@ -151,13 +157,13 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   if (holds) {
     entries.push({ type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) });
     if (node.kind === "module") {
-      entries.push({ type: "item", value: "hide-only", label: "Remove only this file, keep what it holds", icon: <IconUngroup size={I} />, onSelect: () => hideNode(id, { keepContents: true }) });
+      entries.push({ type: "item", value: "hide-only", label: "Remove only this file, keep what it holds", icon: <IconUnwrap size={I} />, onSelect: () => hideNode(id, { keepContents: true }) });
     }
   }
   if (multi) {
-    entries.push({ type: "item", value: "hide-selected", label: `Remove ${st.selection.length} selected`, icon: <IconHide size={I} />, hint: "⌫", onSelect: () => hideNodes(st.selection) });
+    entries.push({ type: "item", value: "hide-selected", label: `Remove ${st.selection.length} selected`, icon: <IconRemove size={I} />, hint: "⌫", onSelect: () => hideNodes(st.selection) });
   }
-  entries.push({ type: "item", value: "hide", label: holds ? "Remove with everything inside" : "Remove from the diagram", icon: <IconHide size={I} />, hint: multi ? undefined : "⌫", onSelect: () => hideNode(id) });
+  entries.push({ type: "item", value: "hide", label: holds ? "Remove with everything inside" : "Remove from the diagram", icon: holds ? <IconRemoveWithContents size={I} /> : <IconRemove size={I} />, hint: multi ? undefined : "⌫", onSelect: () => hideNode(id) });
   return entries;
 }
 

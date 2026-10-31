@@ -109,19 +109,37 @@ function content(id: string, s: Snapshot, index: GraphIndex): ReactNode {
 
 export interface TipState {
   id: string;
-  x: number;
-  y: number;
+  /** The hovered node's box on screen. */
+  rect: { left: number; top: number; width: number; bottom: number };
 }
 
-/** One tooltip for the whole canvas, following the hovered node. Plain HTML: cheap to show/hide. */
+/** Room needed above a node to show the tooltip there; with less, it goes below. */
+const ROOM_ABOVE = 240;
+/** Half the tooltip's max width + margin, to keep it on screen when centring. */
+const HALF = 200;
+
+/**
+ * One tooltip for the whole canvas, above the hovered node and centred on it (below it when
+ * there's no room above). Plain HTML: cheap to show/hide.
+ */
 export function NodeTooltip({ tip, snapshot, index }: { tip: TipState | null; snapshot?: Snapshot; index?: GraphIndex }) {
   if (!tip || !snapshot || !index) return null;
   const body = content(tip.id, snapshot, index);
   if (!body) return null;
-  const left = tip.x + 16 + 380 > window.innerWidth ? Math.max(8, tip.x - 396) : tip.x + 16;
-  const top = Math.min(tip.y + 18, window.innerHeight - 160);
+  const { rect } = tip;
+  const centre = Math.min(Math.max(rect.left + rect.width / 2, HALF), window.innerWidth - HALF);
+  const above = rect.top >= ROOM_ABOVE;
   return (
-    <div className="rae-tip" role="tooltip" style={{ left, top }}>
+    <div
+      className="rae-tip"
+      role="tooltip"
+      data-side={above ? "top" : "bottom"}
+      style={{
+        left: centre,
+        top: above ? rect.top - 10 : rect.bottom + 10,
+        transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+      }}
+    >
       {body}
     </div>
   );

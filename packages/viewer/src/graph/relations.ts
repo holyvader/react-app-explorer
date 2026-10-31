@@ -105,3 +105,37 @@ export function reachable(
   }
   return order;
 }
+
+/**
+ * Whether expanding from `id` would add anything not drawn yet: directly (`deep` = false) or
+ * anywhere up to the roots / down to the leaves. Stops at the first undrawn node, so when
+ * everything is drawn it only walks drawn nodes.
+ */
+export function hasUndrawn(
+  s: Snapshot,
+  ix: GraphIndex,
+  id: string,
+  dir: "parents" | "children",
+  deep: boolean,
+  f: RelationFilter,
+  drawn: ReadonlySet<string>,
+): boolean {
+  const seen = new Set([id]);
+  let frontier = [id];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const cur of frontier) {
+      const edges = dir === "children" ? childEdges(s, ix, cur, f) : parentEdges(s, ix, cur, f);
+      for (const e of edges) {
+        const other = dir === "children" ? e.to : e.from;
+        if (seen.has(other)) continue;
+        seen.add(other);
+        if (!drawn.has(other)) return true;
+        next.push(other);
+      }
+    }
+    if (!deep) return false;
+    frontier = next;
+  }
+  return false;
+}

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
-import { childEdges, parentEdges } from "../graph/relations.ts";
+import { childEdges, hasUndrawn, parentEdges } from "../graph/relations.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
@@ -183,6 +183,14 @@ export function Canvas() {
           children: distinct(children.map((e) => e.to)),
           hiddenParents: distinct(parents.filter((e) => !drawn.has(e.from)).map((e) => e.from)),
           hiddenChildren: distinct(children.filter((e) => !drawn.has(e.to)).map((e) => e.to)),
+          can: node
+            ? {
+                parents: parents.some((e) => !drawn.has(e.from)),
+                allParents: hasUndrawn(snapshot, index, id, "parents", true, filter, drawn),
+                children: children.some((e) => !drawn.has(e.to)),
+                allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn),
+              }
+            : { parents: false, allParents: false, children: false, allChildren: false },
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
@@ -454,8 +462,17 @@ export function Canvas() {
           clearTimeout(tipTimer.current);
           // Folders have no tooltip: their header says what's inside.
           if (!n.data.node) return;
-          const at = { x: e.clientX, y: e.clientY };
-          tipTimer.current = setTimeout(() => setTip({ id: n.id, ...at }), 450);
+          const el = (e.target as Element).closest(".react-flow__node");
+          tipTimer.current = setTimeout(() => {
+            if (!el?.isConnected) return;
+            const r = el.getBoundingClientRect();
+            setTip({ id: n.id, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } });
+          }, 450);
+        }}
+        // A moving view would leave the tooltip behind its node.
+        onMoveStart={() => {
+          clearTimeout(tipTimer.current);
+          setTip(null);
         }}
         onNodeMouseLeave={() => {
           clearTimeout(tipTimer.current);
