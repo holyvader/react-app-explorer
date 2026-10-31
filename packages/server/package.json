@@ -1,0 +1,14 @@
+{
+  "name": "@rae/server",
+  "private": true,
+  "type": "module",
+  "description": "Local server for the packaged app: serves the viewer and its API, runs scans in-process.",
+  "scripts": {
+    "start": "bun src/server.ts",
+    "build": "bun build.ts"
+  },
+  "dependencies": {
+    "@rae/scanner": "workspace:*",
+    "@rae/schema": "workspace:*"
+  }
+}

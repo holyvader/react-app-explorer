@@ -20,7 +20,9 @@ function clip(s: string): string {
 }
 
 async function openChecker(rootDir: string, files: string[], tsconfig?: string) {
-  const api = new API({ cwd: rootDir });
+  // Packaged apps ship the native TypeScript binary next to the executable (it can't run from inside
+  // a compiled Bun binary): RAE_TSGO_PATH points at it. Otherwise the typescript package finds its own.
+  const api = new API({ cwd: rootDir, ...(process.env.RAE_TSGO_PATH ? { tsserverPath: process.env.RAE_TSGO_PATH } : {}) });
   const snapshot = await api.createSnapshot(tsconfig ? { openProjects: [tsconfig] } : { openFiles: files });
   const project = snapshot.getProjects()[0];
   if (!project) throw new Error("tsgo: no project loaded");

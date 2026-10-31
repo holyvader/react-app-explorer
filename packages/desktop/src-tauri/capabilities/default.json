@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window. The page itself gets no Tauri permissions: it only talks HTTP to the local sidecar.",
+  "windows": ["main"],
+  "permissions": []
+}

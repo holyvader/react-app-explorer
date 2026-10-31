@@ -25,3 +25,9 @@ dist-ssr
 
 # explorer snapshots/cache
 .explorer
+
+# desktop app build outputs
+packages/server/src/embedded.generated.ts
+packages/desktop/src-tauri/binaries/
+packages/desktop/src-tauri/target/
+packages/desktop/src-tauri/gen/

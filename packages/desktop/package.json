@@ -1,0 +1,15 @@
+{
+  "name": "@rae/desktop",
+  "private": true,
+  "type": "module",
+  "description": "Desktop app (Tauri): a native window around the viewer, with the server + scanner as a sidecar.",
+  "scripts": {
+    "sidecar": "bun --cwd ../server build.ts",
+    "dev": "bun run sidecar && PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
+    "build": "bun run sidecar && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

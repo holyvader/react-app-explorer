@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "React App Explorer",
+  "version": "0.1.0",
+  "identifier": "dev.rae.explorer",
+  "build": {
+    "frontendDist": "../loading"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "React App Explorer",
+        "width": 1600,
+        "height": 1000,
+        "minWidth": 1000,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Explore React / Next.js apps as an interactive diagram",
+    "externalBin": ["binaries/rae-server", "binaries/rae-tsgo"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+  }
+}

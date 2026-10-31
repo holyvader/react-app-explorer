@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>React App Explorer</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { display: grid; place-items: center; background: #f9fafb; color: #6b7280; font: 13px/1.4 Inter, system-ui, -apple-system, sans-serif; }
+      @media (prefers-color-scheme: dark) { body { background: #0b0b0c; color: #9ca3af; } }
+      .spin { width: 22px; height: 22px; margin: 0 auto 12px; border: 2px solid #429cb544; border-top-color: #429cb5; border-radius: 50%; animation: s 0.8s linear infinite; }
+      @keyframes s { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div><div class="spin"></div><span id="msg">Starting…</span></div>
+  </body>
+</html>

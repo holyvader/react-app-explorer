@@ -41,6 +41,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
 ## Run
+- The packaged desktop app serves this viewer from a Bun sidecar with the same `/api/*` endpoints as the Vite plugin; keep both in sync (see the `desktop` skill).
 ```bash
 bun run scan <path-to-app>                                 # writes <app>/.explorer/snapshots
 RAE_SNAPSHOTS=<app>/.explorer/snapshots bun run dev        # http://localhost:5173
