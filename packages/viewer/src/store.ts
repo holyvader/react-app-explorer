@@ -238,8 +238,18 @@ export const useExplorer = create<ExplorerState>((set, get) => {
           for (const v of s.visible) if (s.snapshot.nodes[v]?.moduleId === id) gone.add(v);
         } else gone.add(id);
       }
+      // Folders around what's removed stay on the diagram (as explicit folders) — removing a leaf
+      // never takes its folder with it. Only removing the folder itself does.
+      const parentOf = new Map(s.graph.elements.map((e) => [e.id, e.parent]));
+      const keep = new Set<string>();
+      for (const id of gone) {
+        for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) if (isFolder(p) && !gone.has(p)) keep.add(p);
+      }
+      const remaining = s.visible.filter((v) => !gone.has(v));
+      const present = new Set(remaining);
+      const visible = [...remaining, ...[...keep].filter((f) => !present.has(f))];
       const selection = s.selection.filter((x) => !gone.has(x));
-      redraw({ visible: s.visible.filter((v) => !gone.has(v)), selection, selectedId: selection.at(-1) }, null);
+      redraw({ visible, selection, selectedId: selection.at(-1) }, null);
     },
 
     selectMany: (ids) => set({ selection: ids, selectedId: ids.at(-1) }),

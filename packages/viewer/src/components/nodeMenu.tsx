@@ -7,6 +7,7 @@ import {
   IconChevronsUp,
   IconCopy,
   IconFocus,
+  IconFolder,
   IconRemove,
   IconRemoveWithContents,
   IconLayout,
@@ -15,8 +16,8 @@ import {
   IconSelect,
   IconUnwrap,
 } from "@rae/design-system/icons";
-import { isFolder } from "../graph/drawn.ts";
-import { folderExpansion, folderPath } from "../graph/folder.ts";
+import { FOLDER_PREFIX, isFolder } from "../graph/drawn.ts";
+import { folderContents, folderExpansion, folderPath } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { hasUndrawn } from "../graph/relations.ts";
 import { editorUrl } from "../lib/editor.ts";
@@ -96,6 +97,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       { type: "separator" },
       { type: "item", value: "files", label: "Show the files inside", icon: <IconArrowDown size={I} />, disabled: !canFiles, onSelect: () => st.expandFolder(id, false) },
       { type: "item", value: "all", label: "Show everything inside", icon: <IconChevronsDown size={I} />, disabled: !canAll, onSelect: () => st.expandFolder(id, true) },
+      ...subfolderMenu(id, path, drawnNow),
       { type: "separator" },
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
       { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemoveWithContents size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
@@ -195,5 +197,43 @@ export function containsEntries(id: string): MenuEntry[] {
       const Icon = KIND_META[n.kind].icon;
       return { type: "item", value: m, label: n.name, icon: <Icon size={I} />, hint: KIND_META[n.kind].label, onSelect: () => st.addNodes([m], { anchor: id }) };
     }),
+  ];
+}
+
+/** A folder's "Subfolders" submenu: add all of them, or any one (as folders on the diagram). */
+function subfolderMenu(id: string, path: string, drawn: ReadonlySet<string>): MenuEntry[] {
+  const st = useExplorer.getState();
+  if (!st.snapshot) return [];
+  const subs = folderContents(st.snapshot, path).subfolders;
+  if (!subs.length) return [];
+  const missing = subs.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`));
+  return [
+    {
+      type: "submenu",
+      value: "subfolders",
+      label: "Subfolders",
+      icon: <IconFolder size={I} />,
+      hint: `${subs.length}`,
+      entries: [
+        {
+          type: "item",
+          value: "subfolders:all",
+          label: missing.length ? `Add all (${missing.length} not shown)` : "All shown",
+          disabled: !missing.length,
+          onSelect: () => st.addNodes(missing.map((f) => `${FOLDER_PREFIX}${f.path}`), { anchor: id, fit: true }),
+        },
+        { type: "separator" },
+        ...subs.map(
+          (f): MenuEntry => ({
+            type: "item",
+            value: `subfolders:${f.path}`,
+            label: f.name,
+            icon: <IconFolder size={I} />,
+            hint: drawn.has(`${FOLDER_PREFIX}${f.path}`) ? "✓ shown" : `${f.count}`,
+            onSelect: () => st.addNodes([`${FOLDER_PREFIX}${f.path}`], { anchor: id }),
+          }),
+        ),
+      ],
+    },
   ];
 }

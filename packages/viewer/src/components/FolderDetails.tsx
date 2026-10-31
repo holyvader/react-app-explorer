@@ -16,6 +16,7 @@ import {
 } from "@rae/design-system";
 import { IconChevronsDown, IconArrowDown, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconRemoveWithContents } from "@rae/design-system/icons";
 import { useMemo } from "react";
+import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath } from "../graph/folder.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { useExplorer } from "../store.ts";
@@ -28,7 +29,7 @@ const KIND_ORDER: NodeKind[] = ["module", "component", "hook", "function", "serv
 export function FolderDetails({ id }: { id: string }) {
   const snapshot = useExplorer((s) => s.snapshot);
   const graph = useExplorer((s) => s.graph);
-  const { select, expandFolder, addNodes, hideNode, arrange, requestAdd } = useExplorer.getState();
+  const { select, expandFolder, addNodes, hideNode, arrange } = useExplorer.getState();
   const path = folderPath(id);
   const c = useMemo(() => (snapshot ? folderContents(snapshot, path) : undefined), [snapshot, path]);
   const drawn = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
@@ -39,6 +40,7 @@ export function FolderDetails({ id }: { id: string }) {
   const declsIn = (fileId: string) => c.declarations.filter((d) => d.moduleId === fileId).length;
   const canFiles = c.files.some((f) => !drawn.has(f.id));
   const canAll = canFiles || c.declarations.some((d) => !drawn.has(d.id));
+  const missingSubs = c.subfolders.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`));
 
   return (
     <Panel w="440px" flexShrink={0}>
@@ -94,14 +96,33 @@ export function FolderDetails({ id }: { id: string }) {
       </PanelSection>
 
       {c.subfolders.length > 0 && (
-        <PanelSection title="Folders" count={c.subfolders.length}>
+        <PanelSection
+          title="Folders"
+          count={c.subfolders.length}
+          aside={
+            missingSubs.length > 0 && (
+              <Button
+                as="span"
+                size="2xs"
+                variant="outline"
+                rounded="full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  addNodes(missingSubs.map((f) => `${FOLDER_PREFIX}${f.path}`), { anchor: id, fit: true });
+                }}
+              >
+                Add all
+              </Button>
+            )
+          }
+        >
           <Wrap gap="1.5">
             {c.subfolders.map((f) => (
               <TagChip
                 key={f.path}
                 color="kind.module.solid"
-                title={`Show the files in ${f.path}`}
-                onClick={() => requestAdd(folderContents(snapshot, f.path).files.map((x) => x.id), `Files inside ${f.path}`, id)}
+                title={drawn.has(`${FOLDER_PREFIX}${f.path}`) ? `${f.path} is on the diagram` : `Add ${f.path} to the diagram`}
+                onClick={() => addNodes([`${FOLDER_PREFIX}${f.path}`], { anchor: id, select: `${FOLDER_PREFIX}${f.path}` })}
               >
                 <IconFolder size={12} strokeWidth={2.4} />
                 {f.name}
