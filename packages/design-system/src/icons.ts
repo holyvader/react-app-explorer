@@ -7,7 +7,7 @@ export {
   ChevronsDown as IconChevronsDown,
   ChevronsUp as IconChevronsUp,
   Box as IconModule,
-  Component as IconComponent,
+  CodeXml as IconComponent, // "</>"
   Anchor as IconHook,
   Zap as IconServerAction,
   FunctionSquare as IconFunction,
