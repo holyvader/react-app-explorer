@@ -12,6 +12,8 @@ export type ElementNodeData = {
   children: number;
   hiddenParents: number;
   hiddenChildren: number;
+  /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */
+  undrawnContents?: number;
   /** Frame refuses the card being dragged over it. */
   refused?: boolean;
 };

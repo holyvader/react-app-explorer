@@ -47,3 +47,28 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
     </span>
   );
 }
+
+/**
+ * A round "+" on the middle of a file's bottom border: what it declares that isn't drawn yet.
+ * Opens a menu: all at once first, then each one (after noesis' "contains" button).
+ */
+export function ContainsButton({ data }: { data: ElementNodeData }) {
+  const n = data.undrawnContents;
+  if (!n) return null;
+  const label = `Show ${n === 1 ? "the declaration" : `the ${n} declarations`} ${data.element.name} contains`;
+  return (
+    <button
+      type="button"
+      className="rae-contains nodrag nopan"
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        useExplorer.getState().openMenu({ id: data.element.id, x: r.left, y: r.bottom + 4, mode: "contains" });
+      }}
+    >
+      +{n}
+    </button>
+  );
+}

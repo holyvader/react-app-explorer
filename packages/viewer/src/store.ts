@@ -49,6 +49,10 @@ interface ExplorerState {
   searchOpen: boolean;
   /** Where nodes picked in search go (right-click on the canvas); viewport centre otherwise. */
   searchAnchor?: CanvasPoint;
+  /** Quick add: right-click on the empty canvas opens a small picker there (client coords + canvas point). */
+  quickAdd: { at: { x: number; y: number }; anchor: CanvasPoint } | null;
+  /** Open context menu: a node's actions, or what a file contains (its "+" button). */
+  menu: { id: string; x: number; y: number; mode: "node" | "contains" } | null;
   pending?: PendingExpansion;
   focusId?: string;
   fitIds?: string[];
@@ -84,6 +88,10 @@ interface ExplorerState {
   arrange: (id: string) => Promise<void>;
   setEditor: (e: EditorKind) => void;
   setSearchOpen: (open: boolean, anchor?: CanvasPoint) => void;
+  setQuickAdd: (q: ExplorerState["quickAdd"]) => void;
+  openMenu: (menu: ExplorerState["menu"]) => void;
+  /** Adds many elements; above LARGE_EXPANSION it asks first. */
+  requestAdd: (ids: string[], label: string, anchor?: Anchor) => void;
   consumeFocus: () => void;
 }
 
@@ -148,6 +156,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
   return {
     visible: [],
     selection: [],
+    quickAdd: null,
+    menu: null,
     past: [],
     future: [],
     enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true },
@@ -240,7 +250,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     select: (id, adding) => {
       if (id === undefined) return set({ selection: [], selectedId: undefined });
       const s = get();
-      if (!adding) return set({ selection: [id], selectedId: id });
+      // Clicked again while it's the only one selected: let go of it (noesis).
+      if (!adding) return s.selection.length === 1 && s.selection[0] === id ? set({ selection: [], selectedId: undefined }) : set({ selection: [id], selectedId: id });
       // ⌘/Ctrl+click: joins the selection, or leaves it.
       const selection = s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id];
       set({ selection, selectedId: selection.at(-1) });
@@ -319,6 +330,20 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     setSearchOpen: (searchOpen, searchAnchor) => set({ searchOpen, ...(searchOpen ? { searchAnchor } : {}) }),
+    setQuickAdd: (quickAdd) => set({ quickAdd }),
+    openMenu: (menu) => set({ menu }),
+
+    requestAdd: (ids, label, anchor = null) => {
+      const s = get();
+      const present = new Set(s.visible);
+      const fresh = ids.filter((id) => !present.has(id) && s.snapshot?.nodes[id]);
+      if (!fresh.length) return;
+      if (fresh.length > LARGE_EXPANSION) {
+        set({ pending: { ids: fresh, label, anchor: typeof anchor === "string" ? anchor : "" } });
+        return;
+      }
+      get().addNodes(fresh, { anchor, fit: fresh.length > 1 });
+    },
     consumeFocus: () => set({ focusId: undefined, fitIds: undefined }),
   };
 });

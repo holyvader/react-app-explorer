@@ -7,7 +7,6 @@ import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
-import { SearchModal } from "./components/SearchModal.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { useExplorer } from "./store.ts";
@@ -119,10 +118,10 @@ export function App() {
                         description={`${Object.keys(snapshot.nodes).length} scanned nodes. Add one to start exploring.`}
                       >
                         <Button onClick={() => setSearchOpen(true)}>
-                          <IconPlus size={16} /> Add node
+                          <IconPlus size={16} /> Start exploration
                         </Button>
                         <Text fontSize="xs" color="fg.muted">
-                          or press ⌘K
+                          or press Space · right-click the canvas to add an element there
                         </Text>
                       </EmptyState>
                     </Box>
@@ -134,7 +133,6 @@ export function App() {
           <DetailsPanel />
         </Flex>
       </Flex>
-      <SearchModal />
       <LibrariesModal open={librariesOpen} onOpenChange={setLibrariesOpen} />
       <ScanModal open={scanOpen} onOpenChange={setScanOpen} onScanned={(file) => void refreshList(file)} />
       <ConfirmExpansion />

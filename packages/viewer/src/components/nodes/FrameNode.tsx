@@ -3,7 +3,7 @@ import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xy
 import { memo, type MouseEvent, type PointerEvent } from "react";
 import { KIND_META } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
-import { NodeActions } from "./NodeActions.tsx";
+import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
 /** How far a pointer may move between press and release and still be a click. */
@@ -11,10 +11,11 @@ const CLICK_SLOP = 4;
 
 /**
  * A frame's room is the canvas to the reader: dragged, it pans the view; double-clicked, it zooms
- * in around the pointer; clicked (not dragged), it selects the frame. React Flow blocks both
+ * in around the pointer; clicked (not dragged), it clears the selection, as a click on the empty
+ * canvas does (the frame is selected from its header). React Flow blocks both
  * panning and zooming on nodes, so they're done here, on the room itself (not what's inside).
  */
-function useRoomAsCanvas(id: string, selectable: boolean) {
+function useRoomAsCanvas() {
   const { getViewport, setViewport } = useReactFlow();
   const store = useStoreApi();
   const onPointerDown = (event: PointerEvent<HTMLElement>) => {
@@ -38,7 +39,7 @@ function useRoomAsCanvas(id: string, selectable: boolean) {
     const end = (to: globalThis.PointerEvent) => {
       cancelAnimationFrame(frame);
       if (to.type === "pointerup" && Math.hypot(to.clientX - from.x, to.clientY - from.y) < CLICK_SLOP) {
-        if (selectable) useExplorer.getState().select(id, to.ctrlKey || to.metaKey);
+        useExplorer.getState().select(undefined);
       } else {
         // Final position from the release itself: fast drags can deliver their (coalesced) moves late.
         void setViewport({ ...from.view, x: from.view.x + to.clientX - from.x, y: from.view.y + to.clientY - from.y });
@@ -71,11 +72,11 @@ function useRoomAsCanvas(id: string, selectable: boolean) {
  * A container drawn around what it holds: a file module (its declarations inside) or a folder
  * (files inside). Dragged by its header; what it holds moves with it.
  */
-function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
+function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
   const { node, element, refused } = data;
   const folder = element.kind === "folder";
   const Icon = folder ? IconFolder : KIND_META.module.icon;
-  const room = useRoomAsCanvas(id, !!node);
+  const room = useRoomAsCanvas();
   return (
     <div className="rae-frame" data-kind={folder ? "folder" : "module"} data-refused={refused || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
@@ -94,6 +95,7 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
         <NodeActions data={data} frame />
       </div>
       <div className="rae-frame__room nopan" {...room} />
+      <ContainsButton data={data} />
       <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
     </div>
   );

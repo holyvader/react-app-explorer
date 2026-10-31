@@ -29,9 +29,13 @@ if (!nextApp) throw new Error("no next-app snapshot: run `bun run scan packages/
 await select.selectOption(nextApp);
 await page.getByText(/^next-app · \d+ files/).waitFor();
 await page.getByText("Empty diagram").waitFor();
-await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
-await page.getByPlaceholder(/Search components/).fill("HomePage");
+// Add the way noesis does: "Start exploration" opens the picker; filter, Enter picks the first match.
+await page.getByRole("button", { name: "Start exploration" }).click();
+await page.getByLabel("Filter elements").fill("HomePage");
 await page.keyboard.press("Enter");
+await page.getByRole("button", { name: "Done" }).click();
+// Select it so the details panel opens.
+await page.locator('.react-flow__node[data-id="app/page.tsx#HomePage"]').click({ position: { x: 60, y: 14 } });
 await page.locator(".react-flow__node").first().waitFor();
 if ((await page.getByText("Render tree").count()) === 0) fail("details panel did not open");
 // Adding a node draws just that node: no file module is added around it.
@@ -100,14 +104,26 @@ if (rb) {
   if ((await viewport()) === v0) fail("dragging inside a frame should pan the diagram");
 }
 
-// Space opens search (noesis shortcut).
+// Space opens the picker (noesis shortcut).
 await page.keyboard.press(" ");
-await page.getByPlaceholder(/Search components/).waitFor();
+await page.getByLabel("Filter elements").waitFor();
 await page.keyboard.press("Escape");
+await page.getByLabel("Filter elements").waitFor({ state: "detached" });
+
+// Right-click on the empty canvas: quick add right there.
+await page.locator(".react-flow__pane").click({ button: "right", position: { x: 30, y: 30 } });
+await page.getByPlaceholder(/Add here/).waitFor();
+await page.keyboard.press("Escape");
+await page.getByPlaceholder(/Add here/).waitFor({ state: "detached" });
 
 // Delete removes the selection; undo brings it back, redo removes it again.
 const count = () => page.locator(".react-flow__node").count();
+// Esc clears the selection (clicking a selected node again would let go of it).
+await page.keyboard.press("Escape");
+await page.waitForTimeout(350); // let any glide settle before clicking
 await card.click();
+const selected = await page.evaluate(() => (window as unknown as { __rae: { getState: () => { selection: string[] } } }).__rae.getState().selection);
+if (!selected.includes("components/TodoItem.tsx#TodoItem")) fail(`clicking the card should select it, got ${JSON.stringify(selected)}`);
 const withCard = await count();
 await page.keyboard.press("Delete");
 await page.waitForTimeout(300);

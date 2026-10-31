@@ -22,7 +22,10 @@ import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
-import { nodeMenuEntries } from "./nodeMenu.tsx";
+import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
+import { ExplorationPicker } from "./picker/ExplorationPicker.tsx";
+import { QuickAdd } from "./picker/QuickAdd.tsx";
+import { NodeTooltip, type TipState } from "./NodeTooltip.tsx";
 import { CardNode } from "./nodes/CardNode.tsx";
 import { FrameNode } from "./nodes/FrameNode.tsx";
 import { type ElementFlowNode, FRAME_HANDLE } from "./nodes/types.ts";
@@ -37,10 +40,10 @@ const cssVar = (token: string) => `var(--chakra-colors-${token.replace(/[A-Z]/g,
 function edgeLook(e: GraphEdge): { className: string; color: string } {
   switch (e.kind) {
     case "imports":
-      if (e.importType === "type-only") return { className: "rae-edge rae-edge--imports-type", color: cssVar("kind.module.muted") };
+      if (e.importType === "type-only") return { className: "rae-edge rae-edge--imports-type", color: cssVar("relation.importsMuted") };
       if (e.importType === "lazy" || e.importType === "dynamic" || e.importType === "next-dynamic")
-        return { className: "rae-edge rae-edge--imports-lazy", color: cssVar("kind.module.solid") };
-      return { className: "rae-edge rae-edge--imports", color: cssVar("kind.module.solid") };
+        return { className: "rae-edge rae-edge--imports-lazy", color: cssVar("relation.imports") };
+      return { className: "rae-edge rae-edge--imports", color: cssVar("relation.imports") };
     case "renders":
       return { className: "rae-edge rae-edge--renders", color: cssVar("kind.component.solid") };
     case "usesHook":
@@ -112,7 +115,14 @@ export function Canvas() {
   const { select, consumeFocus, applyLayout, dropAt } = useExplorer.getState();
   const flow = useReactFlow();
   const [dragging, setDragging] = useState(false);
-  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
+  const menu = useExplorer((s) => s.menu);
+  const setMenu = useExplorer.getState().openMenu;
+  const [tip, setTip] = useState<TipState | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** ⌘/Ctrl held: a click adds to the selection (the cursor says so). */
+  const [adding, setAdding] = useState(false);
+  /** The dragged element is over a frame that won't take it. */
+  const [refusedDrop, setRefusedDrop] = useState(false);
 
   // Full ELK layout when the store asks for one.
   useEffect(() => {
@@ -159,6 +169,8 @@ export function Canvas() {
           children: distinct(children.map((e) => e.to)),
           hiddenParents: distinct(parents.filter((e) => !drawn.has(e.from)).map((e) => e.from)),
           hiddenChildren: distinct(children.filter((e) => !drawn.has(e.to)).map((e) => e.to)),
+          undrawnContents:
+            node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
       } as ElementFlowNode;
     });
@@ -246,6 +258,8 @@ export function Canvas() {
         refusing: refusingFrames(s.placed, s.graph, node.id),
       };
       setDragging(true);
+      clearTimeout(tipTimer.current);
+      setTip(null);
       patchNode(node.id, (n) => ({ ...n, zIndex: RAISED_Z }));
     },
     [patchNode],
@@ -261,6 +275,7 @@ export function Canvas() {
       markRefused(h.refused, false);
       markRefused(into, true);
       h.refused = into;
+      setRefusedDrop(!!into);
     },
     [markRefused],
   );
@@ -270,6 +285,7 @@ export function Canvas() {
       const h = holding.current;
       holding.current = null;
       setDragging(false);
+      setRefusedDrop(false);
       if (!h) return;
       markRefused(h.refused, false);
       patchNode(node.id, (n) => ({ ...n, zIndex: undefined }));
@@ -331,8 +347,17 @@ export function Canvas() {
   // Keyboard shortcuts on the diagram (noesis-style).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return;
       const s = useExplorer.getState();
+      // Esc closes what's open (picker, quick add, menu) — even from inside it — else clears the selection.
+      if (e.key === "Escape") {
+        if (s.searchOpen || s.quickAdd || s.menu) {
+          if (s.searchOpen) s.setSearchOpen(false);
+          if (s.quickAdd) s.setQuickAdd(null);
+          if (s.menu) setMenu(null);
+        } else if (!isTyping(e.target)) s.select(undefined);
+        return;
+      }
+      if (isTyping(e.target)) return;
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
       if (e.key === " " && !mod && !e.repeat && s.snapshot) {
@@ -360,17 +385,24 @@ export function Canvas() {
       } else if ((e.key === "Delete" || e.key === "Backspace") && !mod && s.selection.length) {
         e.preventDefault();
         s.hideNodes(s.selection);
-      } else if (e.key === "Escape") {
-        setMenu(null);
-        s.select(undefined);
       }
     };
+    const onModifier = (e: KeyboardEvent) => setAdding(e.metaKey || e.ctrlKey);
+    const onBlur = () => setAdding(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [flow]);
+    window.addEventListener("keydown", onModifier);
+    window.addEventListener("keyup", onModifier);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onModifier);
+      window.removeEventListener("keyup", onModifier);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [flow, setMenu]);
 
   const menuNode = menu ? snapshot?.nodes[menu.id] : undefined;
-  const menuEntries = useMemo(() => (menu ? nodeMenuEntries(menu.id) : []), [menu]);
+  const menuEntries = useMemo(() => (menu ? (menu.mode === "contains" ? containsEntries(menu.id) : nodeMenuEntries(menu.id)) : []), [menu]);
 
   return (
     <div
@@ -378,6 +410,8 @@ export function Canvas() {
       tabIndex={-1}
       data-selection={selection.length ? "" : undefined}
       data-dragging={dragging ? "" : undefined}
+      data-adding={adding ? "" : undefined}
+      data-refused-drop={refusedDrop ? "" : undefined}
       // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
       onPointerDown={(e) => {
         const active = document.activeElement as HTMLElement | null;
@@ -398,16 +432,29 @@ export function Canvas() {
         panActivationKeyCode={null}
         multiSelectionKeyCode={null}
         edgesFocusable={false}
-        onNodeClick={(e, n) => n.data.node && select(n.id, e.metaKey || e.ctrlKey)}
+        onNodeClick={(e, n) => {
+          // A frame is selected from its header; its room acts as empty canvas (handled in FrameNode).
+          if (n.data.node && !(e.target as HTMLElement).closest(".rae-frame__room")) select(n.id, e.metaKey || e.ctrlKey);
+        }}
+        onNodeMouseEnter={(e, n) => {
+          clearTimeout(tipTimer.current);
+          const at = { x: e.clientX, y: e.clientY };
+          tipTimer.current = setTimeout(() => setTip({ id: n.id, ...at }), 450);
+        }}
+        onNodeMouseLeave={() => {
+          clearTimeout(tipTimer.current);
+          setTip(null);
+        }}
         onNodeContextMenu={(e, n) => {
           e.preventDefault();
           if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
-          setMenu({ x: e.clientX, y: e.clientY, id: n.id });
+          setMenu({ x: e.clientX, y: e.clientY, id: n.id, mode: "node" });
         }}
         onPaneContextMenu={(e) => {
           e.preventDefault();
           const s = useExplorer.getState();
-          if (s.snapshot) s.setSearchOpen(true, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+          // Quick add: a small picker right there; what's picked lands at that point.
+          if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
         }}
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
@@ -432,6 +479,9 @@ export function Canvas() {
           nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
         />
       </ReactFlow>
+      {!dragging && !menu && <NodeTooltip tip={tip} snapshot={snapshot} index={index} />}
+      <ExplorationPicker />
+      <QuickAdd />
       <div className="rae-legend">
         <ShortcutLegend shortcuts={SHORTCUTS} />
       </div>

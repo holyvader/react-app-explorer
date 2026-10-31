@@ -1,0 +1,77 @@
+/* Element tree (picker / quick add) — plain CSS: it can show hundreds of rows. */
+.rae-tree-search {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--chakra-colors-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rae-tree-search input {
+  flex: 1;
+  border: 1px solid var(--chakra-colors-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: 13px var(--chakra-fonts-body);
+  background: var(--chakra-colors-bg);
+  color: var(--chakra-colors-fg);
+  outline: none;
+}
+.rae-tree-search input:focus { border-color: var(--chakra-colors-blue-500); box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2); }
+.rae-tree { flex: 1; overflow-y: auto; padding: 4px 0; font: 13px/1.3 var(--chakra-fonts-body); color: var(--chakra-colors-fg); }
+.rae-tree__row {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding-right: 10px;
+  cursor: pointer;
+}
+.rae-tree__row:hover { background: var(--chakra-colors-bg-muted); }
+.rae-tree__row:focus-visible { background: var(--chakra-colors-bg-emphasized); outline: 2px solid var(--chakra-colors-blue-500); outline-offset: -2px; }
+.rae-tree__row[data-inactive] { color: var(--chakra-colors-fg-subtle); cursor: default; }
+.rae-tree__chev { width: 16px; display: inline-flex; justify-content: center; color: var(--chakra-colors-fg-muted); flex-shrink: 0; }
+.rae-tree__icon { display: inline-flex; flex-shrink: 0; }
+.rae-tree__icon[data-kind="folder"], .rae-tree__icon[data-kind="libraries"] { color: var(--chakra-colors-fg-muted); }
+.rae-tree__icon[data-kind="module"] { color: var(--chakra-colors-kind-module-fg); }
+.rae-tree__icon[data-kind="component"] { color: var(--chakra-colors-kind-component-fg); }
+.rae-tree__icon[data-kind="hook"] { color: var(--chakra-colors-kind-hook-fg); }
+.rae-tree__icon[data-kind="function"] { color: var(--chakra-colors-kind-function-fg); }
+.rae-tree__icon[data-kind="serverAction"] { color: var(--chakra-colors-kind-server-action-fg); }
+.rae-tree__icon[data-kind="external"] { color: var(--chakra-colors-kind-external-fg); }
+.rae-tree__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rae-tree__note { margin-left: auto; padding-left: 8px; font-size: 11px; color: var(--chakra-colors-fg-subtle); white-space: nowrap; }
+.rae-tree__tick {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 1.5px solid var(--chakra-colors-border-emphasized);
+  border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; line-height: 1; color: white;
+}
+.rae-tree__tick[data-state="on"], .rae-tree__tick[data-state="all"] { background: var(--chakra-colors-blue-500); border-color: var(--chakra-colors-blue-500); }
+.rae-tree__tick[data-state="file"], .rae-tree__tick[data-state="partial"] { background: color-mix(in srgb, var(--chakra-colors-blue-500) 45%, transparent); border-color: var(--chakra-colors-blue-500); }
+.rae-tree__more { padding: 6px 12px; font-size: 12px; color: var(--chakra-colors-fg-muted); }
+.rae-tree__empty { padding: 16px 12px; font-size: 13px; color: var(--chakra-colors-fg-muted); text-align: center; }
+.rae-picker-foot {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--chakra-colors-border);
+  background: var(--chakra-colors-bg-subtle);
+  font: 12px var(--chakra-fonts-body);
+  color: var(--chakra-colors-fg-muted);
+}
+/* The round plus at the canvas's foot. */
+.rae-add-anchor { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 6; }
+.rae-add-plus {
+  all: unset; box-sizing: border-box;
+  width: 52px; height: 52px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--chakra-colors-fg); color: var(--chakra-colors-bg);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25), 0 1px 3px rgb(16 24 40 / 0.1);
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+.rae-add-plus:hover { transform: scale(1.06); }
+.rae-add-plus:focus-visible { outline: 3px solid var(--chakra-colors-blue-500); outline-offset: 2px; }

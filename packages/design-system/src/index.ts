@@ -16,3 +16,4 @@ export { Switch, type SwitchProps } from "./components/Switch.tsx";
 export { Checkbox, type CheckboxProps } from "./components/Checkbox.tsx";
 export { ContextMenu, type ContextMenuProps, type MenuEntry } from "./components/ContextMenu.tsx";
 export { ShortcutLegend, type Shortcut } from "./components/ShortcutLegend.tsx";
+export { Popover, type PopoverProps } from "./components/Popover.tsx";

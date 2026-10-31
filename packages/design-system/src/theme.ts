@@ -4,6 +4,7 @@ import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
  * Design tokens for React App Explorer.
  * Graph node kinds and server/client boundaries get dedicated semantic tokens so
  * the app never hardcodes colors: use e.g. `bg="kind.component.subtle"`.
+ * Blue is reserved for selection (selected / related nodes and edges): no kind or relation uses it.
  */
 const kind = (base: string) => ({
   solid: { value: `{colors.${base}.500}` },
@@ -18,6 +19,22 @@ const config = defineConfig({
   },
   theme: {
     tokens: {
+      colors: {
+        // Magenta for components (not in Chakra's default palette).
+        magenta: {
+          50: { value: "#fdf4ff" },
+          100: { value: "#fae8ff" },
+          200: { value: "#f5d0fe" },
+          300: { value: "#f0abfc" },
+          400: { value: "#e879f9" },
+          500: { value: "#d946ef" },
+          600: { value: "#c026d3" },
+          700: { value: "#a21caf" },
+          800: { value: "#86198f" },
+          900: { value: "#701a75" },
+          950: { value: "#4a044e" },
+        },
+      },
       fonts: {
         body: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
         heading: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
@@ -28,16 +45,22 @@ const config = defineConfig({
       colors: {
         kind: {
           module: kind("gray"),
-          component: kind("blue"),
+          // Blue is reserved for selection; nothing else uses it.
+          component: kind("magenta"),
           hook: kind("purple"),
           serverAction: kind("orange"),
           function: kind("teal"),
-          external: kind("pink"),
+          external: kind("yellow"),
         },
         boundary: {
-          server: kind("green"),
+          server: kind("gray"),
           client: kind("cyan"),
-          shared: kind("yellow"),
+          shared: kind("pink"),
+        },
+        relation: {
+          // "imports" edges: dark grey, distinct from the lighter module frames.
+          imports: { value: { _light: "{colors.gray.700}", _dark: "{colors.gray.300}" } },
+          importsMuted: { value: { _light: "{colors.gray.500}", _dark: "{colors.gray.500}" } },
         },
         canvas: {
           bg: { value: { _light: "{colors.gray.50}", _dark: "{colors.gray.950}" } },

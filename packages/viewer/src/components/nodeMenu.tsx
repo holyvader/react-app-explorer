@@ -77,7 +77,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   const st = useExplorer.getState();
   const { snapshot: s, index, editor } = st;
   if (!s || !index) return [];
-  const { select, expand, hideNode, hideNodes, arrange, addNodes } = st;
+  const { expand, hideNode, hideNodes, arrange, addNodes } = st;
   const node = s.nodes[id];
   const holds = st.graph.elements.some((e) => e.parent === id);
   const entries: MenuEntry[] = [];
@@ -91,7 +91,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   if (!node) return [];
 
   const multi = st.selection.length > 1 && st.selection.includes(id);
-  entries.push({ type: "item", value: "select", label: "Select", icon: <IconSelect size={I} />, onSelect: () => select(id) });
+  entries.push({ type: "item", value: "select", label: "Select", icon: <IconSelect size={I} />, onSelect: () => st.selectMany([id]) });
   if (node.absPath) {
     entries.push({
       type: "item",
@@ -149,3 +149,22 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   return entries;
 }
 
+
+/** The file's "+" menu: what it declares that isn't drawn — all at once, then each. */
+export function containsEntries(id: string): MenuEntry[] {
+  const st = useExplorer.getState();
+  const { snapshot: s, index } = st;
+  if (!s || !index) return [];
+  const drawn = new Set(st.graph.elements.map((e) => e.id));
+  const missing = (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).map((e) => e.to);
+  if (!missing.length) return [{ type: "label", label: "Everything inside is drawn" }];
+  return [
+    { type: "item", value: "all", label: `Show all ${missing.length}`, onSelect: () => st.addNodes(missing, { anchor: id, fit: true }) },
+    { type: "separator" },
+    ...missing.map((m): MenuEntry => {
+      const n = s.nodes[m]!;
+      const Icon = KIND_META[n.kind].icon;
+      return { type: "item", value: m, label: n.name, icon: <Icon size={I} />, hint: KIND_META[n.kind].label, onSelect: () => st.addNodes([m], { anchor: id }) };
+    }),
+  ];
+}
