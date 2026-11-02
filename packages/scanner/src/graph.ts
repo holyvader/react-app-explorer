@@ -70,6 +70,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         typeParams: d.typeParams,
         extends: d.extends,
         functions: d.functions.length ? d.functions.map(({ pos: _pos, ...fn }) => fn) : undefined,
+        dynamicApis: d.dynamicApis,
       };
     }
   }
@@ -396,6 +397,75 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       else if (kind !== "segment") intercepting.push({ id, segs, kind });
     }
 
+    /**
+     * Static or dynamic, as `next build` would label it — decided from the code: segment config
+     * (`dynamic`, `revalidate`) of the route and its layouts, dynamic segments without
+     * `generateStaticParams`, route handlers (dynamic by default), and request-time APIs
+     * (`cookies()`, `headers()`, `searchParams`, `fetch … no-store`…) anywhere its page, layouts and
+     * what they render / invoke / use reach. Server actions don't count: they run on submit.
+     */
+    function addRendering(list: { id: NodeId; segs: string[]; kind: RouteInfo["kind"] }[]) {
+      const fileOf = new Map([...files.values()].map((f) => [moduleId(f.absPath), f]));
+      const next = new Map<NodeId, NodeId[]>();
+      for (const e of edges) if (e.kind === "renders" || e.kind === "invokes" || e.kind === "usesHook") (next.get(e.from) ?? next.set(e.from, []).get(e.from)!).push(e.to);
+      for (const r of list) {
+        const info = nodes[r.id]!.route!;
+        const chain: RouteInfo[] = [];
+        for (let cur: RouteInfo | undefined = info; cur; cur = cur.parent ? nodes[cur.parent]?.route : undefined) chain.unshift(cur);
+        const own = info.files.page ?? info.files.route;
+        const shared = chain.flatMap((c) => [c.files.layout, c.files.template]).filter((x): x is NodeId => !!x);
+        const fileIds = [...shared, ...(own ? [own] : [])];
+        // segment config: layouts first, the route's own file last (the innermost wins)
+        const config: { dynamic?: string; revalidate?: number | false } = {};
+        for (const id of fileIds) Object.assign(config, fileOf.get(id)?.segmentConfig);
+        const staticParams = fileIds.some((id) => fileOf.get(id)?.exports.some((e) => e.exported === "generateStaticParams"));
+        const reasons: string[] = [];
+        let mode: "static" | "ssg" | "dynamic" = "static";
+        const where = (id: NodeId) => nodes[id]?.filePath ?? id;
+        if (config.dynamic === "force-dynamic") {
+          mode = "dynamic";
+          reasons.push(`export const dynamic = "force-dynamic"`);
+        } else if (config.dynamic === "force-static" || config.dynamic === "error") {
+          reasons.push(`export const dynamic = "${config.dynamic}"`);
+        } else if (config.revalidate === 0) {
+          mode = "dynamic";
+          reasons.push("export const revalidate = 0");
+        } else {
+          if (r.kind === "api") {
+            mode = "dynamic";
+            reasons.push("route handlers run on every request by default");
+          }
+          const dynamicSegs = r.segs.filter((seg) => seg.startsWith("["));
+          if (dynamicSegs.length && staticParams) {
+            if (mode === "static") mode = "ssg";
+            reasons.push(`prerendered for generateStaticParams (${dynamicSegs.join(", ")})`);
+          } else if (dynamicSegs.length) {
+            mode = "dynamic";
+            reasons.push(`${dynamicSegs.join(", ")} without generateStaticParams`);
+          }
+          // request-time APIs anywhere the route's files reach
+          const seen = new Set<NodeId>();
+          const queue: NodeId[] = fileIds.flatMap((id) => (fileOf.get(id)?.decls ?? []).filter((d) => d.kind !== "type").map((d) => declId(fileOf.get(id)!.absPath, d.local)));
+          while (queue.length) {
+            const id = queue.shift()!;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const n = nodes[id];
+            if (!n || n.kind === "serverAction") continue;
+            for (const api of n.dynamicApis ?? []) {
+              if (reasons.length < 6) reasons.push(`${api} in ${n.name} (${where(id)})`);
+              mode = "dynamic";
+            }
+            for (const to of next.get(id) ?? []) if (!seen.has(to)) queue.push(to);
+          }
+        }
+        const revalidate = typeof config.revalidate === "number" && config.revalidate > 0 ? config.revalidate : undefined;
+        if (revalidate && mode !== "dynamic") reasons.push(`revalidates every ${revalidate}s (ISR)`);
+        if (!reasons.length) reasons.push("no request-time data: prerendered at build");
+        info.rendering = { mode, revalidate, reasons };
+      }
+    }
+
     // most specific first: more static segments, then fewer catch-alls
     const score = (segs: string[]) => segs.reduce((n, s) => n + (s.startsWith("[[") ? 0 : s.startsWith("[...") ? 1 : s.startsWith("[") ? 2 : 4), 0);
     routes.sort((a, b) => score(b.segs) - score(a.segs) || b.segs.length - a.segs.length);
@@ -415,6 +485,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       const path = href.split("/").filter(Boolean).map((p) => (p.includes("[…]") ? "[…]" : decodeURIComponent(p)));
       return routes.find((r) => (api ? r.kind === "api" : r.kind === "page") && matches(r.segs, path))?.id;
     };
+
+    addRendering([...routes, ...intercepting]);
 
     // Middleware (middleware.ts / proxy.ts): which page and API routes its matcher selects.
     for (const f of files.values()) {

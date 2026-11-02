@@ -532,3 +532,9 @@
 
 /* route frames: the route's colour on the header */
 .rae-frame[data-kind="route"] .rae-frame__header { background: color-mix(in srgb, var(--k) 8%, transparent); }
+
+/* route rendering badges, as `next build` labels them */
+.rae-chip[data-render="static"] { --c: var(--chakra-colors-green-solid); }
+.rae-chip[data-render="ssg"] { --c: var(--chakra-colors-teal-solid); }
+.rae-chip[data-render="dynamic"] { --c: var(--chakra-colors-orange-solid); }
+.rae-chip[data-render] { color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }

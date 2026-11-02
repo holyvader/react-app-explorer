@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import { KIND_META, fileNote, routeCaption } from "../../lib/kinds.tsx";
+import { KIND_META, fileNote, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { CardShape } from "./CardShape.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -52,6 +52,11 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
           <div className="rae-name">{element.name}</div>
           <div className="rae-card__caption">{caption}</div>
         </div>
+        {node.route?.rendering && (
+          <span className="rae-chip rae-card__boundary" data-render={node.route.rendering.mode} title={node.route.rendering.reasons.join("\n")}>
+            {renderingLabel(node.route.rendering)}
+          </span>
+        )}
         {node.moduleType && element.parent === null && (
           <span className="rae-chip rae-card__boundary" data-boundary={node.moduleType}>
             {node.moduleType}

@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xyflow/react";
 import { memo, type MouseEvent, type PointerEvent } from "react";
-import { KIND_META, routeCaption } from "../../lib/kinds.tsx";
+import { KIND_META, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -93,6 +93,11 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
           {!folder && !route && node && <div className="rae-sub">{node.filePath}</div>}
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
+        {route?.rendering && (
+          <span className="rae-chip" data-render={route.rendering.mode} title={route.rendering.reasons.join("\n")}>
+            {renderingLabel(route.rendering)}
+          </span>
+        )}
         {node?.nextRole && <span className="rae-badge rae-badge--outline">{node.nextRole}</span>}
         {node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
         <NodeActions data={data} frame />

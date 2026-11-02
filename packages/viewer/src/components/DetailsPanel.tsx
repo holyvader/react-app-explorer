@@ -33,7 +33,7 @@ import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl, openInEditor } from "../lib/editor.ts";
-import { KIND_META, fileNote, routeCaption } from "../lib/kinds.tsx";
+import { KIND_META, fileNote, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
@@ -381,6 +381,23 @@ function RouteInfoView({ node }: { node: GraphNode }) {
             </TagChip>
           ))}
         </Wrap>
+      )}
+      {r.rendering && (
+        <Box>
+          <Eyebrow>Rendering</Eyebrow>
+          <Flex align="flex-start" gap="2" mt="1.5">
+            <TagChip color={r.rendering.mode === "dynamic" ? "orange.solid" : r.rendering.mode === "ssg" ? "teal.solid" : "green.solid"} mono>
+              {renderingLabel(r.rendering)}
+            </TagChip>
+            <Stack gap="0.5" minW="0">
+              {r.rendering.reasons.map((why, i) => (
+                <Text key={i} fontSize="xs" color="fg.muted" wordBreak="break-word">
+                  {why}
+                </Text>
+              ))}
+            </Stack>
+          </Flex>
+        </Box>
       )}
       {r.middleware && (
         <Box>

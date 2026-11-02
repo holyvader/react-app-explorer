@@ -102,6 +102,8 @@ export interface DeclExtract {
   typeParams?: TypeParam[];
   /** Interfaces: their `extends` clauses, as written. */
   extends?: string[];
+  /** Request-time APIs it calls (`cookies()`, `headers()`, `searchParams`, `fetch … no-store`…). */
+  dynamicApis?: string[];
   /** Where it navigates or sends requests (in-app paths only), as written. */
   navigations?: { via: Navigation["via"]; href: string }[];
 }
@@ -115,6 +117,8 @@ export interface FileExtract {
   imports: ImportRecord[];
   exports: ExportRecord[];
   decls: DeclExtract[];
+  /** Route segment config: `export const dynamic = "…"`, `export const revalidate = n | false`. */
+  segmentConfig?: { dynamic?: string; revalidate?: number | false };
   /** `export const config = { matcher }` (middleware / proxy), as written; undefined when there's none. */
   matcher?: MiddlewareMatcher[];
   /** JSX rendered at module level (outside declarations). */

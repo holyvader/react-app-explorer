@@ -34,3 +34,10 @@ export function routeCaption(r: { kind: string; methods?: string[]; segmentKind:
     r.segmentKind === "group" ? "route group" : r.segmentKind === "slot" ? "parallel slot" : r.segmentKind === "intercept" ? "intercepting" : r.params.length ? "dynamic" : undefined;
   return shape ? `${what} · ${shape}` : what;
 }
+
+/** A route's rendering as `next build` prints it: "○ Static", "● SSG", "ƒ Dynamic", "○ ISR 60s". */
+export function renderingLabel(r: { mode: string; revalidate?: number }): string {
+  if (r.mode === "dynamic") return "ƒ Dynamic";
+  if (r.mode === "ssg") return r.revalidate ? `● SSG · ${r.revalidate}s` : "● SSG";
+  return r.revalidate ? `○ ISR ${r.revalidate}s` : "○ Static";
+}

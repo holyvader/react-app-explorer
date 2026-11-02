@@ -342,3 +342,46 @@ describe("middleware matching", () => {
     expect(targets(most)).toEqual(["route:/", "route:/dashboard", "route:/dashboard/[team]"]);
   });
 });
+
+describe("static / dynamic rendering", () => {
+  test("segment config (incl. layouts'), generateStaticParams, ISR, request-time APIs reached through components, route handlers", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const root = mkdtempSync(join(tmpdir(), "rae-render-"));
+    const files: Record<string, string> = {
+      "package.json": `{ "name": "r", "dependencies": { "next": "16" } }`,
+      "app/layout.tsx": `export default function L({ children }: { children: unknown }) { return <html>{children as never}</html>; }`,
+      "app/page.tsx": `import { Buy } from "@/components/Buy";\nexport default function Home() { return <Buy />; }`,
+      "components/Buy.tsx": `"use client";\nimport { order } from "@/lib/actions";\nexport function Buy() { return <button onClick={() => order()} />; }`,
+      "lib/actions.ts": `"use server";\nimport { cookies } from "next/headers";\nexport async function order() { (await cookies()).set("x", "1"); }`,
+      "app/account/page.tsx": `import { Greeting } from "@/components/Greeting";\nexport default function Account() { return <Greeting />; }`,
+      "components/Greeting.tsx": `import { UserName } from "./UserName";\nexport function Greeting() { return <p>Hi <UserName /></p>; }`,
+      "components/UserName.tsx": `import { cookies } from "next/headers";\nexport async function UserName() { return <b>{(await cookies()).get("name")?.value}</b>; }`,
+      "app/news/page.tsx": `export const revalidate = 60;\nexport default async function News() { const r = await fetch("https://x.dev/news"); return <p>{String(r.ok)}</p>; }`,
+      "app/live/page.tsx": `export default async function Live() { const r = await fetch("https://x.dev/live", { cache: "no-store" }); return <p>{String(r.ok)}</p>; }`,
+      "app/posts/[slug]/page.tsx": `export function generateStaticParams() { return [{ slug: "a" }]; }\nexport default function Post() { return <p />; }`,
+      "app/admin/layout.tsx": `export const dynamic = "force-dynamic";\nexport default function A({ children }: { children: unknown }) { return <div>{children as never}</div>; }`,
+      "app/admin/page.tsx": `export default function Admin() { return <p />; }`,
+      "app/api/feed/route.ts": `export const dynamic = "force-static";\nexport function GET() { return Response.json([]); }`,
+      "app/api/me/route.ts": `export function GET() { return Response.json({}); }`,
+      "tsconfig.json": `{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./*"] } } }`,
+    };
+    for (const [p, t] of Object.entries(files)) {
+      mkdirSync(join(root, p, ".."), { recursive: true });
+      writeFileSync(join(root, p), t);
+    }
+    const s = await scan(root, { cache: false, types: false });
+    const r = (id: string) => s.nodes[id]!.route!.rendering!;
+    expect(r("route:/").mode).toBe("static"); // a server action using cookies() runs on submit: doesn't count
+    expect(r("route:/account")).toMatchObject({ mode: "dynamic" });
+    expect(r("route:/account").reasons[0]).toContain("cookies() in UserName");
+    expect(r("route:/news")).toMatchObject({ mode: "static", revalidate: 60 });
+    expect(r("route:/live").reasons[0]).toContain("fetch (no-store)");
+    expect(r("route:/posts/[slug]").mode).toBe("ssg");
+    expect(r("route:/admin")).toMatchObject({ mode: "dynamic", reasons: [`export const dynamic = "force-dynamic"`] }); // from its layout
+    expect(r("route:/api/feed").mode).toBe("static");
+    expect(r("route:/api/me").mode).toBe("dynamic");
+    expect(s.nodes["route:/"]!.route!.kind).toBe("page");
+  });
+});

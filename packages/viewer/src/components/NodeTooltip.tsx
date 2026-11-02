@@ -1,7 +1,7 @@
 import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
 import type { CSSProperties, ReactNode } from "react";
 import type { GraphIndex } from "../graph/relations.ts";
-import { fileNote, KIND_META } from "../lib/kinds.tsx";
+import { fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
 
 /*
  * Node tooltip — plain HTML (one instance for the whole canvas), in the same visual language as
@@ -253,6 +253,14 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
               <Tok k="value">{r.url}</Tok>
             </div>
           </Section>
+          {r.rendering && (
+            <Section label="Rendering">
+              <div className="rae-tip__code">
+                <Tok k="keyword">{renderingLabel(r.rendering)}</Tok>
+                <Tok k="punct"> — {r.rendering.reasons[0]}</Tok>
+              </div>
+            </Section>
+          )}
           {r.methods?.length ? (
             <Section label="Methods">
               <Chips items={r.methods.map((m) => ({ text: m, color: "relation.fetches" }))} />

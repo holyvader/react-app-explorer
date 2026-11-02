@@ -54,6 +54,8 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
   `routeChild` edges (in the "Declares" group). Kind `route` is pink; the Navigation group holds
   `navigates` (solid), `fetches` (dashed), `revalidates` (dotted) and `runsBefore` (red,
   middleware → route). Show route chain starts with the route's middleware.
+- Rendering badges (`renderingLabel`: "○ Static", "● SSG", "ƒ Dynamic", "○ ISR 60s"; `.rae-chip[data-render]`)
+  on route cards and frame headers, in route details (with the reasons), the tooltip and picker rows.
 - **Show route chain** (card, menu, details) on routes and route files or their declarations
   (`routeOf`). `routeChain` = every enclosing route, root first, with its layout, template, loading,
   error and not-found, then the route's own page (or route.ts) — through `requestAdd`. `can.routeChain`

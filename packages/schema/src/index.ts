@@ -42,6 +42,12 @@ export interface RouteInfo {
   methods?: string[];
   /** The nearest enclosing route. */
   parent?: NodeId;
+  /**
+   * How Next renders it (pages and API routes), as `next build` labels it: `static` (○ prerendered),
+   * `ssg` (● prerendered for generateStaticParams), `dynamic` (ƒ on every request). `revalidate`:
+   * seconds between regenerations (ISR). `reasons`: why it's dynamic / static, as found in the code.
+   */
+  rendering?: { mode: "static" | "ssg" | "dynamic"; revalidate?: number; reasons: string[] };
   /** The middleware (middleware.ts / proxy.ts) that runs before this route, and the matcher that selects it. */
   middleware?: { id: NodeId; matcher?: string; conditions?: string[] };
 }
@@ -165,6 +171,8 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** Request-time APIs it calls (`cookies()`, `headers()`, `fetch … no-store`…): they make a route dynamic. */
+  dynamicApis?: string[];
   /** Middleware modules: their `config.matcher` (none → it runs on every route). */
   middleware?: { matchers: MiddlewareMatcher[] };
   /** Route nodes (`kind: "route"`). */

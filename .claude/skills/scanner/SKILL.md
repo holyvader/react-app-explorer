@@ -53,7 +53,13 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    `samplePaths` of each page / API route (intercepting ones included). Matches get `runsBefore` edges
    and `route.middleware` (with the matcher and has/missing conditions). No matcher means every route.
    `NextResponse.redirect` / `rewrite(new URL("/x", …))` are navigations. Checks inside the function
-   aren't evaluated. Pages Router isn't modelled (by choice). A real-world test project:
+   aren't evaluated. **Rendering** (`addRendering`, matches `next build`'s ○ / ● / ƒ): segment config
+   (`dynamic`, `revalidate`) of the route's layouts and own file (the innermost wins); dynamic segments
+   need `generateStaticParams` (→ `ssg`); route handlers are dynamic by default; any `dynamicApis`
+   (`cookies()`, `headers()`, `draftMode()`, `connection()`, `noStore()`, `fetch … no-store`, a page
+   reading `searchParams`) reached from the route's files via renders / invokes / usesHook makes it
+   dynamic. Server actions aren't followed. `reasons` say why. Checked against next-shop-demo's
+   `next build`: 16/16 routes agree. Pages Router isn't modelled (by choice). A real-world test project:
    ~/IdeaProjects/next-shop-demo (every route kind, API methods, navigation, generics).
 7. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else

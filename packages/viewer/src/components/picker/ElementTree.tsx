@@ -1,7 +1,7 @@
 import { IconChevronDown, IconChevronRight, IconFolder, IconLibrary } from "@rae/design-system/icons";
 import { type KeyboardEvent, type RefObject, useMemo, useRef, useState } from "react";
 import { buildTree, type TreeNode, visibleRows } from "../../graph/tree.ts";
-import { KIND_META } from "../../lib/kinds.tsx";
+import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../../store.ts";
 import "./picker.css";
 
@@ -156,6 +156,11 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               <span className="rae-tree__name">{n.name}</span>
               {note && <span className="rae-tree__note">{note}</span>}
               {!note && n.kind === "file" && n.children.length > 0 && <span className="rae-tree__note">{n.children.length}</span>}
+              {!note && node?.route?.rendering && (
+                <span className="rae-tree__note" title={node.route.rendering.reasons.join("\n")}>
+                  {renderingLabel(node.route.rendering)}
+                </span>
+              )}
             </button>
           );
         })}

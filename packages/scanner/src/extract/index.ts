@@ -205,6 +205,38 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     return list.filter((x: MiddlewareMatcher | undefined): x is MiddlewareMatcher => !!x);
   };
 
+  /** `export const dynamic = "force-dynamic"`, `export const revalidate = 60 | 0 | false`. */
+  const segmentConfigOf = (decl: N): { dynamic?: string; revalidate?: number | false } | undefined => {
+    if (decl?.type !== "VariableDeclaration") return undefined;
+    const out: { dynamic?: string; revalidate?: number | false } = {};
+    for (const d of decl.declarations) {
+      const v = unwrap(d.init);
+      if (d.id?.name === "dynamic" && v?.type === "Literal" && typeof v.value === "string") out.dynamic = v.value;
+      if (d.id?.name === "revalidate" && v?.type === "Literal" && (typeof v.value === "number" || v.value === false)) out.revalidate = v.value;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
+
+  /**
+   * Request-time APIs called in a body: `cookies()`, `headers()`, `draftMode()`, `connection()`,
+   * `noStore()` / `unstable_noStore()`, `fetch(…, { cache: "no-store" })` or `{ next: { revalidate: 0 } }`.
+   */
+  const DYNAMIC_CALLS = new Set(["cookies", "headers", "draftMode", "connection", "noStore", "unstable_noStore"]);
+  const dynamicApisIn = (root: N): string[] => {
+    const found: string[] = [];
+    walk(root, (n) => {
+      if (n.type !== "CallExpression") return;
+      const callee = unwrap(n.callee);
+      if (callee?.type === "Identifier" && DYNAMIC_CALLS.has(callee.name)) found.push(`${callee.name}()`);
+      else if (callee?.type === "Identifier" && callee.name === "fetch") {
+        const opts = unwrap(n.arguments?.[1]);
+        const text = opts ? src.slice(opts, 300) : "";
+        if (/cache:\s*["']no-store["']/.test(text) || /revalidate:\s*0\b/.test(text)) found.push("fetch (no-store)");
+      }
+    });
+    return found;
+  };
+
   const declNames = (decl: N): string[] => {
     if (!decl) return [];
     if (decl.id?.type === "Identifier") return [decl.id.name];
@@ -249,6 +281,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
           for (const name of declNames(stmt.declaration)) out.exports.push({ exported: name, local: name });
           const matcher = matcherOf(stmt.declaration);
           if (matcher) out.matcher = matcher;
+          const config = segmentConfigOf(stmt.declaration);
+          if (config) out.segmentConfig = { ...out.segmentConfig, ...config };
           collectDecl(stmt.declaration);
         } else {
           for (const s of stmt.specifiers) {
@@ -464,6 +498,10 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     collectBody(body, decl);
     const navs = navigationsIn(body);
     if (navs.length) decl.navigations = navs;
+    const dyn = dynamicApisIn(body);
+    // a page reading `searchParams` renders per request
+    if (c.fn?.params[0] && /\bsearchParams\b/.test(src.slice(c.fn.params[0], 400))) dyn.push("searchParams");
+    if (dyn.length) decl.dynamicApis = [...new Set(dyn)];
     if (c.cls) decl.functions = classMethods(c.cls);
     return decl;
   }
