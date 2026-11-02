@@ -13,6 +13,10 @@ import type { DeclExtract, FileExtract, RawFn, RawHook } from "../extract/types.
 const MAX_TYPE = 200;
 const MAX_PROPS = 40;
 const FILE_CONCURRENCY = 48;
+/** No progress for this long (no file answered, or the checker never got ready) → give up on types. */
+const STALL_MS = Number(process.env.RAE_TYPES_STALL_MS) || 60_000;
+
+type Progress = { onProgress?: (m: string) => void; kick: () => void };
 
 type Checker = Awaited<ReturnType<typeof openChecker>>["checker"];
 type TType = Type;
@@ -77,18 +81,30 @@ export interface TypesResult {
 
 export async function applyTypes(
   files: FileExtract[],
-  opts: { rootDir: string; tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void },
+  opts: { rootDir: string; tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void; onProgress?: (m: string) => void },
 ): Promise<TypesResult> {
   const todo = files.filter((f) => f.decls.length && f.typesKey !== opts.keyOf(f));
   const res: TypesResult = { queried: 0, skipped: files.length - todo.length, failed: 0 };
   if (!todo.length) return res;
 
   const exe = tsgoPath();
+  opts.onProgress?.(`types: starting checker ${exe ?? "(from the typescript package)"} for ${todo.length} files`);
   const api = new API({ cwd: opts.rootDir, ...(exe ? { tsserverPath: exe } : {}) });
   const watch = watchProcess(api);
+  // A checker that stops answering without exiting would otherwise hang the scan forever.
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  let rejectStall: (e: Error) => void = () => {};
+  const stalled = new Promise<never>((_, reject) => (rejectStall = reject));
+  stalled.catch(() => {});
+  const kick = () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => rejectStall(new Error(`TypeScript checker stopped responding (no progress for ${STALL_MS / 1000}s)`)), STALL_MS);
+  };
+  kick();
   try {
-    return await Promise.race([runTypes(api, todo, res, opts), watch.died]);
+    return await Promise.race([runTypes(api, todo, res, { ...opts, kick }), watch.died, stalled]);
   } finally {
+    clearTimeout(stallTimer);
     watch.stop();
     // after a crash the client can't close cleanly: don't wait for it
     void api.close().catch(() => {});
@@ -101,15 +117,18 @@ async function runTypes(
   api: API,
   todo: FileExtract[],
   res: TypesResult,
-  opts: { tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void },
+  opts: { tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void } & Progress,
 ): Promise<TypesResult> {
   const { snapshot, checker: mainChecker } = await openChecker(
     api,
     todo.map((f) => f.absPath),
     opts.tsconfig,
   );
+  opts.kick();
+  opts.onProgress?.("types: checker ready");
   const retry: FileExtract[] = [];
-  await runAll(todo, makeProcessor(mainChecker, opts.keyOf), res, opts.onWarn, retry);
+  await runAll(todo, makeProcessor(mainChecker, opts.keyOf), res, opts, retry);
+  opts.onProgress?.(`types: ${res.queried} files typed, ${res.failed} failed, ${retry.length} outside the project`);
 
   // Files outside the tsconfig program (scripts, configs...): open them so tsgo picks their default project.
   if (retry.length) {
@@ -127,7 +146,7 @@ async function runTypes(
         byProject.set(String(project.id), entry);
       }
       for (const { checker, files: group } of byProject.values()) {
-        await runAll(group, makeProcessor(checker, opts.keyOf), res, opts.onWarn);
+        await runAll(group, makeProcessor(checker, opts.keyOf), res, opts);
       }
     } catch (e) {
       res.failed += retry.length;
@@ -141,7 +160,7 @@ async function runAll(
   files: FileExtract[],
   processFile: (f: FileExtract) => Promise<void>,
   res: TypesResult,
-  onWarn: ((m: string) => void) | undefined,
+  opts: { onWarn?: (m: string) => void } & Progress,
   retry?: FileExtract[],
 ) {
   // Bounded concurrency across files; requests are pipelined over the IPC channel.
@@ -152,6 +171,7 @@ async function runAll(
       try {
         await processFile(f);
         res.queried++;
+        opts.kick();
       } catch (e) {
         const msg = (e as Error).message ?? String(e);
         if (retry && msg.includes("source file not found")) {
@@ -159,7 +179,8 @@ async function runAll(
           continue;
         }
         res.failed++;
-        if (res.failed <= 5) onWarn?.(`types: ${f.absPath}: ${msg}`);
+        opts.kick();
+        if (res.failed <= 5) opts.onWarn?.(`types: ${f.absPath}: ${msg}`);
       }
     }
   });

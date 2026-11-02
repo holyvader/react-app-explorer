@@ -44,12 +44,16 @@ pub fn run() {
             // TypeScript 7's native binary ships as a resource folder, with the lib.*.d.ts files it needs.
             let tsgo = app.path().resource_dir()?.join("tsgo").join(format!("tsc{}", std::env::consts::EXE_SUFFIX));
             let snapshots = app.path().app_data_dir()?.join("snapshots");
+            // ~/Library/Logs/dev.rae.explorer/server.log on macOS: what the user sends when something breaks
+            let log_file = app.path().app_log_dir()?.join("server.log");
 
             let spawned = app
                 .shell()
                 .sidecar("rae-server")?
                 .args(["--port", "0", "--snapshots"])
                 .arg(snapshots)
+                .arg("--log")
+                .arg(log_file)
                 .env("RAE_TSGO_PATH", tsgo)
                 .spawn();
             let (mut events, child) = match spawned {

@@ -16,6 +16,8 @@ export interface ScanOptions {
   cache?: boolean;
   maxWorkers?: number;
   onWarn?: (msg: string) => void;
+  /** Step-by-step progress (for logs): each phase as it starts and ends. */
+  onProgress?: (msg: string) => void;
 }
 
 export async function scan(input: string, opts: ScanOptions = {}): Promise<Snapshot> {
@@ -26,7 +28,9 @@ export async function scan(input: string, opts: ScanOptions = {}): Promise<Snaps
     const now = performance.now();
     phases[name] = Math.round((now - mark) * 10) / 10;
     mark = now;
+    opts.onProgress?.(`${name} done in ${phases[name]}ms`);
   };
+  opts.onProgress?.(`scan ${input} (types ${opts.types !== false ? "on" : "off"})`);
 
   const info = await discoverProject(input, opts);
   phase("discover");
@@ -52,7 +56,8 @@ export async function scan(input: string, opts: ScanOptions = {}): Promise<Snaps
       return `${f.stamp}|${deps.join(",")}`;
     };
     try {
-      await applyTypes([...files.values()], { rootDir: info.rootDir, tsconfig: info.tsconfig, keyOf, onWarn: opts.onWarn });
+      opts.onProgress?.(`types: ${files.size} files, tsconfig ${info.tsconfig ?? "(none)"}`);
+      await applyTypes([...files.values()], { rootDir: info.rootDir, tsconfig: info.tsconfig, keyOf, onWarn: opts.onWarn, onProgress: opts.onProgress });
     } catch (e) {
       opts.onWarn?.(`type pass skipped: ${(e as Error).message}`);
     }

@@ -4,11 +4,11 @@
  * the Vite dev plugin — snapshots, folder browsing, scanning (in-process). Only answers requests from
  * the app itself: loopback Host, same-origin Origin.
  *
- *   rae-server [--port 0] [--snapshots <dir>] [--static <viewer dist dir>]
+ *   rae-server [--port 0] [--snapshots <dir>] [--static <viewer dist dir>] [--log <file>]
  * Prints `RAE_SERVER_URL=http://127.0.0.1:<port>` once listening.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { scan, writeSnapshot } from "@rae/scanner";
@@ -18,11 +18,43 @@ const { values } = parseArgs({
     port: { type: "string", default: "0" },
     snapshots: { type: "string" },
     static: { type: "string" },
+    log: { type: "string" },
   },
 });
 
+/** Log to stderr and, in the app, to a file the user can send (one previous run kept as .1). */
+const logFile = values.log ? resolve(values.log) : undefined;
+if (logFile) {
+  mkdirSync(dirname(logFile), { recursive: true });
+  try {
+    if (existsSync(logFile)) renameSync(logFile, `${logFile}.1`);
+  } catch {
+    /* keep appending */
+  }
+}
+function log(msg: string) {
+  const line = `${new Date().toISOString()} ${msg}`;
+  console.error(line);
+  if (logFile) {
+    try {
+      appendFileSync(logFile, line + "\n");
+    } catch {
+      /* logging must never break the server */
+    }
+  }
+}
+process.on("uncaughtException", (e) => log(`uncaught: ${e.stack ?? e}`));
+process.on("unhandledRejection", (e) => log(`unhandled rejection: ${(e as Error)?.stack ?? e}`));
+
 const snapshotsDir = resolve(values.snapshots ?? join(homedir(), ".react-app-explorer", "snapshots"));
 mkdirSync(snapshotsDir, { recursive: true });
+
+{
+  const tsgo = process.env.RAE_TSGO_PATH;
+  log(`start: bun ${Bun.version}, ${process.platform} ${release()} ${arch()}, tmp ${tmpdir()}`);
+  log(`snapshots: ${snapshotsDir}`);
+  log(`tsgo: ${tsgo ? `${tsgo} (${existsSync(tsgo) ? "found" : "MISSING"}, lib.d.ts ${existsSync(join(dirname(tsgo), "lib.d.ts")) ? "found" : "MISSING"})` : "from the typescript package"}`);
+}
 
 // The viewer: embedded into the executable at build time, or a dist folder (development).
 let assets: Record<string, string> = {};
@@ -129,14 +161,23 @@ async function api(req: Request, url: URL): Promise<Response> {
     const t0 = Date.now();
     const warnings: string[] = [];
     try {
-      const snapshot = await scan(target, { types: body.types !== false, onWarn: (m) => warnings.push(m) });
+      const snapshot = await scan(target, {
+        types: body.types !== false,
+        onWarn: (m) => {
+          warnings.push(m);
+          log(`warn: ${m}`);
+        },
+        onProgress: (m) => log(`scan: ${m}`),
+      });
       const file = basename(writeSnapshot(snapshot, snapshotsDir));
       const nodes = Object.values(snapshot.nodes);
       const count = (k: string) => nodes.filter((n) => n.kind === k).length;
       const stdout = `✔ ${snapshot.stats.files} files → ${nodes.length} nodes (${count("component")} components, ${count("hook")} hooks, ${count("serverAction")} actions, ${count("external")} external), ${snapshot.edges.length} edges in ${snapshot.stats.durationMs}ms`;
+      log(`scan: ${stdout} → ${file}`);
       return json({ file, stdout, stderr: warnings.slice(0, 20).join("\n"), ms: Date.now() - t0 });
     } catch (e) {
-      return json({ error: (e as Error).message }, 500);
+      log(`scan failed: ${(e as Error).stack ?? e}`);
+      return json({ error: `${(e as Error).message}${logFile ? ` (details in ${logFile})` : ""}` }, 500);
     } finally {
       scanning = false;
     }
@@ -158,4 +199,5 @@ const server = Bun.serve({
   },
 });
 
+log(`listening on 127.0.0.1:${server.port}`);
 console.log(`RAE_SERVER_URL=http://127.0.0.1:${server.port}`);

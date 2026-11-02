@@ -53,6 +53,11 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
 - Downloaded builds are still quarantined and not notarized: users need right-click → Open, or
   `xattr -dr com.apple.quarantine "/Applications/React App Explorer.app"`. A real fix needs a
   Developer ID certificate plus notarization.
+- **Diagnosing a user's machine:** the app's server logs to `~/Library/Logs/dev.rae.explorer/server.log`
+  (the previous run is kept as `.1`). It records startup facts (macOS version, CPU, temp folder, the
+  TypeScript binary and its lib files) and every scan step. Ask for this file first.
+- The type pass also has a **stall watchdog** (`RAE_TYPES_STALL_MS`, default 60s with no file
+  answered): a checker that stops responding without exiting would otherwise hang the scan.
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the
