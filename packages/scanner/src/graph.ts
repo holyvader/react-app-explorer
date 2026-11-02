@@ -80,16 +80,27 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
     }
   }
 
+  /**
+   * The node an import points at. Only packages (node_modules, Node built-ins) are external; the
+   * project's own non-source files (assets) and files that don't exist (missing) are file nodes in
+   * the project tree, flagged so the viewer can say what they are.
+   */
   const external = (r: Resolved): NodeId => {
     if (r.kind === "local") return moduleId(r.path);
-    const id = r.kind === "asset" ? `asset:${rel(r.path)}` : `ext:${r.specifier}`;
-    nodes[id] ??= {
-      id,
-      kind: "external",
-      name: r.kind === "asset" ? basename(r.path) : r.specifier,
-      filePath: r.kind === "asset" ? rel(r.path) : r.specifier,
-      absPath: r.kind === "asset" ? r.path : undefined,
-    };
+    if (r.kind === "asset" || r.kind === "missing") {
+      const id = moduleId(r.path);
+      nodes[id] ??= {
+        id,
+        kind: "module",
+        name: basename(r.path),
+        filePath: rel(r.path),
+        absPath: r.kind === "asset" ? r.path : undefined,
+        ...(r.kind === "asset" ? { asset: true } : { missing: true, specifier: r.specifier }),
+      };
+      return id;
+    }
+    const id = `ext:${r.specifier}`;
+    nodes[id] ??= { id, kind: "external", name: r.specifier, filePath: r.specifier };
     return id;
   };
 

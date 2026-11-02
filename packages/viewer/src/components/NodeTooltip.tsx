@@ -1,7 +1,7 @@
 import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
 import type { CSSProperties, ReactNode } from "react";
 import type { GraphIndex } from "../graph/relations.ts";
-import { KIND_META } from "../lib/kinds.tsx";
+import { fileNote, KIND_META } from "../lib/kinds.tsx";
 
 /*
  * Node tooltip — plain HTML (one instance for the whole canvas), in the same visual language as
@@ -205,7 +205,7 @@ export function NodeTooltip({ tip, snapshot, index }: { tip: TipState | null; sn
   if (!n) return null;
   const meta = KIND_META[n.kind];
   const Icon = meta.icon;
-  const caption = [meta.label, n.moduleType, n.nextRole ? `next ${n.nextRole}` : undefined, n.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = [meta.label, fileNote(n), n.moduleType, n.nextRole ? `next ${n.nextRole}` : undefined, n.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const { rect } = tip;
   const centre = Math.min(Math.max(rect.left + rect.width / 2, HALF), window.innerWidth - HALF);
   const above = rect.top >= ROOM_ABOVE;

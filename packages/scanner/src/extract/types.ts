@@ -4,7 +4,9 @@ import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef } from "@ra
 export type Resolved =
   | { kind: "local"; path: string }
   | { kind: "asset"; path: string }
-  | { kind: "external"; specifier: string };
+  | { kind: "external"; specifier: string }
+  /** The project's own file that doesn't exist (a relative import or an alias pointing at nothing). */
+  | { kind: "missing"; path: string; specifier: string };
 
 export interface ImportName {
   /** Imported name: `default`, `*` (namespace) or the named export. */

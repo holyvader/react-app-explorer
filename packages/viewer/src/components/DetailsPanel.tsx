@@ -4,6 +4,7 @@ import {
   BoundaryChip,
   Box,
   Button,
+  Code,
   CodeToken,
   Eyebrow,
   Flex,
@@ -31,7 +32,7 @@ import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl } from "../lib/editor.ts";
-import { KIND_META } from "../lib/kinds.tsx";
+import { KIND_META, fileNote } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
@@ -69,7 +70,7 @@ export function DetailsPanel() {
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
-  const caption = [meta.label, node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = [meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
@@ -101,6 +102,12 @@ export function DetailsPanel() {
           )}
         </Flex>
 
+        {node.missing && (
+          <Text fontSize="xs" color="fg.muted" bg="bg.subtle" rounded="l2" px="2.5" py="2">
+            Not found on disk. Imported as <Code fontSize="2xs">{node.specifier ?? node.filePath}</Code>, but no such file exists: a generated file
+            that isn't built yet, or a broken path or alias.
+          </Text>
+        )}
         {(node.moduleType || node.directives?.length || node.moduleId) && (
           <Wrap gap="1.5" mt="3" align="center">
             {node.moduleId && (

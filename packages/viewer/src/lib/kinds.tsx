@@ -19,3 +19,6 @@ export const KIND_META: Record<NodeKind, { label: string; icon: Icon }> = {
 };
 
 export const NODE_KINDS = Object.keys(KIND_META) as NodeKind[];
+
+/** What a file node is when it isn't plain source: a non-code asset, or an import that points at nothing. */
+export const fileNote = (n: { asset?: boolean; missing?: boolean }) => (n.missing ? "not found" : n.asset ? "asset" : undefined);

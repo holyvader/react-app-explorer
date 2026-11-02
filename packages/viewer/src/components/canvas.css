@@ -508,3 +508,6 @@
 }
 .rae-contains:hover { border-color: var(--chakra-colors-kind-module-solid); }
 .rae-contains:focus-visible { outline: 2px solid var(--sel); outline-offset: 1px; }
+
+/* An imported project file that doesn't exist: faded, dashed outline (CardShape) */
+.rae-card[data-missing] .rae-card__body { opacity: 0.6; }

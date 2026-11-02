@@ -24,7 +24,7 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
 - `packages/schema/src/index.ts` is the snapshot contract shared with the viewer. Bump `SCHEMA_VERSION` on breaking changes.
 - `extract/index.ts`: directives, imports/exports, decl candidates, classification (component/hook/serverAction/function), props/params, hooks, calls.
 - `extract/jsx.ts`: render tree with the **condition stack**: `&&`, `||/??`, ternary, `if`/early return, `switch`, `.map`, render props, JSX-in-props, Suspense/ErrorBoundary, and JSX in local variables (followed one level deep).
-- `graph.ts`: `resolveLocal` → `resolveExport` (follows re-exports and `export *`); ids are `<relPath>` for modules, `<relPath>#<local>` for decls, `ext:<specifier>` / `asset:<rel>` for external.
+- `graph.ts`: `resolveLocal` → `resolveExport` (follows re-exports and `export *`); ids are `<relPath>` for modules (including assets and missing files), `<relPath>#<local>` for decls, `ext:<specifier>` for packages. (Old snapshots may still have `asset:<rel>` externals; the viewer tolerates them.)
 - `types/tsgo.ts`: `typescript/async` API. **The sync API does not work under Bun** because it reads Node-internal `_handle.fd`.
 
 ## Rules
@@ -32,7 +32,21 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
 2. oxc offsets are UTF-16 and match what tsgo positions expect. Pass `node.start` directly.
 3. tsgo: collect all positions per file and send **one** `checker.getTypeAtPosition(file, positions[])`. Pipeline follow-ups with `Promise.all`; never `await` in a per-node loop. Clip type strings (`MAX_TYPE`).
 4. Keep the extractor syntactic and worker-safe: plain serializable output, no closures, no class instances.
-5. Externals (node_modules, unresolved bare specifiers, builtins) are never scanned. They become `external` nodes.
+5. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
+   that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else
+   is the project's own:
+   - local non-source files are `module` nodes with `asset: true`;
+   - imports that don't resolve but are relative, or match the file's tsconfig `paths`/`baseUrl`, are
+     `module` nodes with `missing: true` (+ `specifier`), placed where the alias points (e.g. generated
+     files that aren't built). `resolve.ts` reads aliases itself (`parseJsonc`, relative `extends`,
+     `references`), because oxc-resolver doesn't say why a lookup failed.
+   - Each file resolves with its **nearest tsconfig** (oxc `tsconfig: "auto"`), so monorepo packages and
+     Vite-style `tsconfig.app.json` references keep their own aliases. Only an explicit `--tsconfig`
+     applies to all files.
+   - The project root is a **real path** (`realpathSync`): the resolver returns real paths, and a
+     symlinked root (macOS `/var` → `/private/var`) turned ids into `../../…`.
+   - Changing what extraction records means bumping `EXTRACT_VERSION` (cache.ts): caches keep each
+     file's resolved imports.
 6. Adding a new schema field: schema → extract (worker output) → graph (node/edge mapping) → viewer display → test.
 
 ## Adding things

@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import { KIND_META } from "../../lib/kinds.tsx";
+import { KIND_META, fileNote } from "../../lib/kinds.tsx";
 import { CardShape } from "./CardShape.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -39,11 +39,11 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   if (!node) return null;
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
-  const caption = [meta.label, node.nextRole, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = [meta.label, fileNote(node), node.nextRole, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   return (
-    <div className="rae-card" data-kind={node.kind}>
+    <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
-      <CardShape kind={node.kind} width={width ?? 0} height={height ?? 0} />
+      <CardShape kind={node.kind} width={width ?? 0} height={height ?? 0} dashed={node.missing} />
       <div className="rae-card__body">
         <span className="rae-card__tile" aria-hidden>
           <Icon size={16} strokeWidth={2.2} />

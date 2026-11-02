@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { Framework, NextRole } from "@rae/schema";
 
@@ -54,18 +54,21 @@ export async function discoverProject(
   input: string,
   opts: { tsconfig?: string; include?: string[]; exclude?: string[] } = {},
 ): Promise<ProjectInfo> {
-  const abs = resolve(input);
+  // Real paths: the resolver returns them, so a project reached through a symlink (macOS /var →
+  // /private/var, linked workspaces) must be rooted at its real path too, or ids go `../../…`.
+  const abs = realpathSync(resolve(input));
   const isFile = statSync(abs).isFile();
   const startDir = isFile ? dirname(abs) : abs;
-
-  const pkgPath = findUp(startDir, "package.json");
-  const rootDir = isFile ? (pkgPath ? dirname(pkgPath) : startDir) : abs;
-  const pkg = pkgPath ? readJson(pkgPath) : undefined;
-  const deps = { ...(pkg?.dependencies as object), ...(pkg?.devDependencies as object) } as Record<string, string>;
 
   const tsconfig = opts.tsconfig
     ? resolve(opts.tsconfig)
     : (findUp(startDir, "tsconfig.json") ?? findUp(startDir, "jsconfig.json"));
+
+  const pkgPath = findUp(startDir, "package.json");
+  // entry-file mode: the project is the package around it — or, without one, its tsconfig's folder
+  const rootDir = isFile ? (pkgPath ? dirname(pkgPath) : tsconfig ? dirname(tsconfig) : startDir) : abs;
+  const pkg = pkgPath ? readJson(pkgPath) : undefined;
+  const deps = { ...(pkg?.dependencies as object), ...(pkg?.devDependencies as object) } as Record<string, string>;
 
   const appDir = [join(rootDir, "app"), join(rootDir, "src/app")].find((d) => existsSync(d));
   const pagesDir = [join(rootDir, "pages"), join(rootDir, "src/pages")].find((d) => existsSync(d));

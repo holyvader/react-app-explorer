@@ -35,7 +35,7 @@ function outline(kind: string, w: number, h: number): { d: string; fold?: string
  * A card's shape as SVG: stroked outline (the border) and a translucent fill, so frames and edges
  * behind show through without the border colour bleeding into the fill.
  */
-export function CardShape({ kind, width, height }: { kind: string; width: number; height: number }) {
+export function CardShape({ kind, width, height, dashed }: { kind: string; width: number; height: number; dashed?: boolean }) {
   const id = useId();
   const { d, fold } = outline(kind, width, height);
   return (
@@ -55,7 +55,7 @@ export function CardShape({ kind, width, height }: { kind: string; width: number
       {/* tinted glass fill, a soft top sheen, then the outline */}
       <path d={d} fill={`url(#${id}g)`} />
       <path d={d} fill={`url(#${id}h)`} />
-      <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || kind === "folder" || undefined} />
+      <path d={d} className="rae-card__stroke" data-dashed={kind === "external" || kind === "folder" || dashed || undefined} />
       {fold && <path d={fold} className="rae-card__stroke rae-card__fold" />}
     </svg>
     {/* hover layer: its own SVG (no filter), faded in by opacity only — cheap, never recolours */}

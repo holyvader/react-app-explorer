@@ -113,6 +113,12 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** A project file that isn't source code (CSS, images, JSON…): a module node without declarations. */
+  asset?: boolean;
+  /** A project file that's imported but doesn't exist (a tsconfig alias or relative path to nothing). */
+  missing?: boolean;
+  /** For missing files: the import specifier as written. */
+  specifier?: string;
   absPath?: string;
   loc?: Loc;
   moduleType?: ModuleType;

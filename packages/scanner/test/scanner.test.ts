@@ -130,3 +130,78 @@ describe("invokes", () => {
     expect(s.schemaVersion).toBe(2);
   });
 });
+
+describe("aliases and externals: only packages are external", () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  /** Writes a throwaway project; returns its root. */
+  const project = (files: Record<string, string>) => {
+    const root = mkdtempSync(join(tmpdir(), "rae-alias-"));
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(join(root, path, ".."), { recursive: true });
+      writeFileSync(join(root, path), text);
+    }
+    return root;
+  };
+  const kindOf = (s: Snapshot, id: string) => s.nodes[id]?.kind;
+
+  test("tsconfig paths alias: existing → local, missing → a 'missing' file (not external); assets are files", async () => {
+    const root = project({
+      "tsconfig.json": `{
+        // comments and trailing commas, as tsconfigs have them
+        "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./*"], }, },
+      }`,
+      "src/main.tsx": [
+        `import { Real } from "@/components/Real";`,
+        `import { Gone } from "@/generated/Gone";`,
+        `import { Rel } from "./nowhere";`,
+        `import "./style.css";`,
+        `import { useState } from "react";`,
+        `import fp from "lodash/fp";`,
+        `export function App() { useState(0); fp; return <Real><Gone /><Rel /></Real>; }`,
+      ].join("\n"),
+      "components/Real.tsx": `export function Real({ children }: { children?: unknown }) { return <div>{children as never}</div>; }`,
+      "src/style.css": `body {}`,
+    });
+    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false });
+    expect(kindOf(s, "components/Real.tsx")).toBe("module");
+    expect(s.nodes["generated/Gone"]).toMatchObject({ kind: "module", missing: true, specifier: "@/generated/Gone" });
+    expect(s.nodes["src/nowhere"]).toMatchObject({ kind: "module", missing: true });
+    expect(s.nodes["src/style.css"]).toMatchObject({ kind: "module", asset: true });
+    // bare names that are no alias stay packages, installed or not
+    expect(kindOf(s, "ext:react")).toBe("external");
+    expect(kindOf(s, "ext:lodash/fp")).toBe("external");
+    expect(Object.values(s.nodes).filter((n) => n.kind === "external" && n.name.startsWith("@/"))).toEqual([]);
+  });
+
+  test("Vite-style: tsconfig.json only references tsconfig.app.json, which declares the aliases", async () => {
+    const root = project({
+      "tsconfig.json": `{ "files": [], "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }] }`,
+      "tsconfig.app.json": `{ "compilerOptions": { "baseUrl": ".", "paths": { "~/*": ["./src/*"] } }, "include": ["src"] }`,
+      "tsconfig.node.json": `{ "compilerOptions": {}, "include": ["vite.config.ts"] }`,
+      "src/main.tsx": `import { App } from "~/App";\nimport { X } from "~/missing/X";\nexport const main = () => [App, X];`,
+      "src/App.tsx": `export function App() { return <div />; }`,
+    });
+    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false });
+    expect(kindOf(s, "src/App.tsx")).toBe("module");
+    expect(s.nodes["src/missing/X"]).toMatchObject({ kind: "module", missing: true });
+    expect(Object.values(s.nodes).filter((n) => n.kind === "external")).toEqual([]);
+  });
+
+  test("monorepo: each package's files use that package's own aliases", async () => {
+    const root = project({
+      "apps/web/tsconfig.json": `{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./*"] } } }`,
+      "apps/web/page.tsx": `import { Button } from "../../packages/ui/src/Button";\nexport default function Page() { return <Button />; }`,
+      "packages/ui/tsconfig.json": `{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./src/*"] } } }`,
+      "packages/ui/src/Button.tsx": `import { cn } from "@/lib/cn";\nimport { Icon } from "@/icons/Icon";\nexport function Button() { cn(); return <Icon />; }`,
+      "packages/ui/src/lib/cn.ts": `export const cn = () => "";`,
+    });
+    const s = await scan(join(root, "apps/web/page.tsx"), { cache: false, types: false });
+    const cn = Object.keys(s.nodes).find((id) => id.endsWith("packages/ui/src/lib/cn.ts"));
+    expect(cn && kindOf(s, cn)).toBe("module");
+    // ui's "@/icons/Icon" means packages/ui/src/icons/Icon (missing) — not apps/web/icons, not a package
+    expect(Object.values(s.nodes).find((n) => n.missing)?.filePath).toMatch(/packages\/ui\/src\/icons\/Icon$/);
+    expect(Object.values(s.nodes).filter((n) => n.kind === "external")).toEqual([]);
+  });
+});

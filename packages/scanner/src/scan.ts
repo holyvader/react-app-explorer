@@ -83,7 +83,9 @@ export async function scanStructure(input: string, opts: ScanOptions = {}): Prom
   phase("cacheLoad");
 
   const { files, cacheHits } = await collectFiles(info.initialFiles, {
-    tsconfig: info.tsconfig,
+    // only an explicit --tsconfig applies to every file; otherwise each file resolves with its
+    // nearest tsconfig (monorepo packages and Vite-style references keep their own aliases)
+    tsconfig: opts.tsconfig,
     cache,
     maxWorkers: opts.maxWorkers,
     onWarn: opts.onWarn,
