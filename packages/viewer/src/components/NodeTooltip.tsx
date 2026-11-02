@@ -1,7 +1,7 @@
 import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
 import type { CSSProperties, ReactNode } from "react";
 import type { GraphIndex } from "../graph/relations.ts";
-import { fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
+import { cacheLabel, fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
 
 /*
  * Node tooltip — plain HTML (one instance for the whole canvas), in the same visual language as
@@ -126,6 +126,14 @@ function GenericsSection({ n }: { n: GraphNode }) {
 function content(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
   return (
     <>
+      {n.cache && (
+        <Section label="Cache">
+          <div className="rae-tip__code">
+            <Tok k="keyword">{cacheLabel(n.cache)}</Tok>
+            {n.cache.tags?.length ? <Tok k="punct">{` · tags ${n.cache.tags.join(", ")}`}</Tok> : null}
+          </div>
+        </Section>
+      )}
       <GenericsSection n={n} />
       {kindContent(n, s, index)}
     </>

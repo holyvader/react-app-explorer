@@ -35,9 +35,29 @@ export function routeCaption(r: { kind: string; methods?: string[]; segmentKind:
   return shape ? `${what} · ${shape}` : what;
 }
 
-/** A route's rendering as `next build` prints it: "○ Static", "● SSG", "ƒ Dynamic", "○ ISR 60s". */
-export function renderingLabel(r: { mode: string; revalidate?: number }): string {
+/** A route's rendering as `next build` prints it: "○ Static", "● SSG", "◐ Partial", "ƒ Dynamic", "○ ISR 60s"; "⚠ Blocking" when the build would fail. */
+export function renderingLabel(r: { mode: string; revalidate?: number; expire?: number; blocking?: boolean }): string {
+  if (r.blocking) return "⚠ Blocking";
   if (r.mode === "dynamic") return "ƒ Dynamic";
-  if (r.mode === "ssg") return r.revalidate ? `● SSG · ${r.revalidate}s` : "● SSG";
-  return r.revalidate ? `○ ISR ${r.revalidate}s` : "○ Static";
+  const every = r.revalidate ? duration(r.revalidate) : undefined;
+  if (r.mode === "ppr") return every ? `◐ Partial · ${every}` : "◐ Partial";
+  if (r.mode === "ssg") return every ? `● SSG · ${every}` : "● SSG";
+  if (every) return r.expire ? `○ Static · ${every}` : `○ ISR ${every}`;
+  return "○ Static";
+}
+
+/** The badge's colour key: the mode, or "blocking". */
+export const renderingKey = (r: { mode: string; blocking?: boolean }) => (r.blocking ? "blocking" : r.mode);
+
+/** 3600 → "1h", 86400 → "1d", 90 → "90s". */
+export function duration(n: number): string {
+  if (n % 86400 === 0) return `${n / 86400}d`;
+  if (n % 3600 === 0) return `${n / 3600}h`;
+  if (n % 60 === 0) return `${n / 60}m`;
+  return `${n}s`;
+}
+
+/** A "use cache" chip: `use cache · 1h`, with the variant when it isn't the default. */
+export function cacheLabel(c: { variant: string; revalidate?: number }): string {
+  return `${c.variant === "default" ? "use cache" : `use cache: ${c.variant}`}${c.revalidate ? ` · ${duration(c.revalidate)}` : ""}`;
 }

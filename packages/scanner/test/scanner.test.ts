@@ -385,3 +385,59 @@ describe("static / dynamic rendering", () => {
     expect(s.nodes["route:/"]!.route!.kind).toBe("page");
   });
 });
+
+describe("Cache Components: \"use cache\", cacheLife / cacheTag, invalidation, partial prerendering", () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  const project = (files: Record<string, string>) => {
+    const root = mkdtempSync(join(tmpdir(), "rae-cc-"));
+    const base: Record<string, string> = {
+      "package.json": `{ "name": "c", "dependencies": { "next": "16" } }`,
+      "next.config.ts": `const config = { cacheComponents: true, partialPrefetching: true };\nexport default config;`,
+      "tsconfig.json": `{ "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./*"] } } }`,
+      "app/layout.tsx": `export default function L({ children }: { children: unknown }) { return <html>{children as never}</html>; }`,
+    };
+    for (const [p, t] of Object.entries({ ...base, ...files })) {
+      mkdirSync(join(root, p, ".."), { recursive: true });
+      writeFileSync(join(root, p), t);
+    }
+    return root;
+  };
+
+  test("cache info, invalidation edges, and how routes render", async () => {
+    const root = project({
+      "lib/catalog.ts": [
+        `import { cacheLife, cacheTag } from "next/cache";`,
+        `export async function getDeals() { "use cache"; cacheLife("hours"); cacheTag("deals", "products"); return [1]; }`,
+        `export async function getStock() { "use cache: remote"; cacheLife({ revalidate: 60, expire: 600 }); cacheTag("stock"); return 3; }`,
+      ].join("\n"),
+      "lib/cached-file.ts": `"use cache";\nexport async function getBanner() { return "hi"; }`,
+      "lib/actions.ts": `"use server";\nimport { revalidateTag, updateTag } from "next/cache";\nexport async function refresh() { revalidateTag("deals", "max"); updateTag("stock"); }`,
+      "app/deals/page.tsx": `import { getDeals, getStock } from "@/lib/catalog";\nexport default async function Deals() { await getDeals(); await getStock(); return <p />; }`,
+      "app/account/page.tsx": `import { Suspense } from "react";\nimport { cookies } from "next/headers";\nasync function Who() { return <p>{(await cookies()).get("n")?.value}</p>; }\nexport default function Account() { return <Suspense fallback={null}><Who /></Suspense>; }`,
+      "app/feed/page.tsx": `export default async function Feed() { const r = await fetch("https://x.dev/feed"); return <p>{String(r.ok)}</p>; }`,
+      "app/feed/loading.tsx": `export default function L() { return <p>…</p>; }`,
+      "app/me/page.tsx": `import { headers } from "next/headers";\nexport const instant = false;\nexport default async function Me() { return <p>{(await headers()).get("ua")}</p>; }`,
+      "app/broken/page.tsx": `import { cookies } from "next/headers";\nexport default async function Broken() { return <p>{(await cookies()).get("x")?.value}</p>; }`,
+      "app/client/page.tsx": `"use client";\nimport { useEffect } from "react";\nexport default function C() { useEffect(() => { fetch("/api/x"); }, []); return <p />; }`,
+    });
+    const s = await scan(root, { cache: false, types: false });
+    expect(s.next?.cacheComponents).toBe(true);
+    expect(s.nodes["lib/catalog.ts#getDeals"]!.cache).toEqual({ variant: "default", scope: "function", life: "hours", revalidate: 3600, expire: 86400, tags: ["deals", "products"] });
+    expect(s.nodes["lib/catalog.ts#getStock"]!.cache).toMatchObject({ variant: "remote", revalidate: 60, expire: 600, tags: ["stock"] });
+    expect(s.nodes["lib/cached-file.ts#getBanner"]!.cache).toMatchObject({ variant: "default", scope: "file" });
+    expect(edge(s, "invalidates", "lib/actions.ts#refresh", "lib/catalog.ts#getDeals")?.specifiers).toEqual(["deals"]);
+    expect(edge(s, "invalidates", "lib/actions.ts#refresh", "lib/catalog.ts#getStock")).toBeDefined();
+
+    const r = (id: string) => s.nodes[id]!.route!.rendering!;
+    expect(r("route:/deals")).toMatchObject({ mode: "static", revalidate: 60, expire: 600 }); // the shortest cacheLife wins
+    expect(r("route:/account").mode).toBe("ppr");
+    expect(r("route:/account").reasons.join(" ")).toContain("cookies() in Who — streamed inside <Suspense> (Account)");
+    expect(r("route:/feed").mode).toBe("ppr"); // uncached fetch, inside its loading.tsx
+    expect(r("route:/me")).toMatchObject({ mode: "dynamic" });
+    expect(r("route:/me").blocking).toBeUndefined();
+    expect(r("route:/broken")).toMatchObject({ mode: "dynamic", blocking: true });
+    expect(r("route:/client").mode).toBe("static"); // client code runs in the browser
+  });
+});

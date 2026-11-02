@@ -54,6 +54,9 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
   `routeChild` edges (in the "Declares" group). Kind `route` is pink; the Navigation group holds
   `navigates` (solid), `fetches` (dashed), `revalidates` (dotted) and `runsBefore` (red,
   middleware → route). Show route chain starts with the route's middleware.
+- Cache Components: "◐ Partial" (purple) and "⚠ Blocking" (red, the build would fail) badges.
+  "use cache" declarations say `cached 1h` in their caption, and their details have a Cache section
+  (variant, cacheLife, tags, invalidated by). `invalidates` edges are in the "Cache" relation group.
 - Rendering badges (`renderingLabel`: "○ Static", "● SSG", "ƒ Dynamic", "○ ISR 60s"; `.rae-chip[data-render]`)
   on route cards and frame headers, in route details (with the reasons), the tooltip and picker rows.
 - **Show route chain** (card, menu, details) on routes and route files or their declarations

@@ -206,13 +206,14 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
   };
 
   /** `export const dynamic = "force-dynamic"`, `export const revalidate = 60 | 0 | false`. */
-  const segmentConfigOf = (decl: N): { dynamic?: string; revalidate?: number | false } | undefined => {
+  const segmentConfigOf = (decl: N): { dynamic?: string; revalidate?: number | false; instant?: boolean } | undefined => {
     if (decl?.type !== "VariableDeclaration") return undefined;
-    const out: { dynamic?: string; revalidate?: number | false } = {};
+    const out: { dynamic?: string; revalidate?: number | false; instant?: boolean } = {};
     for (const d of decl.declarations) {
       const v = unwrap(d.init);
       if (d.id?.name === "dynamic" && v?.type === "Literal" && typeof v.value === "string") out.dynamic = v.value;
       if (d.id?.name === "revalidate" && v?.type === "Literal" && (typeof v.value === "number" || v.value === false)) out.revalidate = v.value;
+      if (d.id?.name === "instant" && v?.type === "Literal" && typeof v.value === "boolean") out.instant = v.value;
     }
     return Object.keys(out).length ? out : undefined;
   };
@@ -232,9 +233,29 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
         const opts = unwrap(n.arguments?.[1]);
         const text = opts ? src.slice(opts, 300) : "";
         if (/cache:\s*["']no-store["']/.test(text) || /revalidate:\s*0\b/.test(text)) found.push("fetch (no-store)");
+        // any uncached fetch is request-time data under Cache Components
+        else found.push("fetch()");
       }
     });
     return found;
+  };
+
+  /** cacheLife("hours" | { … }), cacheTag("a", "b") and revalidateTag / updateTag("x") calls in a body. */
+  const cacheCallsIn = (root: N) => {
+    let life: string | undefined;
+    const tags: string[] = [];
+    const invalidates: { via: "revalidateTag" | "updateTag"; tag: string }[] = [];
+    walk(root, (n) => {
+      if (n.type !== "CallExpression") return;
+      const callee = unwrap(n.callee);
+      const name = (callee?.type === "Identifier" ? callee.name : undefined)?.replace(/^unstable_/, "");
+      const strs = (n.arguments ?? []).map((a: N) => unwrap(a)).filter((a: N) => a?.type === "Literal" && typeof a.value === "string").map((a: N) => a.value as string);
+      if (name === "cacheLife" && n.arguments?.[0]) life = strs[0] ?? src.slice(n.arguments[0], 120);
+      else if (name === "cacheTag") tags.push(...strs);
+      else if (name === "revalidateTag" || name === "expireTag") strs.slice(0, 1).forEach((tag: string) => invalidates.push({ via: "revalidateTag", tag }));
+      else if (name === "updateTag") strs.slice(0, 1).forEach((tag: string) => invalidates.push({ via: "updateTag", tag }));
+    });
+    return { life, tags: [...new Set(tags)], invalidates };
   };
 
   const declNames = (decl: N): string[] => {
@@ -499,6 +520,10 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     const navs = navigationsIn(body);
     if (navs.length) decl.navigations = navs;
     const dyn = dynamicApisIn(body);
+    const cache = cacheCallsIn(body);
+    if (cache.life) decl.cacheLife = cache.life;
+    if (cache.tags.length) decl.cacheTags = cache.tags;
+    if (cache.invalidates.length) decl.invalidates = cache.invalidates;
     // a page reading `searchParams` renders per request
     if (c.fn?.params[0] && /\bsearchParams\b/.test(src.slice(c.fn.params[0], 400))) dyn.push("searchParams");
     if (dyn.length) decl.dynamicApis = [...new Set(dyn)];

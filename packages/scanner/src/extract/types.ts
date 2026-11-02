@@ -102,8 +102,14 @@ export interface DeclExtract {
   typeParams?: TypeParam[];
   /** Interfaces: their `extends` clauses, as written. */
   extends?: string[];
-  /** Request-time APIs it calls (`cookies()`, `headers()`, `searchParams`, `fetch … no-store`…). */
+  /** Request-time APIs it calls (`cookies()`, `headers()`, `searchParams`, `fetch … no-store`, plain `fetch()`…). */
   dynamicApis?: string[];
+  /** cacheLife / cacheTag calls in its body ("use cache" scopes). */
+  cacheLife?: string;
+  cacheTags?: string[];
+  /** revalidateTag / updateTag calls. */
+  invalidates?: { via: "revalidateTag" | "updateTag"; tag: string }[];
+  /** Segment config `export const instant = false` lives on the file; see FileExtract.segmentConfig. */
   /** Where it navigates or sends requests (in-app paths only), as written. */
   navigations?: { via: Navigation["via"]; href: string }[];
 }
@@ -118,7 +124,7 @@ export interface FileExtract {
   exports: ExportRecord[];
   decls: DeclExtract[];
   /** Route segment config: `export const dynamic = "…"`, `export const revalidate = n | false`. */
-  segmentConfig?: { dynamic?: string; revalidate?: number | false };
+  segmentConfig?: { dynamic?: string; revalidate?: number | false; instant?: boolean };
   /** `export const config = { matcher }` (middleware / proxy), as written; undefined when there's none. */
   matcher?: MiddlewareMatcher[];
   /** JSX rendered at module level (outside declarations). */

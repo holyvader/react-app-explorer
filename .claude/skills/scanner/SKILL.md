@@ -59,7 +59,19 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    (`cookies()`, `headers()`, `draftMode()`, `connection()`, `noStore()`, `fetch … no-store`, a page
    reading `searchParams`) reached from the route's files via renders / invokes / usesHook makes it
    dynamic. Server actions aren't followed. `reasons` say why. Checked against next-shop-demo's
-   `next build`: 16/16 routes agree. Pages Router isn't modelled (by choice). A real-world test project:
+   `next build`: 16/16 routes agree. **Cache Components** (`cacheComponents` / `dynamicIO` / `useCache`
+   in next.config → `snapshot.next.cacheComponents`): `addCacheComponentsRendering`. Request-time
+   data (`cookies()`, `headers()`, `connection()`, `searchParams`, uncached `fetch()`, `params`
+   without generateStaticParams) inside `<Suspense>` (a `renders` edge with a `suspense` condition) or
+   under a loading.tsx is `ppr` (◐). A loading.tsx covers its page and the segments below, layouts
+   included, but not its own layout; the root layout is covered by nothing. Outside a boundary it's
+   `dynamic` + `blocking` (next build fails) unless `export const instant = false`. Route files are
+   entered through their exports; client components and server actions aren't followed; `"use cache"`
+   scopes (`cache` on the node: variant, function or file scope, cacheLife profile or object → seconds,
+   cacheTag) stop the walk and their shortest revalidate / expire becomes the route's. `revalidateTag`
+   / `updateTag` → `invalidates` edges to the tagged scopes. Verified against next-shop-demo's build
+   (cacheComponents on): 18/18 routes and the 1h/1d and 1m/10m intervals agree. Pages Router isn't
+   modelled (by choice). A real-world test project:
    ~/IdeaProjects/next-shop-demo (every route kind, API methods, navigation, generics).
 7. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else

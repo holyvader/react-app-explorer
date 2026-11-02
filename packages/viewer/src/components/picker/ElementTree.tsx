@@ -38,7 +38,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
 
   const roots = useMemo(() => {
     if (!snapshot) return [];
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true }, excluded, hideAllLibraries: hideAll, showAssets });
+    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets });
     return buildTree(snapshot, f.libraries);
   }, [snapshot, excluded, hideAll, showAssets]);
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);

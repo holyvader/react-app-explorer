@@ -216,7 +216,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     menu: null,
     past: [],
     future: [],
-    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true },
+    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true },
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),

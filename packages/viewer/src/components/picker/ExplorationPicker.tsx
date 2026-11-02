@@ -27,7 +27,7 @@ export function ExplorationPicker() {
   const shown = useMemo(() => new Set(visible), [visible]);
   const total = useMemo(() => {
     if (!snapshot) return 0;
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true }, excluded, hideAllLibraries: hideAll, showAssets });
+    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets });
     return Object.values(snapshot.nodes).filter((n) => !n.id.startsWith("asset:") && !isFiltered(n, f.libraries)).length;
   }, [snapshot, excluded, hideAll, showAssets]);
 

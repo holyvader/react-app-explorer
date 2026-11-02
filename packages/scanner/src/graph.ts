@@ -1,5 +1,5 @@
 import { basename, dirname, join, relative } from "node:path";
-import type { Condition, Edge, EdgeKind, GraphNode, HookUsage, ImportType, JsxNode, ModuleType, NodeId, RouteInfo, SegmentKind } from "@rae/schema";
+import type { CacheInfo, Condition, Edge, EdgeKind, GraphNode, HookUsage, ImportType, JsxNode, ModuleType, NodeId, RouteInfo, SegmentKind } from "@rae/schema";
 import type { FileExtract, RawJsxNode, Resolved } from "./extract/types.ts";
 import { nextRoleOf, type ProjectInfo } from "./project.ts";
 
@@ -71,6 +71,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         extends: d.extends,
         functions: d.functions.length ? d.functions.map(({ pos: _pos, ...fn }) => fn) : undefined,
         dynamicApis: d.dynamicApis,
+        cache: d.kind === "type" ? undefined : cacheInfoOf(d.directives, f.directives, d.cacheLife, d.cacheTags),
+        invalidates: d.invalidates,
       };
     }
   }
@@ -301,8 +303,20 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
   }
 
   propagateModuleTypes(files, info, nodes, moduleId);
+  addInvalidations();
   if (info.appDir) addRoutes(info.appDir);
   return { nodes, edges };
+
+  /** revalidateTag / updateTag("x") → every "use cache" declaration tagged "x". */
+  function addInvalidations() {
+    const byTag = new Map<string, NodeId[]>();
+    for (const n of Object.values(nodes)) for (const t of n.cache?.tags ?? []) (byTag.get(t) ?? byTag.set(t, []).get(t)!).push(n.id);
+    for (const n of Object.values(nodes)) {
+      for (const inv of n.invalidates ?? []) {
+        for (const to of byTag.get(inv.tag) ?? []) addEdge({ from: n.id, to, kind: "invalidates", specifiers: [inv.tag], via: undefined }, `invalidates\0${n.id}\0${to}\0${inv.tag}`);
+      }
+    }
+  }
 
   /**
    * The App Router as nodes: one route per app/ directory holding special files (page, layout,
@@ -310,6 +324,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
    * declaration's navigations are matched to routes: navigates / fetches / revalidates edges.
    */
   function addRoutes(appDir: string) {
+    const cacheComponents = !!info.cacheComponents;
     const HTTP = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
     const byDir = new Map<string, { files: Record<string, NodeId>; methods: string[] }>();
     for (const f of files.values()) {
@@ -408,6 +423,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       const fileOf = new Map([...files.values()].map((f) => [moduleId(f.absPath), f]));
       const next = new Map<NodeId, NodeId[]>();
       for (const e of edges) if (e.kind === "renders" || e.kind === "invokes" || e.kind === "usesHook") (next.get(e.from) ?? next.set(e.from, []).get(e.from)!).push(e.to);
+      if (cacheComponents) return addCacheComponentsRendering(list, fileOf);
       for (const r of list) {
         const info = nodes[r.id]!.route!;
         const chain: RouteInfo[] = [];
@@ -451,8 +467,9 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
             if (seen.has(id)) continue;
             seen.add(id);
             const n = nodes[id];
-            if (!n || n.kind === "serverAction") continue;
-            for (const api of n.dynamicApis ?? []) {
+            if (!n || n.kind === "serverAction" || n.moduleType === "client") continue;
+            // (a plain fetch() is cached by default outside Cache Components)
+            for (const api of (n.dynamicApis ?? []).filter((a) => a !== "fetch()")) {
               if (reasons.length < 6) reasons.push(`${api} in ${n.name} (${where(id)})`);
               mode = "dynamic";
             }
@@ -463,6 +480,112 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         if (revalidate && mode !== "dynamic") reasons.push(`revalidates every ${revalidate}s (ISR)`);
         if (!reasons.length) reasons.push("no request-time data: prerendered at build");
         info.rendering = { mode, revalidate, reasons };
+      }
+    }
+
+    /**
+     * Rendering with Cache Components (Next 16), as `next build` decides it: routes prerender by
+     * default; request-time data (`cookies()`, `headers()`, `connection()`, `searchParams`, uncached
+     * `fetch()`, `params` without generateStaticParams) streams in when it sits inside <Suspense> or a
+     * loading.tsx boundary (◐ Partial Prerender) and fails the build outside one (blocking), unless
+     * the route opts out with `export const instant = false` (ƒ). "use cache" scopes are static
+     * and aren't looked into; their cacheLife sets the route's revalidate / expire.
+     */
+    function addCacheComponentsRendering(list: { id: NodeId; segs: string[]; kind: RouteInfo["kind"] }[], fileOf: Map<NodeId, FileExtract>) {
+      const out = new Map<NodeId, Edge[]>();
+      for (const e of edges) if (e.kind === "renders" || e.kind === "invokes" || e.kind === "usesHook") (out.get(e.from) ?? out.set(e.from, []).get(e.from)!).push(e);
+      // a route file is entered through its exports (the page, the layout…); helpers are reached from them
+      const declsOf = (fileId: NodeId) => {
+        const f = fileOf.get(fileId);
+        const all = (f?.decls ?? []).filter((d) => d.kind !== "type").map((d) => declId(f!.absPath, d.local));
+        const exported = all.filter((id) => nodes[id]?.exported);
+        return exported.length ? exported : all;
+      };
+      for (const r of list) {
+        const info = nodes[r.id]!.route!;
+        const chain: RouteInfo[] = [];
+        for (let cur: RouteInfo | undefined = info; cur; cur = cur.parent ? nodes[cur.parent]?.route : undefined) chain.unshift(cur);
+        const own = info.files.page ?? info.files.route;
+        const fileIds = [...chain.flatMap((c) => [c.files.layout, c.files.template]), own].filter((x): x is NodeId => !!x);
+        const reasons: string[] = [];
+        const config = Object.assign({}, ...fileIds.map((id) => fileOf.get(id)?.segmentConfig ?? {})) as { dynamic?: string; revalidate?: number | false; instant?: boolean };
+        if (config.dynamic || config.revalidate !== undefined) reasons.push("export const dynamic / revalidate don't apply with Cache Components");
+
+        if (r.kind === "api") {
+          const cached = declsOf(own!).some((id) => nodes[id]?.cache);
+          info.rendering = { mode: cached ? "static" : "dynamic", reasons: [cached ? `"use cache" handler: prerendered` : "route handlers run on every request unless cached (\"use cache\")", ...reasons] };
+          continue;
+        }
+
+        // start points, each with whether a boundary already wraps it
+        const loadingUpTo = (i: number) => chain.slice(0, i).some((c) => !!c.files.loading);
+        const starts: { id: NodeId; covered: boolean; via: string }[] = [];
+        chain.forEach((c, i) => {
+          for (const f of [c.files.layout, c.files.template]) if (f) for (const id of declsOf(f)) starts.push({ id, covered: loadingUpTo(i), via: "a loading.tsx above it" });
+        });
+        if (own) for (const id of declsOf(own)) starts.push({ id, covered: loadingUpTo(chain.length), via: "loading.tsx" });
+
+        const covered: string[] = [];
+        const blocking: string[] = [];
+        let revalidate: number | undefined;
+        let expire: number | undefined;
+        const staticParams = fileIds.some((id) => fileOf.get(id)?.exports.some((e) => e.exported === "generateStaticParams"));
+        const dynamicSegs = r.segs.filter((seg) => seg.startsWith("["));
+        if (dynamicSegs.length && !staticParams) {
+          const pageCovered = loadingUpTo(chain.length);
+          (pageCovered ? covered : blocking).push(`params (${dynamicSegs.join(", ")}) at request time${pageCovered ? " — inside loading.tsx" : ""}`);
+        }
+        const seen = new Set<string>();
+        const queue = starts.map((s) => ({ ...s }));
+        while (queue.length) {
+          const { id, covered: inside, via } = queue.shift()!;
+          const key = `${id}\0${inside}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const n = nodes[id];
+          // server actions run on submit; client components run in the browser (and only render client code)
+          if (!n || n.kind === "serverAction" || n.moduleType === "client") continue;
+          if (n.cache) {
+            // cached: static, and its cacheLife bounds the route's
+            if (n.cache.revalidate !== undefined) revalidate = Math.min(revalidate ?? Infinity, n.cache.revalidate);
+            if (n.cache.expire !== undefined) expire = Math.min(expire ?? Infinity, n.cache.expire);
+            continue;
+          }
+          for (const api of n.dynamicApis ?? []) {
+            const label = api === "fetch (no-store)" ? "fetch()" : api;
+            (inside ? covered : blocking).push(`${label} in ${n.name}${inside ? ` — streamed inside ${via}` : " — outside <Suspense>"}`);
+          }
+          for (const e of out.get(id) ?? []) {
+            const suspense = e.kind === "renders" && e.conditions?.some((c) => c.kind === "suspense");
+            queue.push({ id: e.to, covered: inside || !!suspense, via: suspense ? `<Suspense> (${n.name})` : via });
+          }
+        }
+
+        const limit = (list: string[]) => [...new Set(list)].slice(0, 6);
+        let mode: "static" | "ssg" | "ppr" | "dynamic" = "static";
+        let blocks: boolean | undefined;
+        if (blocking.length && config.instant === false) {
+          mode = "dynamic";
+          reasons.unshift("export const instant = false: renders on every request", ...limit(blocking));
+        } else if (blocking.length) {
+          mode = "dynamic";
+          blocks = true;
+          reasons.unshift(...limit(blocking), "next build fails: wrap it in <Suspense>, cache it with \"use cache\", or set export const instant = false");
+        } else if (covered.length) {
+          mode = "ppr";
+          reasons.unshift("static shell prerendered; these stream in:", ...limit(covered));
+        } else {
+          if (dynamicSegs.length && staticParams) mode = "ssg";
+          reasons.unshift(mode === "ssg" ? `prerendered for generateStaticParams (${dynamicSegs.join(", ")})` : "no request-time data outside cached scopes: prerendered");
+        }
+        if (revalidate !== undefined && Number.isFinite(revalidate) && mode !== "dynamic") reasons.push(`cached data revalidates every ${seconds(revalidate)}`);
+        info.rendering = {
+          mode,
+          revalidate: revalidate !== undefined && Number.isFinite(revalidate) ? revalidate : undefined,
+          expire: expire !== undefined && Number.isFinite(expire) ? expire : undefined,
+          blocking: blocks,
+          reasons: [...reasons, "Cache Components is on"],
+        };
       }
     }
 
@@ -661,4 +784,48 @@ function samplePaths(segs: string[]): string[] {
       .flatMap((s) => (s.startsWith("[[...") ? (optional === "empty" ? [] : ["sample"]) : [s.startsWith("[") ? "sample" : s]))
       .join("/");
   return [...new Set([fill("empty"), fill("filled")])];
+}
+
+/** cacheLife profiles (Next 16): revalidate / expire in seconds. */
+const CACHE_LIFE: Record<string, { revalidate: number; expire: number }> = {
+  seconds: { revalidate: 1, expire: 60 },
+  minutes: { revalidate: 60, expire: 3600 },
+  hours: { revalidate: 3600, expire: 86400 },
+  days: { revalidate: 86400, expire: 604800 },
+  weeks: { revalidate: 604800, expire: 2592000 },
+  max: { revalidate: 2592000, expire: 31536000 },
+  default: { revalidate: 900, expire: 31536000 },
+};
+
+/**
+ * A declaration's "use cache" scope: its own directive (`"use cache"`, `"use cache: remote"`…) or its
+ * file's; cacheLife (a profile or `{ revalidate, expire }`) and cacheTag from its body.
+ */
+function cacheInfoOf(own: string[], file: string[], life?: string, tags?: string[]): CacheInfo | undefined {
+  const pick = (ds: string[]) => ds.find((d) => /^use cache(:\s*\w+)?$/.test(d));
+  const directive = pick(own) ?? pick(file);
+  if (!directive) return undefined;
+  const v = directive.split(":")[1]?.trim();
+  const variant: CacheInfo["variant"] = v === "remote" ? "remote" : v === "private" ? "private" : "default";
+  let times = CACHE_LIFE[life ?? "default"];
+  if (life && !times && life.startsWith("{")) {
+    const num = (k: string) => Number(new RegExp(`${k}\\s*:\\s*(\\d+)`).exec(life)?.[1] ?? NaN);
+    times = { revalidate: num("revalidate"), expire: num("expire") };
+  }
+  return {
+    variant,
+    scope: pick(own) ? "function" : "file",
+    life,
+    revalidate: Number.isFinite(times?.revalidate) ? times!.revalidate : undefined,
+    expire: Number.isFinite(times?.expire) ? times!.expire : undefined,
+    tags: tags?.length ? tags : undefined,
+  };
+}
+
+/** 3600 → "1h", 86400 → "1d". */
+export function seconds(n: number): string {
+  if (n % 86400 === 0) return `${n / 86400}d`;
+  if (n % 3600 === 0) return `${n / 3600}h`;
+  if (n % 60 === 0) return `${n / 60}m`;
+  return `${n}s`;
 }

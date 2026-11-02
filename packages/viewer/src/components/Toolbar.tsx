@@ -15,6 +15,7 @@ const GROUP_COLOR: Record<EdgeGroup, string> = {
   invokes: "relation.invokes",
   types: "relation.usesType",
   navigation: "relation.navigates",
+  cache: "relation.invalidates",
 };
 
 /** A view button's text: below 2080px only the icon shows (the tooltip says what it is), so the toolbar fits. */
@@ -88,7 +89,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
               onValueChange={onPickSnapshot}
               options={options}
               placeholder={options.length ? "Select snapshot" : "No snapshots found"}
-              width="220px"
+              width="196px"
               size="xs"
             />
           </Box>

@@ -29,6 +29,9 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Hot-path canvas UI (nodes, edges, labels, tooltip, tree rows) is plain HTML + CSS (`components/canvas.css`, `picker/picker.css`) using the design-system token CSS variables. That doesn't break the rule: nothing there imports Chakra.
 
 ## State
+- **zustand selectors must return stable values**: `useExplorer((s) => s.index?.in.get(id)?.filter(…))`
+  returns a fresh array every call and loops forever ("Maximum update depth exceeded"). Select the
+  store value and derive with `useMemo`, or return a primitive (a count).
 - Read with granular selectors: `useExplorer((s) => s.visible)`. Never select the whole store.
 - Call actions via `useExplorer.getState().action` (stable, no re-render), or select them individually.
 - Keep derived data in `useMemo` near its use (e.g. the picker tree, relations). Store only the minimal state.

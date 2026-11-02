@@ -47,9 +47,29 @@ export interface RouteInfo {
    * `ssg` (● prerendered for generateStaticParams), `dynamic` (ƒ on every request). `revalidate`:
    * seconds between regenerations (ISR). `reasons`: why it's dynamic / static, as found in the code.
    */
-  rendering?: { mode: "static" | "ssg" | "dynamic"; revalidate?: number; reasons: string[] };
+  rendering?: {
+    /** `ppr`: ◐ Partial Prerender (Cache Components) — a static shell, request-time parts streamed in. */
+    mode: "static" | "ssg" | "ppr" | "dynamic";
+    revalidate?: number;
+    /** Cache Components: seconds until cached data expires (from cacheLife). */
+    expire?: number;
+    /** Cache Components: request-time data outside <Suspense> — `next build` fails (blocking prerender). */
+    blocking?: boolean;
+    reasons: string[];
+  };
   /** The middleware (middleware.ts / proxy.ts) that runs before this route, and the matcher that selects it. */
   middleware?: { id: NodeId; matcher?: string; conditions?: string[] };
+}
+
+/** A `"use cache"` scope: `"use cache"` / `"use cache: remote"` / `"use cache: private"`, in the function or the whole file. */
+export interface CacheInfo {
+  variant: "default" | "remote" | "private";
+  scope: "function" | "file";
+  /** cacheLife as written (`hours`, `{ revalidate: 60 }`); revalidate / expire in seconds when known. */
+  life?: string;
+  revalidate?: number;
+  expire?: number;
+  tags?: string[];
 }
 
 /** One entry of a middleware's `config.matcher`, as written; `has` / `missing` as "cookie session", "header x-flag=1"… */
@@ -173,6 +193,10 @@ export interface GraphNode {
   filePath: string;
   /** Request-time APIs it calls (`cookies()`, `headers()`, `fetch … no-store`…): they make a route dynamic. */
   dynamicApis?: string[];
+  /** `"use cache"` (Cache Components): how it's cached — variant, where the directive is, cacheLife and cacheTag. */
+  cache?: CacheInfo;
+  /** `revalidateTag` / `updateTag` calls: the cache tags it invalidates. */
+  invalidates?: { via: "revalidateTag" | "updateTag"; tag: string }[];
   /** Middleware modules: their `config.matcher` (none → it runs on every route). */
   middleware?: { matchers: MiddlewareMatcher[] };
   /** Route nodes (`kind: "route"`). */
@@ -240,7 +264,9 @@ export type EdgeKind =
   | "fetches"
   | "revalidates"
   /** Middleware (middleware.ts / proxy.ts) → each route its matcher selects (every route without a matcher). */
-  | "runsBefore";
+  | "runsBefore"
+  /** revalidateTag / updateTag → the "use cache" declarations tagged with it. */
+  | "invalidates";
 
 export type ImportType = "static" | "dynamic" | "lazy" | "next-dynamic" | "type-only" | "reexport";
 
@@ -274,6 +300,8 @@ export interface Snapshot {
   rootDir: string;
   entry: string;
   framework: Framework;
+  /** Next.js settings that change how routes render (`cacheComponents` in next.config). */
+  next?: { cacheComponents?: boolean };
   stats: ScanStats;
   nodes: Record<NodeId, GraphNode>;
   edges: Edge[];

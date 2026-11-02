@@ -43,6 +43,7 @@ export {
   Braces as IconType,
   Signpost as IconRoute,
   Layers as IconRouteChain,
+  DatabaseZap as IconCache,
   FileImage as IconAsset,
   TriangleAlert as IconWarning,
 } from "lucide-react";

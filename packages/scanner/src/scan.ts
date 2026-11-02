@@ -53,6 +53,7 @@ function toSnapshot(scan: Omit<StructureScan, "snapshot">, createdAt: string, ty
     rootDir: scan.info.rootDir,
     entry: scan.info.entry,
     framework: scan.info.framework,
+    next: scan.info.framework === "next-app" ? { cacheComponents: !!scan.info.cacheComponents } : undefined,
     stats: {
       files: scan.files.size,
       durationMs: Math.round(performance.now() - scan.t0),

@@ -91,6 +91,7 @@ const config = defineConfig({
           revalidates: { value: "{colors.gray.500}" },
           routeFile: { value: "{colors.pink.300}" },
           runsBefore: { value: "{colors.red.500}" },
+          invalidates: { value: "{colors.purple.600}" },
         },
         // Code tokens (props, signatures, hooks) — shared by the node tooltip and the sidebar.
         // Note: no token may be called `value` — Chakra reads any object with a `value` key as a token.

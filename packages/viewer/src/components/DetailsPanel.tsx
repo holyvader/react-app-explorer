@@ -33,7 +33,7 @@ import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl, openInEditor } from "../lib/editor.ts";
-import { KIND_META, fileNote, renderingLabel, routeCaption } from "../lib/kinds.tsx";
+import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
@@ -164,6 +164,12 @@ export function DetailsPanel() {
           </HStack>
         </Flex>
       </PanelHeader>
+
+      {node.cache && (
+        <PanelSection title="Cache">
+          <CacheView node={node} />
+        </PanelSection>
+      )}
 
       {node.middleware && (
         <PanelSection title="Middleware">
@@ -386,7 +392,10 @@ function RouteInfoView({ node }: { node: GraphNode }) {
         <Box>
           <Eyebrow>Rendering</Eyebrow>
           <Flex align="flex-start" gap="2" mt="1.5">
-            <TagChip color={r.rendering.mode === "dynamic" ? "orange.solid" : r.rendering.mode === "ssg" ? "teal.solid" : "green.solid"} mono>
+            <TagChip
+              color={r.rendering.blocking ? "red.solid" : r.rendering.mode === "dynamic" ? "orange.solid" : r.rendering.mode === "ppr" ? "purple.solid" : r.rendering.mode === "ssg" ? "teal.solid" : "green.solid"}
+              mono
+            >
               {renderingLabel(r.rendering)}
             </TagChip>
             <Stack gap="0.5" minW="0">
@@ -423,6 +432,57 @@ function RouteInfoView({ node }: { node: GraphNode }) {
           ))}
         </Wrap>
       </Box>
+    </Stack>
+  );
+}
+
+/** A "use cache" scope: variant, where the directive is, cacheLife (with revalidate / expire), tags, and what invalidates it. */
+function CacheView({ node }: { node: GraphNode }) {
+  const c = node.cache!;
+  // (select the index itself: a selector returning a fresh filtered array would re-render forever)
+  const index = useExplorer((s) => s.index);
+  const invalidatedBy = useMemo(() => (index?.in.get(node.id) ?? []).filter((e) => e.kind === "invalidates"), [index, node.id]);
+  return (
+    <Stack gap="2.5">
+      <Box {...CODE_BOX}>
+        <CodeToken kind="keyword">"{c.variant === "default" ? "use cache" : `use cache: ${c.variant}`}"</CodeToken>
+        <CodeToken kind="punct">{c.scope === "file" ? "  — for the whole file" : "  — in this function"}</CodeToken>
+        {c.life && (
+          <Box>
+            <CodeToken kind="name">cacheLife</CodeToken>
+            <CodeToken kind="punct">(</CodeToken>
+            <CodeToken kind="value">{c.life.startsWith("{") ? c.life : `"${c.life}"`}</CodeToken>
+            <CodeToken kind="punct">)</CodeToken>
+          </Box>
+        )}
+      </Box>
+      {(c.revalidate !== undefined || c.expire !== undefined) && (
+        <Text fontSize="xs" color="fg.muted">
+          {c.revalidate !== undefined && `Revalidates every ${duration(c.revalidate)}`}
+          {c.revalidate !== undefined && c.expire !== undefined && " · "}
+          {c.expire !== undefined && `expires after ${duration(c.expire)}`}
+          {!c.life && " (the default profile)"}
+        </Text>
+      )}
+      {c.tags?.length ? (
+        <Wrap gap="1.5">
+          {c.tags.map((t) => (
+            <TagChip key={t} color="relation.invalidates" mono>
+              {t}
+            </TagChip>
+          ))}
+        </Wrap>
+      ) : null}
+      {invalidatedBy.length > 0 && (
+        <Box>
+          <Eyebrow>Invalidated by</Eyebrow>
+          <Wrap gap="1.5" mt="1.5">
+            {invalidatedBy.map((e, i) => (
+              <NodeChip key={i} id={e.from} anchor={node.id} suffix={e.specifiers?.[0]} />
+            ))}
+          </Wrap>
+        </Box>
+      )}
     </Stack>
   );
 }

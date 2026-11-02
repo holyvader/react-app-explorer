@@ -326,6 +326,7 @@
 .rae-edge--fetches        { --e: var(--chakra-colors-relation-fetches); --dash: 6 4; --anim: rae-dash-9; --speed: 1s; --ew: 2px; }
 .rae-edge--revalidates    { --e: var(--chakra-colors-relation-revalidates); --dash: 1 4; --anim: rae-dash-5; --speed: 2s; --ew: 1.5px; }
 .rae-edge--runsBefore     { --e: var(--chakra-colors-relation-runs-before); --dash: 2 3; --anim: rae-dash-5; --speed: 1.2s; --ew: 2px; }
+.rae-edge--invalidates    { --e: var(--chakra-colors-relation-invalidates); --dash: 4 3; --anim: rae-dash-7; --speed: 1.4s; --ew: 1.75px; }
 .rae-edge--routeFile      { --e: var(--chakra-colors-relation-route-file); --dash: 3 4; --anim: rae-dash-7; --speed: 2.4s; --ew: 1.5px; }
 .rae-edge--invokes        { --e: var(--chakra-colors-kind-function-solid); --dash: 10 3 2 3; --anim: rae-dash-18; --speed: 0.7s; --ew: 1.75px; }
 .rae-edge--invokesAction  { --e: var(--chakra-colors-kind-server-action-solid); --dash: 6 3; --anim: rae-dash-9; --speed: 0.45s; --ew: 2.25px; }
@@ -378,6 +379,7 @@
 .rae-edge-label[data-kind="fetches"] { --e: var(--chakra-colors-relation-fetches); }
 .rae-edge-label[data-kind="revalidates"] { --e: var(--chakra-colors-relation-revalidates); }
 .rae-edge-label[data-kind="runsBefore"] { --e: var(--chakra-colors-relation-runs-before); }
+.rae-edge-label[data-kind="invalidates"] { --e: var(--chakra-colors-relation-invalidates); }
 .rae-edge-label[data-kind="routeFile"], .rae-edge-label[data-kind="routeChild"] { --e: var(--chakra-colors-relation-route-file); }
 .rae-edge-label[data-kind="invokes"] { --e: var(--chakra-colors-kind-function-solid); }
 .rae-edge-label[data-kind="invokesAction"] { --e: var(--chakra-colors-kind-server-action-solid); }
@@ -537,4 +539,7 @@
 .rae-chip[data-render="static"] { --c: var(--chakra-colors-green-solid); }
 .rae-chip[data-render="ssg"] { --c: var(--chakra-colors-teal-solid); }
 .rae-chip[data-render="dynamic"] { --c: var(--chakra-colors-orange-solid); }
+.rae-chip[data-render="ppr"] { --c: var(--chakra-colors-purple-solid); }
+.rae-chip[data-render="blocking"] { --c: var(--chakra-colors-red-solid); }
+.rae-chip[data-cache] { --c: var(--chakra-colors-purple-solid); color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); white-space: nowrap; }
 .rae-chip[data-render] { color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -11,7 +11,7 @@ let cached: Promise<Snapshot> | undefined;
 const loadSnapshot = (): Promise<Snapshot> =>
   (cached ??= scan(new URL("../../fixtures/next-app", import.meta.url).pathname, { cache: false, types: false }));
 
-const ALL = { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true };
+const ALL = { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true };
 const opts = (o: Partial<{ folders: boolean; excluded: string[]; hideAll: boolean }> = {}) => ({
   enabled: ALL,
   folders: o.folders ?? true,

@@ -11,6 +11,8 @@ export interface ProjectInfo {
   tsconfig?: string;
   appDir?: string;
   pagesDir?: string;
+  /** Next.js: `cacheComponents: true` (or the older experimental `dynamicIO` / `useCache`) in next.config. */
+  cacheComponents?: boolean;
 }
 
 const DEFAULT_EXCLUDE = [
@@ -98,6 +100,7 @@ export async function discoverProject(
     framework: isNext && appDir ? "next-app" : framework,
     tsconfig,
     appDir: isNext ? appDir : undefined,
+    cacheComponents: isNext ? readCacheComponents(rootDir) : undefined,
     pagesDir: isNext ? pagesDir : undefined,
   };
 }
@@ -129,4 +132,15 @@ export function nextRoleOf(absPath: string, info: ProjectInfo): NextRole | undef
     if (/^(src\/)?(middleware|proxy)\.[jt]s$/.test(rel)) return "middleware";
   }
   return undefined;
+}
+
+/** Whether next.config turns on Cache Components (read as text: the config is code, not data). */
+function readCacheComponents(rootDir: string): boolean {
+  for (const name of ["next.config.ts", "next.config.mjs", "next.config.js", "next.config.mts", "next.config.cjs"]) {
+    const path = join(rootDir, name);
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, "utf8").replace(/\/\/.*$/gm, "");
+    return /\b(cacheComponents|dynamicIO|useCache)\s*:\s*true\b/.test(text);
+  }
+  return false;
 }

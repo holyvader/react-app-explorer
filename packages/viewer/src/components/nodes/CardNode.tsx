@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import { KIND_META, fileNote, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
+import { KIND_META, duration, fileNote, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { CardShape } from "./CardShape.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -39,7 +39,7 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   if (!node) return null;
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
-  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean).join(" · ");
   return (
     <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
@@ -53,7 +53,7 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
           <div className="rae-card__caption">{caption}</div>
         </div>
         {node.route?.rendering && (
-          <span className="rae-chip rae-card__boundary" data-render={node.route.rendering.mode} title={node.route.rendering.reasons.join("\n")}>
+          <span className="rae-chip rae-card__boundary" data-render={renderingKey(node.route.rendering)} title={node.route.rendering.reasons.join("\n")}>
             {renderingLabel(node.route.rendering)}
           </span>
         )}

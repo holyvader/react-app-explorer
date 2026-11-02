@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xyflow/react";
 import { memo, type MouseEvent, type PointerEvent } from "react";
-import { KIND_META, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
+import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -94,7 +94,7 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
         {route?.rendering && (
-          <span className="rae-chip" data-render={route.rendering.mode} title={route.rendering.reasons.join("\n")}>
+          <span className="rae-chip" data-render={renderingKey(route.rendering)} title={route.rendering.reasons.join("\n")}>
             {renderingLabel(route.rendering)}
           </span>
         )}

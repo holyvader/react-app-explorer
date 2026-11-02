@@ -68,6 +68,8 @@ function edgeLook(e: GraphEdge): { className: string; color: string } {
       return { className: "rae-edge rae-edge--revalidates", color: cssVar("relation.revalidates") };
     case "runsBefore":
       return { className: "rae-edge rae-edge--runsBefore", color: cssVar("relation.runsBefore") };
+    case "invalidates":
+      return { className: "rae-edge rae-edge--invalidates", color: cssVar("relation.invalidates") };
   }
 }
 

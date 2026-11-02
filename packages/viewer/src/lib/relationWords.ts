@@ -39,6 +39,8 @@ export function relationWord(e: GraphEdge): string {
       return "revalidates";
     case "runsBefore":
       return "runs before";
+    case "invalidates":
+      return e.specifiers?.[0] ? `invalidates "${e.specifiers[0]}"` : "invalidates";
   }
 }
 
@@ -70,5 +72,7 @@ export function relationToken(e: GraphEdge): string {
       return "relation.revalidates";
     case "runsBefore":
       return "relation.runsBefore";
+    case "invalidates":
+      return "relation.invalidates";
   }
 }
