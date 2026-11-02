@@ -1,6 +1,6 @@
 [package]
 name = "react-app-explorer"
-version = "0.1.10"
+version = "0.1.11"
 description = "React App Explorer"
 edition = "2021"
 
