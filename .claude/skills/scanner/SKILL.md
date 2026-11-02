@@ -45,7 +45,10 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    `routeChild` and `routeFile`. Each declaration's `navigations` (Link/`<a>` href, router.push /
    replace, redirect, fetch, revalidatePath; in-app "/…" paths only, template parts → `[…]`) are
    matched to routes, most specific first, and become `navigates` / `fetches` / `revalidates` edges.
-   A `[…]` only fills dynamic segments. Pages Router isn't modelled (by choice).
+   A `[…]` only fills dynamic segments. Intercepting routes (`(.)x` anywhere on the way, often on a
+   parent folder) get segment kind `intercept`, are named as Next prints them (`/(.)photos/[id]`) and
+   are never link targets. Pages Router isn't modelled (by choice). A real-world test project:
+   ~/IdeaProjects/next-shop-demo (every route kind, API methods, navigation, generics).
 7. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else
    is the project's own:

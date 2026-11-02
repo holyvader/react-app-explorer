@@ -353,7 +353,11 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       const segs = urlSegments(dir);
       const url = "/" + segs.join("/");
       const last = dir.split("/").pop() ?? "";
-      const kindOfSeg = segmentKind(dir === "" ? "" : last);
+      // intercepting: a "(.)" / "(..)" / "(...)" segment on the way (it may sit on a parent folder)
+      const interceptAt = dir.split("/").filter((seg) => !["group", "slot"].includes(segmentKind(seg))).findIndex((seg) => segmentKind(seg) === "intercept");
+      const kindOfSeg = interceptAt >= 0 ? "intercept" : segmentKind(dir === "" ? "" : last);
+      // named as Next prints it: the URL with the interception marker kept (`/(.)photos/[id]`)
+      const display = interceptAt >= 0 ? "/" + dir.split("/").filter((seg) => !["group", "slot"].includes(segmentKind(seg))).join("/") : url;
       const kind: RouteInfo["kind"] = entry.files.page ? "page" : entry.files.route ? "api" : "segment";
       // parent: the nearest enclosing directory that is a route too
       let parent: NodeId | undefined;
@@ -369,7 +373,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         id,
         kind: "route",
         // groups and slots share their parent's URL: name them by their segment too
-        name: kindOfSeg === "group" || kindOfSeg === "slot" ? `${url} ${last}` : url,
+        name: kindOfSeg === "group" || kindOfSeg === "slot" ? `${url} ${last}` : display,
         filePath: rel(join(appDir, dir)) || ".",
         absPath: join(appDir, dir),
         route: {
@@ -385,7 +389,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       };
       if (parent) addEdge({ from: parent, to: id, kind: "routeChild" });
       for (const mid of Object.values(entry.files)) if (mid) addEdge({ from: id, to: mid, kind: "routeFile" });
-      if (kind !== "segment") routes.push({ id, segs, kind });
+      // links go to the real route (Next does the intercepting), so intercepting routes aren't targets
+      if (kind !== "segment" && kindOfSeg !== "intercept") routes.push({ id, segs, kind });
     }
 
     // most specific first: more static segments, then fewer catch-alls

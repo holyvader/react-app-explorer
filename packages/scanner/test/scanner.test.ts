@@ -256,6 +256,8 @@ describe("App Router routes", () => {
       "app/blog/new/page.tsx": `export default function New() { return <p />; }`,
       "app/blog/@modal/default.tsx": `export default function D() { return null; }`,
       "app/docs/[[...slug]]/page.tsx": `export default function Docs() { return <p />; }`,
+      "app/@modal/default.tsx": `export default function D() { return null; }`,
+      "app/@modal/(.)blog/[slug]/page.tsx": `export default function Quick() { return <dialog />; }`,
       "app/api/posts/route.ts": `export async function GET() { return Response.json([]); }\nexport async function POST() { return Response.json({}); }`,
     };
     for (const [p, t] of Object.entries(files)) {
@@ -272,6 +274,8 @@ describe("App Router routes", () => {
     expect(r("route:/docs/[[...slug]]")).toMatchObject({ segmentKind: "optionalCatchAll", params: ["slug"] });
     expect(r("route:/api/posts")).toMatchObject({ kind: "api", methods: ["GET", "POST"], files: { route: "app/api/posts/route.ts" } });
 
+    // intercepting (the marker on a parent folder): named as Next prints it, and never a link target
+    expect(s.nodes["route:/@modal/(.)blog/[slug]"]).toMatchObject({ name: "/(.)blog/[slug]", route: { url: "/blog/[slug]", segmentKind: "intercept" } });
     const home = "app/(marketing)/page.tsx#Home";
     // static beats dynamic; a template part matches a dynamic segment; query strings are dropped; external links ignored
     expect(edge(s, "navigates", home, "route:/blog/new")?.href).toBe("/blog/new");
