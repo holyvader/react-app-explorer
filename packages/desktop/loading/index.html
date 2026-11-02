@@ -5,13 +5,40 @@
     <title>React App Explorer</title>
     <style>
       html, body { height: 100%; margin: 0; }
-      body { display: grid; place-items: center; background: #f9fafb; color: #6b7280; font: 13px/1.4 Inter, system-ui, -apple-system, sans-serif; }
-      @media (prefers-color-scheme: dark) { body { background: #0b0b0c; color: #9ca3af; } }
+      body { display: grid; place-items: center; background: #f9fafb; color: #6b7280; font: 13px/1.5 Inter, system-ui, -apple-system, sans-serif; }
+      @media (prefers-color-scheme: dark) { body { background: #0b0b0c; color: #9ca3af; } code, pre { background: #1f2937 !important; color: #e5e7eb; } }
+      .box { max-width: 560px; padding: 24px; text-align: center; }
       .spin { width: 22px; height: 22px; margin: 0 auto 12px; border: 2px solid #429cb544; border-top-color: #429cb5; border-radius: 50%; animation: s 0.8s linear infinite; }
       @keyframes s { to { transform: rotate(360deg); } }
+      #error { display: none; text-align: left; }
+      #error h1 { font-size: 15px; color: inherit; margin: 0 0 8px; }
+      code, pre { background: #eef0f3; border-radius: 6px; padding: 2px 6px; font: 12px/1.5 ui-monospace, Menlo, monospace; user-select: all; }
+      pre { padding: 10px 12px; white-space: pre-wrap; word-break: break-all; }
+      body.failed .spin, body.failed #msg { display: none; }
+      body.failed #error { display: block; }
     </style>
   </head>
   <body>
-    <div><div class="spin"></div><span id="msg">Starting…</span></div>
+    <div class="box">
+      <div class="spin"></div>
+      <span id="msg">Starting…</span>
+      <div id="error">
+        <h1>The app's local server didn't start</h1>
+        <div id="reason"></div>
+        <p>If macOS blocked it (likely right after downloading, because the app isn't signed with an Apple Developer ID), run this in Terminal, then reopen the app:</p>
+        <pre>xattr -dr com.apple.quarantine "/Applications/React App Explorer.app"</pre>
+        <p>The app needs macOS 13 or newer.</p>
+        <pre id="details" hidden></pre>
+      </div>
+    </div>
+    <script>
+      // Called by the Rust shell when the sidecar exits before (or after) the viewer loaded.
+      window.raeServerFailed = (reason, details) => {
+        document.body.classList.add("failed");
+        document.getElementById("reason").textContent = reason;
+        const d = document.getElementById("details");
+        if (details) { d.textContent = details; d.hidden = false; }
+      };
+    </script>
   </body>
 </html>

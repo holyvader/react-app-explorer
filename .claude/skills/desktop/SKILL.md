@@ -36,6 +36,23 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   crash becomes a "type pass skipped" warning and the scan finishes without types.
 - Test packaged scans on a folder with **no `.explorer/cache`**: cached files skip parsing and the
   type pass, which hid the missing lib files (the original bug).
+- **oxc-parser's loader is ESM with `createRequire(import.meta.url)`**: the bundler can't follow
+  that `require`, so the `.node` path stayed a runtime string pointing into the *build machine's*
+  node_modules. It worked on the build Mac and failed everywhere else ("The local server stopped").
+  `build.ts` strips the `createRequire` line and the WebContainer fallback, then **guards** the
+  result: both addons must appear as `/$bunfs/root/*.node`, and no build-machine path may remain.
+  Test "another machine" by hiding the local `.node` files while running the sidecar.
+- macOS signing: `bundle.macOS.signingIdentity: "-"` ad-hoc signs the **whole bundle** (sealed
+  resources and nested sidecar). Without it the main binary was only linker-signed, and Gatekeeper
+  assessed the sidecar separately, so downloaded copies hung or were killed. The hardened runtime
+  needs `Entitlements.plist`: allow-jit plus unsigned-executable-memory (JavaScriptCore), and
+  disable-library-validation (the embedded oxc addons). Without them the sidecar dies loading them.
+  `minimumSystemVersion` is 13.0 (Bun's minimum).
+- If the sidecar dies, `lib.rs` shows the reason (exit code/signal and the last stderr lines) on the
+  bundled loading page (`window.raeServerFailed`), with the quarantine fix command.
+- Downloaded builds are still quarantined and not notarized: users need right-click → Open, or
+  `xattr -dr com.apple.quarantine "/Applications/React App Explorer.app"`. A real fix needs a
+  Developer ID certificate plus notarization.
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the

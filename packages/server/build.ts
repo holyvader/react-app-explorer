@@ -79,6 +79,13 @@ const resolverNode = join(resolverPkg, `resolver.${platform}.node`);
 const version = (dir: string) => JSON.parse(require("node:fs").readFileSync(join(dir, "package.json"), "utf8")).version as string;
 const rewrite = (src: string, scope: string, node: string, v: string) =>
   src
+    // oxc-parser's loader is ESM with `const require = createRequire(import.meta.url)`: the bundler
+    // can't follow that require, so the .node path stayed a runtime string (pointing into the build
+    // machine's node_modules!). Use the bundler-visible `require` instead.
+    .replace(/^import \{ createRequire \} from ['"](node:)?module['"];?\s*$/m, "")
+    .replace(/^const require = createRequire\(import\.meta\.url\);?\s*$/m, "")
+    // the WebContainer fallback (browser-hosted Node only) reads its package.json by absolute path
+    .replace(/require\((['"])\.\/webcontainer-fallback\.c?js\1\)/g, "null")
     .replace(new RegExp(`require\\((['"])${scope}/binding-[a-z0-9-]+/package\\.json\\1\\)\\.version`, "g"), JSON.stringify(v))
     .replace(new RegExp(`require\\((['"])${scope}/binding-[a-z0-9-]+\\1\\)`, "g"), `require(${JSON.stringify(node)})`);
 const embedNative: Bun.BunPlugin = {
@@ -106,6 +113,18 @@ const out = await Bun.build({
 if (!out.success) {
   for (const l of out.logs) console.error(l);
   throw new Error("server compile failed");
+}
+
+// Guard: both addons must be embedded, and nothing may point into this machine's filesystem.
+{
+  const bin = await Bun.file(serverOut).text();
+  const embedded = [...new Set(bin.match(/\/\$bunfs\/root\/[\w.-]+\.node/g) ?? [])];
+  for (const name of [`parser.${platform}`, `resolver.${platform}`]) {
+    if (!embedded.some((e) => e.includes(name))) throw new Error(`${name}.node isn't embedded in the server (found: ${embedded.join(", ") || "none"})`);
+  }
+  for (const leak of [parserNode, resolverNode, repo]) {
+    if (bin.includes(leak)) throw new Error(`The server executable references a build-machine path: ${leak}`);
+  }
 }
 
 // 5. TypeScript 7's native binary + its lib.*.d.ts files (this tsgo build doesn't embed them and

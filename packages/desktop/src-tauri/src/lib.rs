@@ -11,6 +11,31 @@ struct Sidecar(Mutex<Option<CommandChild>>);
 
 const URL_PREFIX: &str = "RAE_SERVER_URL=";
 
+/// Shows why the sidecar stopped, on the loading page (navigating back to it if the viewer was open).
+fn show_failure(handle: &tauri::AppHandle, reason: &str, details: &str, navigated: bool) {
+    let Some(window) = handle.get_webview_window("main") else { return };
+    let script = format!(
+        "window.raeServerFailed && window.raeServerFailed({}, {})",
+        serde_json::to_string(reason).unwrap_or_default(),
+        serde_json::to_string(details).unwrap_or_default()
+    );
+    if navigated {
+        // the viewer is open: go back to the bundled page first (it defines raeServerFailed)
+        let home = if cfg!(windows) { "http://tauri.localhost/" } else { "tauri://localhost/" };
+        if let Ok(url) = Url::parse(home) {
+            let _ = window.navigate(url);
+        }
+    }
+    // the page may still be loading: try now and again shortly (the call is idempotent)
+    let _ = window.eval(&script);
+    std::thread::spawn(move || {
+        for ms in [400, 1500] {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+            let _ = window.eval(&script);
+        }
+    });
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -20,18 +45,27 @@ pub fn run() {
             let tsgo = app.path().resource_dir()?.join("tsgo").join(format!("tsc{}", std::env::consts::EXE_SUFFIX));
             let snapshots = app.path().app_data_dir()?.join("snapshots");
 
-            let (mut events, child) = app
+            let spawned = app
                 .shell()
                 .sidecar("rae-server")?
                 .args(["--port", "0", "--snapshots"])
                 .arg(snapshots)
                 .env("RAE_TSGO_PATH", tsgo)
-                .spawn()?;
+                .spawn();
+            let (mut events, child) = match spawned {
+                Ok(pair) => pair,
+                Err(e) => {
+                    show_failure(app.handle(), "It couldn't be started.", &e.to_string(), false);
+                    return Ok(());
+                }
+            };
             app.state::<Sidecar>().0.lock().unwrap().replace(child);
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut navigated = false;
+                // the sidecar's last stderr lines, shown if it dies
+                let mut stderr: Vec<String> = Vec::new();
                 while let Some(event) = events.recv().await {
                     match event {
                         CommandEvent::Stdout(line) if !navigated => {
@@ -44,12 +78,26 @@ pub fn run() {
                                 }
                             }
                         }
-                        CommandEvent::Stderr(line) => eprintln!("[rae-server] {}", String::from_utf8_lossy(&line).trim_end()),
-                        CommandEvent::Terminated(status) => {
-                            eprintln!("[rae-server] exited: {:?}", status.code);
-                            if let Some(window) = handle.get_webview_window("main") {
-                                let _ = window.eval("document.getElementById('msg') && (document.getElementById('msg').textContent = 'The local server stopped. Restart the app.')");
+                        CommandEvent::Stderr(line) => {
+                            let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                            eprintln!("[rae-server] {line}");
+                            stderr.push(line);
+                            if stderr.len() > 20 {
+                                stderr.remove(0);
                             }
+                        }
+                        CommandEvent::Error(e) => {
+                            stderr.push(e);
+                        }
+                        CommandEvent::Terminated(status) => {
+                            let reason = match (status.code, status.signal) {
+                                (_, Some(9)) => "It was killed by macOS (signal 9) — usually Gatekeeper blocking an app downloaded from the internet.".to_string(),
+                                (_, Some(sig)) => format!("It was stopped by signal {sig}."),
+                                (Some(code), _) => format!("It exited with code {code}."),
+                                _ => "It exited.".to_string(),
+                            };
+                            eprintln!("[rae-server] exited: {reason}");
+                            show_failure(&handle, &reason, &stderr.join("\n"), navigated);
                             break;
                         }
                         _ => {}
