@@ -2,11 +2,72 @@ import { Box, Collapsible, Flex, Text, type BoxProps } from "@chakra-ui/react";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-/** Side panel container (e.g. details sidebar). */
-export function Panel({ children, ...rest }: BoxProps) {
+export interface PanelResize {
+  width: number;
+  onWidthChange: (width: number) => void;
+  min?: number;
+  max?: number;
+  /** Double-clicking the handle goes back to this width. */
+  defaultWidth?: number;
+}
+
+/**
+ * Side panel container (e.g. details sidebar). With `resize`, its left edge is a drag handle
+ * (plain pointer events: no re-render storm, the width is reported as it changes).
+ */
+export function Panel({ children, resize, ...rest }: BoxProps & { resize?: PanelResize }) {
+  if (!resize) {
+    return (
+      <Box bg="bg.panel" borderLeftWidth="1px" borderColor="border.muted" h="full" overflowY="auto" {...rest}>
+        {children}
+      </Box>
+    );
+  }
+  const { width, onWidthChange, min = 320, max = 900, defaultWidth } = resize;
+  const clamp = (w: number) => Math.round(Math.min(Math.max(w, min), Math.min(max, window.innerWidth - 360)));
   return (
-    <Box bg="bg.panel" borderLeftWidth="1px" borderColor="border.muted" h="full" overflowY="auto" {...rest}>
-      {children}
+    <Box position="relative" h="full" flexShrink={0} style={{ width }}>
+      <Box
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize the sidebar (double-click to reset)"
+        aria-valuenow={width}
+        tabIndex={0}
+        position="absolute"
+        left="-3px"
+        top="0"
+        bottom="0"
+        w="6px"
+        zIndex="2"
+        cursor="col-resize"
+        css={{ "&:hover, &[data-dragging]": { background: "color-mix(in srgb, var(--chakra-colors-component-500) 45%, transparent)" }, transition: "background 0.15s" }}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          const el = e.currentTarget;
+          el.setPointerCapture(e.pointerId);
+          el.dataset.dragging = "";
+          const startX = e.clientX;
+          const startW = width;
+          const move = (ev: PointerEvent) => onWidthChange(clamp(startW + (startX - ev.clientX)));
+          const up = () => {
+            delete el.dataset.dragging;
+            el.removeEventListener("pointermove", move);
+            el.removeEventListener("pointerup", up);
+            el.removeEventListener("pointercancel", up);
+          };
+          el.addEventListener("pointermove", move);
+          el.addEventListener("pointerup", up);
+          el.addEventListener("pointercancel", up);
+        }}
+        onDoubleClick={() => defaultWidth && onWidthChange(clamp(defaultWidth))}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowLeft") onWidthChange(clamp(width + 24));
+          else if (e.key === "ArrowRight") onWidthChange(clamp(width - 24));
+        }}
+      />
+      <Box bg="bg.panel" borderLeftWidth="1px" borderColor="border.muted" h="full" overflowY="auto" {...rest}>
+        {children}
+      </Box>
     </Box>
   );
 }

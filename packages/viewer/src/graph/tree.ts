@@ -45,7 +45,7 @@ export function buildTree(s: Snapshot, filter: LibraryFilter): TreeNode[] {
     }
   }
   for (const n of Object.values(s.nodes)) {
-    if (n.kind !== "module") continue;
+    if (n.kind !== "module" || isFiltered(n, filter)) continue;
     const slash = n.filePath.lastIndexOf("/");
     const parent = slash < 0 || n.filePath.startsWith("..") ? root : folderFor(n.filePath.slice(0, slash));
     const decls = (declsOf.get(n.id) ?? []).sort((a, b) => (s.nodes[a.id!]?.loc?.line ?? 0) - (s.nodes[b.id!]?.loc?.line ?? 0));

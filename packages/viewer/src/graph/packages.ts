@@ -12,12 +12,19 @@ export function packageOf(specifier: string): string {
 
 export interface LibraryFilter {
   excluded: ReadonlySet<string>;
-  /** Hide every 3rd-party package (assets stay). */
+  /** Hide every 3rd-party package. */
   hideAll: boolean;
+  /** Show the project's asset files (CSS, images, JSON); hidden by default. */
+  showAssets?: boolean;
 }
 
-/** Whether a node is a 3rd-party library hidden by the filter. Assets (local css/svg) are never filtered. */
+/** A non-code project file: `asset` module nodes (and `asset:` externals in old snapshots). */
+export const isAsset = (node: GraphNode | undefined) => !!node && (node.asset === true || node.id.startsWith("asset:"));
+
+/** Whether a node is hidden by the filter: a 3rd-party library the user hid, or an asset while assets are off. */
 export function isFiltered(node: GraphNode | undefined, filter: LibraryFilter): boolean {
-  if (!node || node.kind !== "external" || node.id.startsWith("asset:")) return false;
+  if (!node) return false;
+  if (isAsset(node)) return !filter.showAssets;
+  if (node.kind !== "external") return false;
   return filter.hideAll || filter.excluded.has(packageOf(node.filePath));
 }

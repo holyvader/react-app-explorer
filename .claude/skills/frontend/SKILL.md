@@ -40,6 +40,22 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
+## Details sidebar & filters
+- The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
+  Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.
+- Uses / Used by are grouped by the other end's kind, most important first (`GROUP_ORDER`:
+  components, server actions, hooks, functions, types, files, libraries).
+- Types render through `TypeText`. Hovering shows a tooltip with the whole type plus the definitions
+  of the project types it names; the names are links that add the type (`node.typeRefs`, falling
+  back to a unique type node of that name). A type node's details show its definition.
+- Assets (`asset` modules, old `asset:` externals) are hidden unless the toolbar's Assets toggle is
+  on (`showAssets`, localStorage `rae.showAssets`): `isFiltered` applies everywhere the library
+  filter does.
+- Open in editor: `openInEditor(url)`. In a browser it follows the editor's URL scheme; in the
+  desktop app (`serverIsDesktop`, from the snapshot list's `desktop: true`) it POSTs `/api/open`,
+  and the server opens only editor schemes with the OS. Errors go to `notify()` (a notice over the
+  canvas): `alert()` doesn't work in the app's web view.
+
 ## Scanning from the UI
 - `lib/scanJob.ts` `startScan` reads the NDJSON stream into the store's `scan` state, so it outlives
   the dialog. `cancelScan` aborts the request, and the server then stops parsing or kills the type

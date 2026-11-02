@@ -40,6 +40,8 @@ export {
   Ungroup as IconUngroup,
   FolderTree as IconFolderTree,
   CircleCheck as IconDone,
+  Braces as IconType,
+  FileImage as IconAsset,
   TriangleAlert as IconWarning,
 } from "lucide-react";
 export type { LucideIcon as Icon } from "lucide-react";

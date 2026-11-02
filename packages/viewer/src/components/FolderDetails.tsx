@@ -14,12 +14,12 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconChevronsDown, IconArrowDown, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconRemoveWithContents } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconRemoveWithContents } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
-import { folderContents, folderPath } from "../graph/folder.ts";
+import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
 import { KIND_META } from "../lib/kinds.tsx";
-import { useExplorer } from "../store.ts";
+import { useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 
 /** Rows listed before "+N more" (the rest stays reachable via "Show the files inside"). */
 const MAX_FILES = 120;
@@ -27,9 +27,11 @@ const KIND_ORDER: NodeKind[] = ["module", "component", "hook", "function", "serv
 
 /** Details of a selected folder: what it contains, in the same visual language as other nodes. */
 export function FolderDetails({ id }: { id: string }) {
+  const sidebarWidth = useExplorer((s) => s.sidebarWidth);
+  const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const graph = useExplorer((s) => s.graph);
-  const { select, expandFolder, addNodes, hideNode, arrange } = useExplorer.getState();
+  const { select, expandFolder, addNodes, hideNode, arrange, showParentFolders } = useExplorer.getState();
   const path = folderPath(id);
   const c = useMemo(() => (snapshot ? folderContents(snapshot, path) : undefined), [snapshot, path]);
   const drawn = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
@@ -40,10 +42,12 @@ export function FolderDetails({ id }: { id: string }) {
   const declsIn = (fileId: string) => c.declarations.filter((d) => d.moduleId === fileId).length;
   const canFiles = c.files.some((f) => !drawn.has(f.id));
   const canAll = canFiles || c.declarations.some((d) => !drawn.has(d.id));
+  const canParent = parentFolders(id, false).some((x) => !drawn.has(x));
+  const canAllParents = parentFolders(id, true).filter((x) => !drawn.has(x)).length > 1;
   const missingSubs = c.subfolders.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`));
 
   return (
-    <Panel w="440px" flexShrink={0}>
+    <Panel resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}>
       <PanelHeader>
         <Flex gap="3" align="start">
           <KindTile kind="module" size={44} style={{ background: "var(--chakra-colors-bg-muted)", boxShadow: "inset 0 0 0 1px var(--chakra-colors-border)" }} color="fg.muted">
@@ -72,6 +76,8 @@ export function FolderDetails({ id }: { id: string }) {
             <IconChevronsDown size={15} /> Show everything inside
           </Button>
           <ActionIconButton label="Show the files inside" icon={<IconArrowDown />} size="sm" variant="outline" disabled={!canFiles} onClick={() => expandFolder(id, false)} />
+          <ActionIconButton label="Show the parent folder" icon={<IconArrowUp />} size="sm" variant="outline" disabled={!canParent} onClick={() => showParentFolders(id, false)} />
+          <ActionIconButton label="Show all parent folders up to the root" icon={<IconChevronsUp />} size="sm" variant="outline" disabled={!canAllParents} onClick={() => showParentFolders(id, true)} />
           <Box flex="1" />
           <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
             <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="xs" onClick={() => addNodes([], { focus: id })} />

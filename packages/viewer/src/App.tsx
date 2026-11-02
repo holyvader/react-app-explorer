@@ -7,6 +7,7 @@ import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
+import { Notice } from "./components/Notice.tsx";
 import { ScanProgress } from "./components/ScanProgress.tsx";
 import { SnapshotsModal } from "./components/SnapshotsModal.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
@@ -114,6 +115,7 @@ export function App() {
         <Flex flex="1" minH="0">
           <Box flex="1" position="relative">
             <ScanProgress />
+            <Notice />
             {loading ? (
               <Flex h="full" align="center" justify="center">
                 <Spinner />

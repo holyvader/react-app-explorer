@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { FileExtract } from "./extract/types.ts";
 
 /** Bump when extract output changes shape/semantics to invalidate caches. */
-export const EXTRACT_VERSION = 6; // 6: unresolved aliases are "missing" files, assets are files (not external)
+export const EXTRACT_VERSION = 7; // 7: type declarations (kind "type") and type references
 
 export function cachePath(rootDir: string) {
   return join(rootDir, ".explorer", "cache", `extract-v${EXTRACT_VERSION}.json`);

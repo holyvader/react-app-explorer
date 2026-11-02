@@ -54,3 +54,15 @@ export function folderExpansion(s: Snapshot, path: string, deep: boolean): strin
   const c = folderContents(s, path);
   return deep ? [...c.files, ...c.declarations].map((n) => n.id) : c.files.map((n) => n.id);
 }
+
+/** A folder's parent folder id (`dir:a/b` → `dir:a`), or all of its ancestors up to the project root. */
+export function parentFolders(id: string, all: boolean): string[] {
+  const out: string[] = [];
+  let path = folderPath(id);
+  for (let slash = path.lastIndexOf("/"); slash > 0; slash = path.lastIndexOf("/")) {
+    path = path.slice(0, slash);
+    out.push(`${FOLDER_PREFIX}${path}`);
+    if (!all) break;
+  }
+  return out;
+}

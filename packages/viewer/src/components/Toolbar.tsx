@@ -1,5 +1,5 @@
 import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, Text, ToolGroup, Tooltip } from "@rae/design-system";
-import { IconBrand, IconClear, IconFolderTree, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
+import { IconAsset, IconBrand, IconClear, IconFolderTree, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
 import { useRef } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
@@ -13,6 +13,7 @@ const GROUP_COLOR: Record<EdgeGroup, string> = {
   renders: "relation.renders",
   hooks: "relation.usesHook",
   invokes: "relation.invokes",
+  types: "relation.usesType",
 };
 
 export interface ToolbarProps {
@@ -33,9 +34,10 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
   const folders = useExplorer((s) => s.folders);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
+  const showAssets = useExplorer((s) => s.showAssets);
   const canUndo = useExplorer((s) => s.past.length > 0);
   const canRedo = useExplorer((s) => s.future.length > 0);
-  const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setFolders, undo, redo } = useExplorer.getState();
+  const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setFolders, setShowAssets, undo, redo } = useExplorer.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const options = (list?.snapshots ?? []).map((s) => ({
@@ -114,6 +116,11 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         <Tooltip content="Draw folders as frames around files">
           <Button size="xs" variant={folders ? "surface" : "ghost"} onClick={() => setFolders(!folders)} aria-pressed={folders} rounded="l2">
             <IconFolderTree size={14} /> Folders
+          </Button>
+        </Tooltip>
+        <Tooltip content={showAssets ? "Asset files (CSS, images, JSON) are shown" : "Show asset files (CSS, images, JSON)"}>
+          <Button size="xs" variant={showAssets ? "surface" : "ghost"} onClick={() => setShowAssets(!showAssets)} aria-pressed={showAssets} rounded="l2">
+            <IconAsset size={14} /> Assets
           </Button>
         </Tooltip>
         <Tooltip content={hideAllLibraries ? "All 3rd-party libraries hidden" : `${excluded.length} libraries hidden: ${excluded.join(", ") || "none"}`}>

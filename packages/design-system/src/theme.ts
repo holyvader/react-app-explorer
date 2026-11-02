@@ -66,6 +66,7 @@ const config = defineConfig({
           hook: kind("purple"),
           serverAction: kind("orange"),
           function: kind("teal"),
+          type: kind("green"),
           external: kind("yellow"),
         },
         boundary: {
@@ -83,6 +84,7 @@ const config = defineConfig({
           invokes: { value: "{colors.teal.500}" },
           invokesAction: { value: "{colors.orange.500}" },
           declares: { value: "{colors.gray.500}" },
+          usesType: { value: "{colors.green.600}" },
         },
         // Code tokens (props, signatures, hooks) — shared by the node tooltip and the sidebar.
         // Note: no token may be called `value` — Chakra reads any object with a `value` key as a token.
@@ -105,5 +107,5 @@ const config = defineConfig({
 
 export const system = createSystem(defaultConfig, config);
 
-export type NodeKindToken = "module" | "component" | "hook" | "serverAction" | "function" | "external";
+export type NodeKindToken = "module" | "component" | "hook" | "serverAction" | "function" | "type" | "external";
 export type BoundaryToken = "server" | "client" | "shared";

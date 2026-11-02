@@ -4,17 +4,22 @@ export interface SnapshotList {
   dir: string;
   /** The desktop app's server log (where scan failures are detailed); absent in dev. */
   logFile?: string;
+  /** Set by the desktop app's server. */
+  desktop?: boolean;
   snapshots: (Pick<SnapshotIndexEntry, "file" | "createdAt"> & Partial<SnapshotIndexEntry>)[];
 }
 
 /** The server's log file, once known (the desktop app reports it with the snapshot list). */
 export let serverLogFile: string | undefined;
+/** Whether the viewer runs in the desktop app (its server says so with the snapshot list). */
+export let serverIsDesktop = false;
 
 export async function fetchSnapshotList(): Promise<SnapshotList> {
   const res = await fetch("/api/snapshots/");
   if (!res.ok) throw new Error(`Failed to list snapshots (${res.status})`);
   const list = (await res.json()) as SnapshotList;
   serverLogFile = list.logFile;
+  serverIsDesktop = list.desktop === true;
   return list;
 }
 

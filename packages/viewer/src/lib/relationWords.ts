@@ -25,6 +25,8 @@ export function relationWord(e: GraphEdge): string {
       return "server action";
     case "declares":
       return "declares";
+    case "usesType":
+      return "uses type";
   }
 }
 
@@ -43,5 +45,7 @@ export function relationToken(e: GraphEdge): string {
       return "relation.invokesAction";
     case "declares":
       return "relation.declares";
+    case "usesType":
+      return "relation.usesType";
   }
 }

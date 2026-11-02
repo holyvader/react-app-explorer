@@ -31,37 +31,41 @@ import {
 import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
-import { editorUrl } from "../lib/editor.ts";
+import { editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
-import { relationFilterOf, useExplorer } from "../store.ts";
+import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { RenderTree } from "./RenderTree.tsx";
+import { TypeText } from "./TypeText.tsx";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
  * tooltip: the kind's icon tile, code-coloured props/signatures, tinted chips, relation colours.
  */
 export function DetailsPanel() {
+  const sidebarWidth = useExplorer((s) => s.sidebarWidth);
+  const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const index = useExplorer((s) => s.index);
   const selectedId = useExplorer((s) => s.selectedId);
   const enabled = useExplorer((s) => s.enabled);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
+  const showAssets = useExplorer((s) => s.showAssets);
   const editor = useExplorer((s) => s.editor);
   const { select, expand, addNodes } = useExplorer.getState();
   const node = selectedId ? snapshot?.nodes[selectedId] : undefined;
 
   const relations = useMemo(() => {
     if (!snapshot || !index || !node) return { parents: [], children: [] };
-    const filter = relationFilterOf({ enabled, excluded, hideAllLibraries });
+    const filter = relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets });
     return {
       parents: parentEdges(snapshot, index, node.id, filter),
       children: childEdges(snapshot, index, node.id, filter),
     };
-  }, [snapshot, index, node, enabled, excluded, hideAllLibraries]);
+  }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets]);
 
   // Folders aren't scanned nodes: they get their own details (what they contain).
   if (selectedId && isFolder(selectedId)) return <FolderDetails id={selectedId} />;
@@ -70,12 +74,12 @@ export function DetailsPanel() {
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
-  const caption = [meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
   return (
-    <Panel w="440px" flexShrink={0}>
+    <Panel resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}>
       <PanelHeader>
         <Flex gap="3" align="start">
           <KindTile kind={node.kind} size={44}>
@@ -129,10 +133,8 @@ export function DetailsPanel() {
 
         <Flex mt="4" gap="2" align="center">
           {open && (
-            <Button asChild size="sm" variant="solid" rounded="l2">
-              <a href={open}>
-                <IconOpen size={15} /> Open in editor
-              </a>
+            <Button size="sm" variant="solid" rounded="l2" onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}>
+              <IconOpen size={15} /> Open in editor
             </Button>
           )}
           <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />
@@ -146,6 +148,14 @@ export function DetailsPanel() {
         </Flex>
       </PanelHeader>
 
+      {node.kind === "type" && node.typeText && (
+        <PanelSection title="Definition">
+          <Box bg="syntax.bg" rounded="l2" px="3" py="2.5" fontFamily="mono" fontSize="xs" lineHeight="1.7" borderWidth="1px" borderColor="border.muted" overflowX="auto">
+            <TypeText text={node.typeText} owner={node} block />
+          </Box>
+        </PanelSection>
+      )}
+
       {node.props && node.props.length > 0 && (
         <PanelSection title="Props" count={node.props.length}>
           <Stack gap="0.5">
@@ -153,7 +163,7 @@ export function DetailsPanel() {
               <CodeRow key={p.name}>
                 <CodeToken kind="name">{p.name}</CodeToken>
                 <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
-                <CodeToken kind="type">{p.type ?? "unknown"}</CodeToken>
+                <TypeText text={p.type ?? "unknown"} owner={node} />
                 {p.default && (
                   <>
                     <CodeToken kind="punct"> = </CodeToken>
@@ -193,7 +203,7 @@ export function DetailsPanel() {
                       {h.returnType && (
                         <>
                           <CodeToken kind="punct">{h.assignedTo ? ": " : "→ "}</CodeToken>
-                          <CodeToken kind="type">{h.returnType}</CodeToken>
+                          <TypeText text={h.returnType} owner={node} />
                         </>
                       )}
                     </CodeRow>
@@ -233,12 +243,12 @@ export function DetailsPanel() {
                 {f.isAsync && <CodeToken kind="keyword">async </CodeToken>}
                 <CodeToken kind="name">{f.name}</CodeToken>
                 <CodeToken kind="punct">(</CodeToken>
-                <Params params={f.params} />
+                <Params params={f.params} owner={node} />
                 <CodeToken kind="punct">)</CodeToken>
                 {f.returnType && (
                   <>
                     <CodeToken kind="punct">: </CodeToken>
-                    <CodeToken kind="type">{f.returnType}</CodeToken>
+                    <TypeText text={f.returnType} owner={node} />
                   </>
                 )}
               </CodeRow>
@@ -308,7 +318,7 @@ function CodeRow({ children, aside, indent }: { children: ReactNode; aside?: str
   );
 }
 
-function Params({ params }: { params: ParamDef[] }) {
+function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
   return (
     <>
       {params.map((p, i) => (
@@ -318,7 +328,7 @@ function Params({ params }: { params: ParamDef[] }) {
           {p.type && (
             <>
               <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-              <CodeToken kind="type">{p.type}</CodeToken>
+              <TypeText text={p.type} owner={owner} />
             </>
           )}
           {p.default && (
@@ -344,14 +354,14 @@ function Signature({ node }: { node: GraphNode }) {
         <Box pl="4">
           {sig.params.map((p, i) => (
             <Box key={i} wordBreak="break-word">
-              <Params params={[p]} />
+              <Params params={[p]} owner={node} />
               {i < sig.params.length - 1 && <CodeToken kind="punct">,</CodeToken>}
             </Box>
           ))}
         </Box>
       )}
       <CodeToken kind="punct">): </CodeToken>
-      <CodeToken kind="type">{sig.returnType ?? "unknown"}</CodeToken>
+      <TypeText text={sig.returnType ?? "unknown"} owner={node} />
     </Box>
   );
 }
@@ -379,6 +389,17 @@ function NodeChip({ id, anchor, suffix }: { id: string; anchor: string; suffix?:
   );
 }
 
+/** Relation groups, most important first: what renders and runs before files and packages. */
+const GROUP_ORDER: { kinds: string[]; label: string }[] = [
+  { kinds: ["component"], label: "Components" },
+  { kinds: ["serverAction"], label: "Server actions" },
+  { kinds: ["hook"], label: "Hooks" },
+  { kinds: ["function"], label: "Functions" },
+  { kinds: ["type"], label: "Types" },
+  { kinds: ["module"], label: "Files" },
+  { kinds: ["external"], label: "Libraries" },
+];
+
 function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
   const snapshot = useExplorer((s) => s.snapshot);
   const selectedId = useExplorer((s) => s.selectedId);
@@ -388,49 +409,78 @@ function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
         Nothing
       </Text>
     );
+  // grouped by the other end's kind, groups in importance order, entries by name
+  const groups = GROUP_ORDER.map((g) => ({
+    ...g,
+    edges: edges
+      .filter((e) => g.kinds.includes(snapshot?.nodes[e[side]]?.kind ?? ""))
+      .sort((a, b) => (snapshot?.nodes[a[side]]?.name ?? "").localeCompare(snapshot?.nodes[b[side]]?.name ?? "")),
+  })).filter((g) => g.edges.length);
   return (
-    <Stack gap="1">
-      {edges.map((e, i) => {
-        const other = snapshot?.nodes[e[side]];
-        if (!other) return null;
-        const Icon = KIND_META[other.kind].icon;
-        return (
-          <Flex
-            key={i}
-            as="button"
-            gap="2.5"
-            align="center"
-            textAlign="left"
-            px="2"
-            py="1.5"
-            mx="-2"
-            rounded="l2"
-            transition="background 150ms ease"
-            _hover={{ bg: "bg.subtle" }}
-            onClick={() => useExplorer.getState().addNodes([other.id], { select: other.id, focus: other.id, anchor: selectedId })}
-          >
-            <KindTile kind={other.kind} size={26}>
-              <Icon size={13} strokeWidth={2.4} />
-            </KindTile>
-            <Box flex="1" minW="0">
-              <Flex align="center" gap="2" minW="0">
-                <Text fontSize="sm" fontWeight="medium" truncate>
-                  {other.name}
-                </Text>
-                <TagChip color={relationToken(e)}>{relationWord(e)}</TagChip>
-              </Flex>
-              <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
-                {e.specifiers?.length ? e.specifiers.join(", ") : other.kind === "external" ? "library" : other.filePath}
+    <Stack gap="3">
+      {groups.map((g) => (
+        <Box key={g.label}>
+          {groups.length > 1 && (
+            <Flex align="center" gap="1.5" mb="1">
+              <Eyebrow>{g.label}</Eyebrow>
+              <Text fontSize="2xs" color="fg.subtle" fontWeight="medium">
+                {g.edges.length}
               </Text>
-              {e.conditions && (
-                <Text fontSize="xs" color="syntax.literal" fontFamily="mono" truncate title={e.conditions.map(formatCondition).join(" ∧ ")}>
-                  when {e.conditions.map(formatCondition).join(" ∧ ")}
-                </Text>
-              )}
-            </Box>
-          </Flex>
-        );
-      })}
+            </Flex>
+          )}
+          <Stack gap="1">
+            {g.edges.map((e, i) => (
+              <RelationRow key={`${e[side]}-${e.kind}-${i}`} e={e} side={side} selectedId={selectedId} />
+            ))}
+          </Stack>
+        </Box>
+      ))}
     </Stack>
+  );
+}
+
+function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; selectedId?: string }) {
+  const other = useExplorer((s) => s.snapshot?.nodes[e[side]]);
+  if (!other) return null;
+  const Icon = KIND_META[other.kind].icon;
+  return (
+    <Flex
+      as="button"
+      gap="2.5"
+      align="center"
+      textAlign="left"
+      px="2"
+      py="1.5"
+      mx="-2"
+      rounded="l2"
+      transition="background 150ms ease"
+      _hover={{ bg: "bg.subtle" }}
+      onClick={() => useExplorer.getState().addNodes([other.id], { select: other.id, focus: other.id, anchor: selectedId })}
+    >
+      <KindTile kind={other.kind} size={26}>
+        <Icon size={13} strokeWidth={2.4} />
+      </KindTile>
+      <Box flex="1" minW="0">
+        <Flex align="center" gap="2" minW="0">
+          <Text fontSize="sm" fontWeight="medium" truncate>
+            {other.name}
+          </Text>
+          <TagChip color={relationToken(e)}>{relationWord(e)}</TagChip>
+          {fileNote(other) && (
+            <Text as="span" fontSize="2xs" color="fg.subtle">
+              {fileNote(other)}
+            </Text>
+          )}
+        </Flex>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
+          {e.specifiers?.length ? e.specifiers.join(", ") : other.kind === "external" ? "library" : other.filePath}
+        </Text>
+        {e.conditions && (
+          <Text fontSize="xs" color="syntax.literal" fontFamily="mono" truncate title={e.conditions.map(formatCondition).join(" ∧ ")}>
+            when {e.conditions.map(formatCondition).join(" ∧ ")}
+          </Text>
+        )}
+      </Box>
+    </Flex>
   );
 }

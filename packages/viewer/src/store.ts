@@ -2,7 +2,7 @@ import type { Snapshot } from "@rae/schema";
 import { create } from "zustand";
 import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
-import { folderExpansion, folderPath } from "./graph/folder.ts";
+import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, placeLocally } from "./graph/placement.ts";
 import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
@@ -29,6 +29,9 @@ export interface DiagramState {
 }
 
 const HISTORY_LIMIT = 100;
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+/** The details sidebar's default width (px). */
+export const SIDEBAR_WIDTH = 440;
 
 /** A scan started from the UI: structure first (the dialog), then types in the background. */
 export interface ScanState {
@@ -64,6 +67,12 @@ interface ExplorerState {
   /** Library filter: packages hidden everywhere (canvas, search, relations). */
   excluded: string[];
   hideAllLibraries: boolean;
+  /** Asset files (CSS, images, JSON) on the canvas and in lists; off by default. */
+  showAssets: boolean;
+  /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
+  notice?: string;
+  /** The details sidebar's width (px), kept between visits. */
+  sidebarWidth: number;
   /** Draw folders as frames around file modules. */
   folders: boolean;
   editor: EditorKind;
@@ -105,10 +114,15 @@ interface ExplorerState {
   expand: (id: string, dir: "parents" | "children", deep: boolean) => void;
   /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
   expandFolder: (id: string, deep: boolean) => void;
+  /** Folders: add the parent folder, or every folder above it up to the project root. */
+  showParentFolders: (id: string, all: boolean) => void;
   confirmPending: () => void;
   cancelPending: () => void;
   toggleGroup: (g: EdgeGroup) => void;
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
+  setShowAssets: (on: boolean) => void;
+  setSidebarWidth: (width: number) => void;
+  notify: (message: string | undefined) => void;
   setFolders: (on: boolean) => void;
   relayout: () => void;
   applyLayout: (graph: DrawnGraph, placed: PlacedElement[]) => void;
@@ -123,7 +137,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", assets: "rae.showAssets", sidebar: "rae.sidebarWidth" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -133,9 +147,9 @@ const readJson = <T,>(key: string, fallback: T): T => {
   }
 };
 
-export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries">): RelationFilter => ({
+export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets">): RelationFilter => ({
   enabled: s.enabled,
-  libraries: { excluded: new Set(s.excluded), hideAll: s.hideAllLibraries },
+  libraries: { excluded: new Set(s.excluded), hideAll: s.hideAllLibraries, showAssets: s.showAssets },
 });
 
 const EMPTY: DrawnGraph = { elements: [], relations: [] };
@@ -197,9 +211,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     menu: null,
     past: [],
     future: [],
-    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true },
+    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true },
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
+    showAssets: readJson(KEYS.assets, false),
+    sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
     folders: readJson(KEYS.folders, true),
     editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
     searchOpen: false,
@@ -346,6 +362,12 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id });
     },
 
+    showParentFolders: (id, all) => {
+      const drawnNow = new Set(get().graph.elements.map((e) => e.id));
+      const ids = parentFolders(id, all).filter((x) => !drawnNow.has(x));
+      if (ids.length) get().addNodes(ids, { anchor: id });
+    },
+
     expandFolder: (id, deep) => {
       const s = get();
       if (!s.snapshot) return;
@@ -361,6 +383,22 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     cancelPending: () => set({ pending: undefined }),
 
     toggleGroup: (g) => redraw({ enabled: { ...get().enabled, [g]: !get().enabled[g] } }, null),
+
+    notify: (message) => {
+      clearTimeout(noticeTimer);
+      set({ notice: message });
+      if (message) noticeTimer = setTimeout(() => set({ notice: undefined }), 7000);
+    },
+
+    setSidebarWidth: (width) => {
+      localStorage.setItem(KEYS.sidebar, JSON.stringify(width));
+      set({ sidebarWidth: width });
+    },
+
+    setShowAssets: (on) => {
+      localStorage.setItem(KEYS.assets, JSON.stringify(on));
+      redraw({ showAssets: on }, null);
+    },
 
     setLibraryFilter: ({ excluded, hideAllLibraries }) => {
       if (excluded) localStorage.setItem(KEYS.excluded, JSON.stringify(excluded));

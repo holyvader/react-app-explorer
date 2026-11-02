@@ -8,7 +8,7 @@ export type NodeId = string;
 
 export type Framework = "next-app" | "next-pages" | "react";
 
-export type NodeKind = "module" | "component" | "hook" | "serverAction" | "function" | "external";
+export type NodeKind = "module" | "component" | "hook" | "serverAction" | "function" | "type" | "external";
 
 export type ModuleType = "server" | "client" | "shared";
 
@@ -113,6 +113,14 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** Type declarations (`kind: "type"`): the declaration as written — the type's full preview. */
+  typeText?: string;
+  typeKind?: "interface" | "type" | "enum";
+  /**
+   * Named types this declaration's annotations refer to, by the name used in its source → the node
+   * they resolve to (a `type` node, or an external package for library types). Lets UIs link type text.
+   */
+  typeRefs?: Record<string, NodeId>;
   /** A project file that isn't source code (CSS, images, JSON…): a module node without declarations. */
   asset?: boolean;
   /** A project file that's imported but doesn't exist (a tsconfig alias or relative path to nothing). */
@@ -142,7 +150,8 @@ export interface GraphNode {
  * - invokesAction: the same, when the target is a server action.
  * (Schema v1 named these `calls` / `callsAction`.)
  */
-export type EdgeKind = "imports" | "declares" | "renders" | "invokes" | "usesHook" | "invokesAction";
+/** `usesType`: a declaration's annotations (props, params, return type, extends…) refer to a type declaration. */
+export type EdgeKind = "imports" | "declares" | "renders" | "invokes" | "usesHook" | "invokesAction" | "usesType";
 
 export type ImportType = "static" | "dynamic" | "lazy" | "next-dynamic" | "type-only" | "reexport";
 

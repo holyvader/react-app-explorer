@@ -23,6 +23,8 @@ function outline(kind: string, w: number, h: number): { d: string; fold?: string
         d: `M${I + 10},${I} H${w - 18} L${w - I},18 V${h - I - 10} A10,10 0 0 1 ${w - I - 10},${h - I} H${I + 10} A10,10 0 0 1 ${I},${h - I - 10} V${I + 10} A10,10 0 0 1 ${I + 10},${I} Z`,
         fold: `M${w - 18},${I} V12 Q${w - 18},18 ${w - 12},18 H${w - I}`,
       };
+    case "type": // squarer corners: a definition, not code that runs
+      return { d: r(7) };
     case "function": // solid pill
     case "external": // dashed pill
       return { d: r(h) };

@@ -170,6 +170,15 @@ function content(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
         </>
       );
     }
+    case "type":
+      return (
+        <>
+          <Section label={n.typeKind === "interface" ? "Interface" : n.typeKind === "enum" ? "Enum" : "Type"}>
+            <pre className="rae-tip__code rae-tip__pre">{(n.typeText ?? "").split("\n").slice(0, 14).join("\n")}{(n.typeText ?? "").split("\n").length > 14 ? "\n…" : ""}</pre>
+          </Section>
+          <div className="rae-tip__foot">Used by {new Set(inc.filter((e) => e.kind === "usesType").map((e) => e.from)).size} declarations</div>
+        </>
+      );
     case "external": {
       const names = [...new Set(inc.flatMap((e) => e.specifiers ?? []))];
       return (

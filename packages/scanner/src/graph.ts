@@ -74,7 +74,9 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         directives: d.directives.length ? d.directives : undefined,
         nextRole: exportNames?.includes("default") ? nodes[id]!.nextRole : undefined,
         props: d.props,
-        signature: { params: d.params, returnType: d.returnType },
+        signature: d.kind === "type" ? undefined : { params: d.params, returnType: d.returnType },
+        typeText: d.typeText,
+        typeKind: d.typeKind,
         functions: d.functions.length ? d.functions.map(({ pos: _pos, ...fn }) => fn) : undefined,
       };
     }
@@ -237,6 +239,17 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       const did = declId(f.absPath, d.local);
       const node = nodes[did]!;
       addEdge({ from: mid, to: did, kind: "declares" });
+      // type references: link the names to their declarations (through imports), as usesType relations
+      if (d.typeRefs?.length) {
+        const refs: Record<string, NodeId> = {};
+        for (const name of d.typeRefs) {
+          const t = resolveLocal(f, name);
+          if (!t || !nodes[t.id]) continue;
+          refs[name] = t.id;
+          if (nodes[t.id]!.kind === "type") addEdge({ from: did, to: t.id, kind: "usesType" });
+        }
+        if (Object.keys(refs).length) node.typeRefs = refs;
+      }
 
       // hooks
       const hooksUsed: HookUsage[] = [];

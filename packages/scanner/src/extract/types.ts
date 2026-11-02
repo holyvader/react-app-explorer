@@ -75,7 +75,7 @@ export interface RawRef {
   conditions?: Condition[];
 }
 
-export type DeclKind = "component" | "hook" | "serverAction" | "function";
+export type DeclKind = "component" | "hook" | "serverAction" | "function" | "type";
 
 export interface DeclExtract {
   local: string;
@@ -93,6 +93,11 @@ export interface DeclExtract {
   renders: RawRef[];
   renderTree: RawJsxNode[];
   directives: string[];
+  /** Type declarations: the declaration as written (the preview), and what kind of declaration. */
+  typeText?: string;
+  typeKind?: "interface" | "type" | "enum";
+  /** Names of types this declaration refers to in its type annotations (resolved in the graph). */
+  typeRefs?: string[];
 }
 
 export interface FileExtract {

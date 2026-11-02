@@ -83,6 +83,34 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
   const types = new Map<string, TypeMember[]>();
   const candidates: Candidate[] = [];
 
+  /**
+   * Names of the types referred to inside some type positions: `Foo`, `Foo<Bar>`, `ns.Foo` (→ `ns`),
+   * `typeof x`, `interface A extends B`. Generic parameters (`T`) and the declaration itself are left out.
+   */
+  const typeRefsIn = (roots: N[], self?: string): string[] => {
+    const found = new Set<string>();
+    const params = new Set<string>();
+    const leftmost = (n: N): string | undefined => (n?.type === "Identifier" ? n.name : n?.type === "TSQualifiedName" || n?.type === "MemberExpression" ? leftmost(n.left ?? n.object) : undefined);
+    for (const root of roots) {
+      walk(root, (n) => {
+        if (n.type === "TSTypeParameter" && n.name) params.add(typeof n.name === "string" ? n.name : n.name.name);
+        else if (n.type === "TSTypeReference") {
+          const name = leftmost(n.typeName);
+          if (name) found.add(name);
+        } else if (n.type === "TSTypeQuery") {
+          const name = leftmost(n.exprName);
+          if (name) found.add(name);
+        } else if (n.type === "TSInterfaceHeritage" || n.type === "TSClassImplements") {
+          const name = leftmost(n.expression);
+          if (name) found.add(name);
+        }
+      });
+    }
+    for (const p of params) found.delete(p);
+    if (self) found.delete(self);
+    return [...found];
+  };
+
   const declNames = (decl: N): string[] => {
     if (!decl) return [];
     if (decl.id?.type === "Identifier") return [decl.id.name];
@@ -200,13 +228,40 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
         break;
       case "TSInterfaceDeclaration":
         types.set(decl.id.name, typeMembers(decl.body?.body ?? []));
+        typeDecl(decl, "interface");
         break;
       case "TSTypeAliasDeclaration":
         if (decl.typeAnnotation?.type === "TSTypeLiteral") types.set(decl.id.name, typeMembers(decl.typeAnnotation.members));
+        typeDecl(decl, "type");
+        break;
+      case "TSEnumDeclaration":
+        typeDecl(decl, "enum");
         break;
       default:
         break;
     }
+  }
+
+  /** A type declaration becomes a declaration of kind "type": its text is the preview, its refs link to other types. */
+  function typeDecl(decl: N, typeKind: "interface" | "type" | "enum") {
+    if (!decl.id?.name) return;
+    out.decls.push({
+      local: decl.id.name,
+      kind: "type",
+      isAsync: false,
+      loc: src.loc(decl.id.start),
+      pos: decl.id.start,
+      params: [],
+      hooks: [],
+      functions: [],
+      calls: [],
+      renders: [],
+      renderTree: [],
+      directives: [],
+      typeText: src.raw(decl),
+      typeKind,
+      typeRefs: typeRefsIn([decl.typeAnnotation, decl.body, decl.extends, decl.typeParameters], decl.id.name),
+    });
   }
 
   function typeMembers(members: N[]): TypeMember[] {
@@ -301,6 +356,10 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       directives,
     };
     if (kind === "component" && c.fn?.params[0]) decl.props = propsOf(c.fn.params[0]);
+    if (c.fn) {
+      const refs = typeRefsIn([...c.fn.params, c.fn.returnType, c.fn.typeParameters]);
+      if (refs.length) decl.typeRefs = refs;
+    }
 
     const body = c.fn ? c.fn.body : c.cls?.body;
     collectBody(body, decl);

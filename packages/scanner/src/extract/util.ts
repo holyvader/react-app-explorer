@@ -62,6 +62,15 @@ export class SourceText {
     }
     return { line: lo + 1, col: offset - this.lineStarts[lo]! + 1 };
   }
+  /** Source text as written (line breaks kept, common indentation removed), truncated. For previews. */
+  raw(n: N, max = 4000): string {
+    if (!n) return "";
+    const lines = this.text.slice(n.start, n.end).split("\n");
+    const indent = Math.min(...lines.slice(1).filter((l) => l.trim()).map((l) => l.match(/^\s*/)![0].length), Infinity);
+    const s = [lines[0], ...lines.slice(1).map((l) => (Number.isFinite(indent) ? l.slice(indent) : l))].join("\n").trimEnd();
+    return s.length > max ? s.slice(0, max - 1) + "…" : s;
+  }
+
   /** Source slice with whitespace collapsed and truncated. */
   slice(n: N, max = 160): string {
     if (!n) return "";

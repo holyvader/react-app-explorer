@@ -31,15 +31,16 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const snapshot = useExplorer((s) => s.snapshot);
   const excluded = useExplorer((s) => s.excluded);
   const hideAll = useExplorer((s) => s.hideAllLibraries);
+  const showAssets = useExplorer((s) => s.showAssets);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const list = useRef<HTMLDivElement>(null);
 
   const roots = useMemo(() => {
     if (!snapshot) return [];
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true }, excluded, hideAllLibraries: hideAll });
+    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true }, excluded, hideAllLibraries: hideAll, showAssets });
     return buildTree(snapshot, f.libraries);
-  }, [snapshot, excluded, hideAll]);
+  }, [snapshot, excluded, hideAll, showAssets]);
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);
 
   const toggleOpen = (key: string, to?: boolean) =>

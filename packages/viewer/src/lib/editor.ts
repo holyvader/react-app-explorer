@@ -1,3 +1,5 @@
+import { serverIsDesktop } from "./api.ts";
+
 export type EditorKind = "idea" | "webstorm" | "vscode" | "cursor";
 
 export const EDITORS: { value: EditorKind; label: string }[] = [
@@ -19,4 +21,17 @@ export function editorUrl(editor: EditorKind, absPath: string, line = 1, col = 1
     case "idea":
       return `idea://open?file=${encodeURIComponent(absPath)}&line=${line}&column=${col}`;
   }
+}
+
+/**
+ * Opens a file in the editor. In a browser the editor's URL scheme (idea://, vscode://…) is simply
+ * followed; the desktop app's web view won't open other apps' schemes, so its server asks the OS.
+ */
+export async function openInEditor(url: string): Promise<void> {
+  if (!serverIsDesktop) {
+    window.location.href = url;
+    return;
+  }
+  const res = await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Couldn't open the editor (${res.status})`);
 }

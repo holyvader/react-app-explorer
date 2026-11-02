@@ -14,8 +14,8 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FOLDER_PREFIX } from "../graph/drawn.ts";
-import { folderExpansion, folderPath } from "../graph/folder.ts";
+import { FOLDER_PREFIX, isFolder } from "../graph/drawn.ts";
+import { folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
 import { childEdges, hasUndrawn, parentEdges } from "../graph/relations.ts";
@@ -55,6 +55,8 @@ function edgeLook(e: GraphEdge): { className: string; color: string } {
       return { className: "rae-edge rae-edge--invokesAction", color: cssVar("kind.serverAction.solid") };
     case "declares":
       return { className: "rae-edge rae-edge--declares", color: cssVar("kind.module.muted") };
+    case "usesType":
+      return { className: "rae-edge rae-edge--usesType", color: cssVar("relation.usesType") };
   }
 }
 
@@ -66,7 +68,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ["Double-click"], does: "Zoom in (also inside a frame)" },
   { keys: ["Drag"], does: "Pan, also inside a file or folder frame" },
   { keys: ["⌘", "Ctrl"], does: "With a click, add to the selection" },
-  { keys: ["⌘ A", "Ctrl A"], does: "Select every element in sight" },
+  { keys: ["⌘ A", "Ctrl A"], does: "Select every element on the diagram" },
   { keys: ["Delete", "⌫"], does: "Remove the selected elements" },
   { keys: ["⌘ Z", "Ctrl Z"], does: "Undo a step" },
   { keys: ["⇧ ⌘ Z", "Ctrl Y"], does: "Redo it" },
@@ -141,7 +143,8 @@ export function Canvas() {
     };
   }, [layoutToken, applyLayout, flow]);
 
-  const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries }), [enabled, excluded, hideAllLibraries]);
+  const showAssets = useExplorer((s) => s.showAssets);
+  const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets }), [enabled, excluded, hideAllLibraries, showAssets]);
 
   // Scanned elements (files + declarations) under each folder, for folder headers.
   const scannedUnder = useMemo(() => {
@@ -210,8 +213,9 @@ export function Canvas() {
             : id.startsWith(FOLDER_PREFIX)
               ? // folders: "children" = the files inside, "all children" = files and their declarations
                 {
-                  parents: false,
-                  allParents: false,
+                  // parents = the folders above it, up to the project root
+                  parents: parentFolders(id, false).some((x) => !drawn.has(x)),
+                  allParents: parentFolders(id, true).filter((x) => !drawn.has(x)).length > 1,
                   children: folderExpansion(snapshot, folderPath(id), false).some((x) => !drawn.has(x)),
                   allChildren: folderExpansion(snapshot, folderPath(id), true).some((x) => !drawn.has(x)),
                 }
@@ -422,20 +426,9 @@ export function Canvas() {
         e.preventDefault();
         s.setSearchOpen(true);
       } else if (mod && key === "a" && !e.altKey) {
-        // Every element in sight.
+        // Every element on the diagram — folders included.
         e.preventDefault();
-        const { x, y, zoom } = flow.getViewport();
-        const box = document.querySelector(".rae-canvas")?.getBoundingClientRect();
-        if (!box) return;
-        const view = { x: -x / zoom, y: -y / zoom, w: box.width / zoom, h: box.height / zoom };
-        const ids = s.placed
-          .filter((p) => s.snapshot?.nodes[p.element.id])
-          .filter((p) => {
-            const r = absoluteRect(s.placed, p.element.id)!;
-            return r.x + r.width > view.x && r.x < view.x + view.w && r.y + r.height > view.y && r.y < view.y + view.h;
-          })
-          .map((p) => p.element.id);
-        s.selectMany(ids);
+        s.selectMany(s.placed.map((p) => p.element.id).filter((id) => isFolder(id) || !!s.snapshot?.nodes[id]));
       } else if (mod && !e.altKey && (key === "z" || key === "y")) {
         e.preventDefault();
         if (key === "z" && !e.shiftKey) s.undo();

@@ -94,7 +94,8 @@ export async function applyTypes(
     signal?: AbortSignal;
   },
 ): Promise<TypesResult> {
-  const todo = files.filter((f) => f.decls.length && f.typesKey !== opts.keyOf(f));
+  // type declarations need no checker: their text is the preview
+  const todo = files.filter((f) => f.decls.some((d) => d.kind !== "type") && f.typesKey !== opts.keyOf(f));
   const res: TypesResult = { queried: 0, skipped: files.length - todo.length, failed: 0 };
   if (!todo.length) return res;
 
@@ -263,7 +264,7 @@ function makeProcessor(checker: Checker, keyOf: (f: FileExtract) => string) {
     // Collect all positions for one batched request.
     const positions: number[] = [];
     const slot = (pos: number) => positions.push(pos) - 1;
-    const plan = f.decls.map((d) => ({
+    const plan = f.decls.filter((d) => d.kind !== "type").map((d) => ({
       d,
       self: slot(d.pos),
       fns: d.functions.map((fn) => slot(fn.pos)),

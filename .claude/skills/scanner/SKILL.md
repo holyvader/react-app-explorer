@@ -32,7 +32,11 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
 2. oxc offsets are UTF-16 and match what tsgo positions expect. Pass `node.start` directly.
 3. tsgo: collect all positions per file and send **one** `checker.getTypeAtPosition(file, positions[])`. Pipeline follow-ups with `Promise.all`; never `await` in a per-node loop. Clip type strings (`MAX_TYPE`).
 4. Keep the extractor syntactic and worker-safe: plain serializable output, no closures, no class instances.
-5. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
+5. **Type declarations** (interface / type alias / enum) are declarations of kind `type`. `typeText`
+   is the declaration as written (`SourceText.raw`, the UI's preview) and `typeKind` says which kind.
+   Every declaration records `typeRefs` (names in its annotations → node ids, resolved through
+   imports) and `usesType` edges to type nodes. The tsgo pass skips `type` declarations.
+6. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else
    is the project's own:
    - local non-source files are `module` nodes with `asset: true`;

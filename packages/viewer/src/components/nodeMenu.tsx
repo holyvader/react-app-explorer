@@ -17,10 +17,10 @@ import {
   IconUnwrap,
 } from "@rae/design-system/icons";
 import { FOLDER_PREFIX, isFolder } from "../graph/drawn.ts";
-import { folderContents, folderExpansion, folderPath } from "../graph/folder.ts";
+import { folderContents, folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { hasUndrawn } from "../graph/relations.ts";
-import { editorUrl } from "../lib/editor.ts";
+import { editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
 
@@ -31,6 +31,7 @@ const RELATIONS: { kinds: EdgeKind[]; out: string; in: string }[] = [
   { kinds: ["renders"], out: "Renders", in: "Rendered by" },
   { kinds: ["usesHook"], out: "Uses hooks", in: "Hook used by" },
   { kinds: ["invokes", "invokesAction"], out: "Invokes", in: "Invoked by" },
+  { kinds: ["usesType"], out: "Uses types", in: "Type used by" },
 ];
 
 /** Items listed per submenu before "Show all" is the way to get the rest. */
@@ -95,6 +96,22 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       { type: "item", value: "select", label: "Select", icon: <IconSelect size={I} />, onSelect: () => st.selectMany([id]) },
       { type: "item", value: "center", label: "Center on canvas", icon: <IconFocus size={I} />, onSelect: () => addNodes([], { focus: id }) },
       { type: "separator" },
+      {
+        type: "item",
+        value: "parent",
+        label: "Show the parent folder",
+        icon: <IconArrowUp size={I} />,
+        disabled: !parentFolders(id, false).some((x) => !drawnNow.has(x)),
+        onSelect: () => st.showParentFolders(id, false),
+      },
+      {
+        type: "item",
+        value: "parents",
+        label: "Show all parent folders up to the root",
+        icon: <IconChevronsUp size={I} />,
+        disabled: parentFolders(id, true).filter((x) => !drawnNow.has(x)).length < 2,
+        onSelect: () => st.showParentFolders(id, true),
+      },
       { type: "item", value: "files", label: "Show the files inside", icon: <IconArrowDown size={I} />, disabled: !canFiles, onSelect: () => st.expandFolder(id, false) },
       { type: "item", value: "all", label: "Show everything inside", icon: <IconChevronsDown size={I} />, disabled: !canAll, onSelect: () => st.expandFolder(id, true) },
       ...subfolderMenu(id, path, drawnNow),
@@ -113,7 +130,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       value: "open",
       label: "Open in editor",
       icon: <IconOpen size={I} />,
-      onSelect: () => window.open(editorUrl(editor, node.absPath!, node.loc?.line, node.loc?.col), "_self"),
+      onSelect: () => void openInEditor(editorUrl(editor, node.absPath!, node.loc?.line, node.loc?.col)).catch((e: Error) => useExplorer.getState().notify(e.message)),
     });
     entries.push({
       type: "item",

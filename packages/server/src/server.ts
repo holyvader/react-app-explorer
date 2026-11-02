@@ -121,6 +121,8 @@ function listDir(path: string) {
 }
 
 /** The running scan: its snapshot file (once written) and how to stop it. */
+const EDITOR_SCHEMES = new Set(["idea:", "webstorm:", "vscode:", "cursor:"]);
+
 type ScanJob = { file?: string; abort: AbortController };
 let scanning: ScanJob | undefined;
 
@@ -164,7 +166,29 @@ async function api(req: Request, url: URL): Promise<Response> {
     log(`deleted ${removed.length} snapshot(s): ${removed.join(", ")}`);
     return json({ removed });
   }
-  if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex(), logFile });
+  if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex(), logFile, desktop: true });
+
+  // Open a file in an editor: the app's web view won't follow other apps' URL schemes, so the OS does.
+  if (path === "/api/open") {
+    if (req.method !== "POST") return json({ error: "POST only" }, 405);
+    if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
+    let url: URL;
+    try {
+      url = new URL(((await req.json()) as { url?: string }).url ?? "");
+    } catch {
+      return json({ error: "Invalid URL" }, 400);
+    }
+    // editors only: never hand arbitrary URLs (file:, http:, other apps) to the OS
+    if (!EDITOR_SCHEMES.has(url.protocol)) return json({ error: `Not an editor link: ${url.protocol}` }, 400);
+    const cmd = process.platform === "darwin" ? ["open", url.href] : process.platform === "win32" ? ["cmd", "/c", "start", "", url.href] : ["xdg-open", url.href];
+    const p = Bun.spawnSync(cmd, { stdout: "ignore", stderr: "pipe" });
+    if (p.exitCode !== 0) {
+      const err = p.stderr.toString().trim() || `exit ${p.exitCode}`;
+      log(`open in editor failed: ${url.protocol} ${err}`);
+      return json({ error: `Couldn't open the editor: ${err}. Is it installed, and does it handle ${url.protocol}// links?` }, 500);
+    }
+    return json({ ok: true });
+  }
   if (path.startsWith("/api/snapshots/")) {
     const file = basename(decodeURIComponent(path.slice("/api/snapshots/".length)));
     const full = join(snapshotsDir, file);

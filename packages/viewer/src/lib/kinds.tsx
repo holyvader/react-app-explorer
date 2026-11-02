@@ -6,6 +6,7 @@ import {
   IconHook,
   IconModule,
   IconServerAction,
+  IconType,
   type Icon,
 } from "@rae/design-system/icons";
 
@@ -15,6 +16,7 @@ export const KIND_META: Record<NodeKind, { label: string; icon: Icon }> = {
   hook: { label: "Hook", icon: IconHook },
   serverAction: { label: "Server action", icon: IconServerAction },
   function: { label: "Function", icon: IconFunction },
+  type: { label: "Type", icon: IconType },
   external: { label: "External", icon: IconExternal },
 };
 

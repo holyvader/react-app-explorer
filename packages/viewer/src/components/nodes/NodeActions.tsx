@@ -26,7 +26,7 @@ const I = 13;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, expandFolder, hideNode, arrange } = useExplorer.getState();
+  const { expand, expandFolder, showParentFolders, hideNode, arrange } = useExplorer.getState();
   const { element, node, parents, children, hiddenParents, hiddenChildren, can } = data;
   const id = element.id;
   return (
@@ -41,6 +41,12 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       )}
       {node && can.allChildren && (
         <IconBtn label="Show all children down to the leaves" icon={<IconChevronsDown size={I} />} onClick={() => expand(id, "children", true)} />
+      )}
+      {element.kind === "folder" && can.parents && (
+        <IconBtn label="Show the parent folder" icon={<IconArrowUp size={I} />} onClick={() => showParentFolders(id, false)} />
+      )}
+      {element.kind === "folder" && can.allParents && (
+        <IconBtn label="Show all parent folders up to the root" icon={<IconChevronsUp size={I} />} onClick={() => showParentFolders(id, true)} />
       )}
       {element.kind === "folder" && can.children && (
         <IconBtn label="Show the files inside" icon={<IconArrowDown size={I} />} onClick={() => expandFolder(id, false)} />
