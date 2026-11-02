@@ -715,7 +715,10 @@ function RelationList({ edges, side, limit }: { edges: Edge[]; side: "from" | "t
 
 function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; selectedId?: string }) {
   const other = useExplorer((s) => s.snapshot?.nodes[e[side]]);
+  // "Used by": the names it imports from this node, minus this node's own name (a hook's users import the hook)
+  const selfName = useExplorer((s) => (side === "from" ? s.snapshot?.nodes[e.to]?.name : undefined));
   if (!other) return null;
+  const specifiers = e.specifiers?.filter((n) => n !== selfName);
   const Icon = KIND_META[other.kind].icon;
   return (
     <Flex
@@ -746,9 +749,9 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
             </Text>
           )}
         </Flex>
-        {e.specifiers?.length ? (
+        {specifiers?.length ? (
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
-            {e.specifiers.join(", ")}
+            {specifiers.join(", ")}
           </Text>
         ) : null}
         {/* where it lives, dimmed: the file (the package for libraries) */}

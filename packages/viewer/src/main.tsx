@@ -3,6 +3,7 @@ import "@xyflow/react/dist/style.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
+import "./lib/selectionHistory.ts";
 import { syncStorage } from "./lib/storage.ts";
 import { useExplorer } from "./store.ts";
 

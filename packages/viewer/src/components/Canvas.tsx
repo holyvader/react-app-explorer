@@ -86,6 +86,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ["⌘ Z", "Ctrl Z"], does: "Undo a step" },
   { keys: ["⇧ ⌘ Z", "Ctrl Y"], does: "Redo it" },
   { keys: ["Esc"], does: "Clear the selection, close the menu" },
+  { keys: ["Back", "⌘ ["], does: "The previously selected element (Forward / ⌘ ] again)" },
 ];
 
 const RAISED_Z = 1000;
