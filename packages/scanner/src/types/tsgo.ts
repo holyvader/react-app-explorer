@@ -10,7 +10,8 @@ import type { DeclExtract, FileExtract, RawFn, RawHook } from "../extract/types.
  * those offsets, one batched `getTypeAtPosition` per file, with follow-ups pipelined.
  */
 
-const MAX_TYPE = 200;
+// long enough for the details (laid out over lines) and tooltips to show whole object types
+const MAX_TYPE = 1000;
 const MAX_PROPS = 40;
 const FILE_CONCURRENCY = 48;
 /** No progress for this long (no file answered, or the checker never got ready) → give up on types. */

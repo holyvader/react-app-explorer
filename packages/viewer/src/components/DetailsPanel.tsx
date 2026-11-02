@@ -343,26 +343,48 @@ function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
   );
 }
 
+/** Inputs (one parameter per row) and output; object types laid out over several lines. */
 function Signature({ node }: { node: GraphNode }) {
   const sig = node.signature!;
+  const box = { bg: "syntax.bg", rounded: "l2", px: "3", py: "2", fontFamily: "mono", fontSize: "xs", lineHeight: "1.7", borderWidth: "1px", borderColor: "border.muted" } as const;
   return (
-    <Box bg="syntax.bg" rounded="l2" px="3" py="2.5" fontFamily="mono" fontSize="xs" lineHeight="1.7" borderWidth="1px" borderColor="border.muted">
-      {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
-      <CodeToken kind="name">{node.name}</CodeToken>
-      <CodeToken kind="punct">(</CodeToken>
-      {sig.params.length > 0 && (
-        <Box pl="4">
-          {sig.params.map((p, i) => (
-            <Box key={i} wordBreak="break-word">
-              <Params params={[p]} owner={node} />
-              {i < sig.params.length - 1 && <CodeToken kind="punct">,</CodeToken>}
-            </Box>
-          ))}
+    <Stack gap="3">
+      <Box>
+        <Eyebrow>Inputs</Eyebrow>
+        {sig.params.length ? (
+          <Stack gap="1.5" mt="1.5">
+            {sig.params.map((p, i) => (
+              <Box key={i} {...box} wordBreak="break-word">
+                <CodeToken kind="name">{p.name}</CodeToken>
+                {p.type && (
+                  <>
+                    <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
+                    <TypeText text={p.type} owner={node} pretty />
+                  </>
+                )}
+                {p.default && (
+                  <>
+                    <CodeToken kind="punct"> = </CodeToken>
+                    <CodeToken kind="value">{p.default}</CodeToken>
+                  </>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        ) : (
+          <Text fontSize="sm" color="fg.muted" mt="1">
+            None
+          </Text>
+        )}
+      </Box>
+      <Box>
+        <Eyebrow>Output</Eyebrow>
+        <Box {...box} mt="1.5" wordBreak="break-word">
+          {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
+          <TypeText text={sig.returnType ?? "unknown"} owner={node} pretty />
         </Box>
-      )}
-      <CodeToken kind="punct">): </CodeToken>
-      <TypeText text={sig.returnType ?? "unknown"} owner={node} />
-    </Box>
+      </Box>
+    </Stack>
   );
 }
 

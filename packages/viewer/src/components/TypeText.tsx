@@ -1,7 +1,7 @@
 import { Box, Text, Tooltip } from "@rae/design-system";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, type ReactNode } from "react";
-import { isPrimitiveType } from "../lib/typeText.ts";
+import { formatType, isPrimitiveType } from "../lib/typeText.ts";
 import { useExplorer } from "../store.ts";
 
 const IDENT = /[A-Za-z_$][\w$]*/g;
@@ -63,8 +63,10 @@ function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
  * project types it names; those names are links that add the type (or library) to the diagram.
  * `owner` is the node whose annotation this is (its `typeRefs` say what each name resolves to).
  */
-export function TypeText({ text, owner, block }: { text: string; owner?: GraphNode; block?: boolean }) {
+export function TypeText({ text: raw, owner, block, pretty }: { text: string; owner?: GraphNode; block?: boolean; pretty?: boolean }) {
   const snapshot = useExplorer((s) => s.snapshot);
+  // `pretty`: object types laid out over several lines (the tooltip always shows them that way)
+  const text = pretty ? formatType(raw) : raw;
   if (!snapshot) return <>{text}</>;
 
   const parts: ReactNode[] = [];
@@ -104,12 +106,12 @@ export function TypeText({ text, owner, block }: { text: string; owner?: GraphNo
   // block definitions are already shown in full, primitives need no preview; other inline types get the full-text tooltip
   const hasTooltip = !(targets.size === 0 && (block || isPrimitiveType(text)));
   const body = (
-    <Box as="span" color="syntax.type" whiteSpace={block ? "pre-wrap" : undefined} wordBreak={block ? "break-word" : undefined} cursor={hasTooltip ? "help" : undefined}>
+    <Box as="span" color="syntax.type" whiteSpace={block || pretty ? "pre-wrap" : undefined} wordBreak={block || pretty ? "break-word" : undefined} cursor={hasTooltip ? "help" : undefined}>
       {parts.map((p, i) => (
         <Fragment key={i}>{p}</Fragment>
       ))}
     </Box>
   );
   if (!hasTooltip) return body;
-  return <Tooltip content={<Preview text={block ? "" : text} targets={[...targets.values()]} />}>{body}</Tooltip>;
+  return <Tooltip content={<Preview text={block ? "" : formatType(raw)} targets={[...targets.values()]} />}>{body}</Tooltip>;
 }

@@ -192,3 +192,17 @@ describe("isPrimitiveType: primitives get no type tooltip", () => {
       expect([t, isPrimitiveType(t)]).toEqual([t, false]);
   });
 });
+
+describe("formatType: object types over several lines", () => {
+  const { formatType } = require("../src/lib/typeText.ts") as typeof import("../src/lib/typeText.ts");
+  test("members one per line, nested objects indented", () => {
+    expect(formatType("{ title: string; subtitle?: string | undefined; }")).toBe("{\n  title: string;\n  subtitle?: string | undefined;\n}");
+    expect(formatType("Promise<{ user: { id: number; }; ok: boolean; }>")).toBe("Promise<{\n  user: {\n    id: number;\n  };\n  ok: boolean;\n}>");
+  });
+  test("leaves non-objects, strings, empty objects and arrow types alone", () => {
+    expect(formatType("string | undefined")).toBe("string | undefined");
+    expect(formatType('"{ not; an; object }"')).toBe('"{ not; an; object }"');
+    expect(formatType("{}")).toBe("{}");
+    expect(formatType("(a: number) => { x: string; }")).toBe("(a: number) => {\n  x: string;\n}");
+  });
+});
