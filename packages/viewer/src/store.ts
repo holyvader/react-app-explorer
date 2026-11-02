@@ -303,10 +303,17 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       }
       // Folders around what's removed stay on the diagram (as explicit folders) — removing a leaf
       // never takes its folder with it. Only removing the folder itself does.
+      // (A removed folder's own subfolders are not "around" anything: they go with it — keeping them
+      // would bring the folder itself back as their frame.)
+      const removedDirs = ids.filter(isFolder).map(folderPath);
+      const insideRemoved = (folderId: string) => {
+        const path = folderPath(folderId);
+        return removedDirs.some((d) => path === d || path.startsWith(d + "/"));
+      };
       const parentOf = new Map(s.graph.elements.map((e) => [e.id, e.parent]));
       const keep = new Set<string>();
       for (const id of gone) {
-        for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) if (isFolder(p) && !gone.has(p)) keep.add(p);
+        for (let p = parentOf.get(id) ?? null; p; p = parentOf.get(p) ?? null) if (isFolder(p) && !gone.has(p) && !insideRemoved(p)) keep.add(p);
       }
       const remaining = s.visible.filter((v) => !gone.has(v));
       const present = new Set(remaining);
