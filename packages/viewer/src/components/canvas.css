@@ -543,3 +543,15 @@
 .rae-chip[data-render="blocking"] { --c: var(--chakra-colors-red-solid); }
 .rae-chip[data-cache] { --c: var(--chakra-colors-purple-solid); color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); white-space: nowrap; }
 .rae-chip[data-render] { color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border-color: color-mix(in srgb, var(--c) 30%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* WebKit (the desktop app's web view): no hover fades or slides on nodes. An animating opacity /
+   transform gets its own compositing layer, rasterised at 1× and then scaled by the diagram's zoom,
+   so the card read blurry until the animation ended. Instant changes repaint at the real scale. */
+:root[data-webkit] .rae-card__hover,
+:root[data-webkit] .rae-card__actions,
+:root[data-webkit] .rae-card__boundary,
+:root[data-webkit] .rae-frame::after,
+:root[data-webkit] .rae-frame__header {
+  transition: none;
+}
+:root[data-webkit] .rae-card__actions { transform: translate(0, -50%); }
