@@ -206,3 +206,49 @@ describe("formatType: object types over several lines", () => {
     expect(formatType("(a: number) => { x: string; }")).toBe("(a: number) => {\n  x: string;\n}");
   });
 });
+
+describe("routeChain: what renders a URL, root first", () => {
+  const { routeChain, routeOf } = require("../src/graph/drawn.ts") as typeof import("../src/graph/drawn.ts");
+  const route = (id: string, parent: string | undefined, files: Record<string, string>, kind: "page" | "segment" = "segment") => ({
+    id,
+    kind: "route" as const,
+    name: id,
+    filePath: id,
+    route: { url: "/", segment: "", segmentKind: "static" as const, params: [], kind, files, parent },
+  });
+  const mod = (id: string) => ({ id, kind: "module" as const, name: id, filePath: id });
+  const snap = {
+    nodes: Object.fromEntries(
+      [
+        route("route:/", undefined, { layout: "app/layout.tsx", "not-found": "app/not-found.tsx" }),
+        route("route:/(shop)", "route:/", { layout: "app/(shop)/layout.tsx" }),
+        route("route:/(shop)/p/[id]", "route:/(shop)", { page: "app/(shop)/p/[id]/page.tsx", loading: "app/(shop)/p/[id]/loading.tsx" }, "page"),
+        route("route:/(shop)/other", "route:/(shop)", { page: "app/(shop)/other/page.tsx" }, "page"),
+        mod("app/layout.tsx"),
+        mod("app/not-found.tsx"),
+        mod("app/(shop)/layout.tsx"),
+        mod("app/(shop)/p/[id]/page.tsx"),
+        mod("app/(shop)/p/[id]/loading.tsx"),
+        { id: "app/(shop)/p/[id]/page.tsx#Product", kind: "component" as const, name: "Product", filePath: "x", moduleId: "app/(shop)/p/[id]/page.tsx" },
+      ].map((n) => [n.id, n]),
+    ),
+    edges: [],
+  } as unknown as Parameters<typeof routeChain>[0];
+  test("layouts and shared files of every enclosing route, then the route's own page — not its siblings'", () => {
+    expect(routeChain(snap, "route:/(shop)/p/[id]")).toEqual([
+      "route:/",
+      "app/layout.tsx",
+      "app/not-found.tsx",
+      "route:/(shop)",
+      "app/(shop)/layout.tsx",
+      "route:/(shop)/p/[id]",
+      "app/(shop)/p/[id]/loading.tsx",
+      "app/(shop)/p/[id]/page.tsx",
+    ]);
+  });
+  test("a page's component and its file lead to their route", () => {
+    expect(routeOf(snap, "app/(shop)/p/[id]/page.tsx#Product")).toBe("route:/(shop)/p/[id]");
+    expect(routeOf(snap, "app/(shop)/p/[id]/page.tsx")).toBe("route:/(shop)/p/[id]");
+    expect(routeOf(snap, "app/(shop)/layout.tsx")).toBe("route:/(shop)");
+  });
+});

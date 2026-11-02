@@ -8,6 +8,7 @@ import {
   IconCopy,
   IconFocus,
   IconFolder,
+  IconRouteChain,
   IconRemove,
   IconRemoveWithContents,
   IconLayout,
@@ -16,7 +17,7 @@ import {
   IconSelect,
   IconUnwrap,
 } from "@rae/design-system/icons";
-import { FOLDER_PREFIX, isFolder } from "../graph/drawn.ts";
+import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
 import { folderContents, folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { hasUndrawn } from "../graph/relations.ts";
@@ -152,6 +153,21 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   const rf = relationFilterOf(st);
   const can = (dir: "parents" | "children", deep: boolean) => hasUndrawn(s, index, id, dir, deep, rf, drawnNow);
   entries.push({ type: "separator" });
+  {
+    const route = routeOf(s, id);
+    if (route) {
+      const drawnIds = new Set(st.graph.elements.map((e) => e.id));
+      entries.push({
+        type: "item",
+        value: "routeChain",
+        label: "Show route chain",
+        icon: <IconRouteChain size={I} />,
+        hint: s.nodes[route]!.route!.url,
+        disabled: !routeChain(s, route).some((x) => !drawnIds.has(x)),
+        onSelect: () => st.showRouteChain(id),
+      });
+    }
+  }
   entries.push({ type: "item", value: "parents", label: "Show parents", icon: <IconArrowUp size={I} />, disabled: !can("parents", false), onSelect: () => expand(id, "parents", false) });
   entries.push({ type: "item", value: "parents-all", label: "Show all parents up to the root", icon: <IconChevronsUp size={I} />, disabled: !can("parents", true), onSelect: () => expand(id, "parents", true) });
   entries.push({ type: "item", value: "children", label: "Show children", icon: <IconArrowDown size={I} />, disabled: !can("children", false), onSelect: () => expand(id, "children", false) });

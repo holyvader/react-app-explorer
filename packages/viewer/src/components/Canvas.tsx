@@ -14,7 +14,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FOLDER_PREFIX, isFolder } from "../graph/drawn.ts";
+import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
 import { folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
@@ -218,6 +218,10 @@ export function Canvas() {
                 allParents: hasUndrawn(snapshot, index, id, "parents", true, filter, drawn),
                 children: children.some((e) => !drawn.has(e.to)),
                 allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn),
+                routeChain: (() => {
+                  const route = routeOf(snapshot, id);
+                  return !!route && routeChain(snapshot, route).some((x) => !drawn.has(x));
+                })(),
               }
             : id.startsWith(FOLDER_PREFIX)
               ? // folders: "children" = the files inside, "all children" = files and their declarations

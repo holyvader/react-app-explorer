@@ -53,6 +53,10 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
   (`nodesUnderRoute`). With Routes off, a route you added is a card linked by `routeFile` /
   `routeChild` edges (in the "Declares" group). Kind `route` is pink; the Navigation group holds
   `navigates` (solid), `fetches` (dashed) and `revalidates` (dotted).
+- **Show route chain** (card, menu, details) on routes and route files or their declarations
+  (`routeOf`). `routeChain` = every enclosing route, root first, with its layout, template, loading,
+  error and not-found, then the route's own page (or route.ts) — through `requestAdd`. `can.routeChain`
+  hides the action once all of it is drawn.
 - Kind `type` (green, square-ish card) and relation `usesType` (group "Types", dotted green).
 - Folders can be **added explicitly**: their `dir:<path>` id goes into `visible`, from the picker (the row ticks folder → with the files inside → off) or from quick add (the folder lands at the clicked point). `drawnGraph` draws an explicit folder even when empty, as a dashed folder card (`CardNode` folder branch), and never collapses it into a chain. Removing a folder also removes explicit subfolders. Removing anything else **keeps the drawn folders around it**: `hideNodes` makes them explicit, so a folder left empty stays as a folder card. Folders can add their subfolders, all or one: a "Subfolders" submenu in the context menu and "Add all" or chips in `FolderDetails`.
 - Adding, as in noesis:

@@ -175,6 +175,37 @@ function routesFor(snapshot: Snapshot, shown: Set<string>): { id: string; parent
   return [...all].filter((id) => !collapsed(id)).map((id) => ({ id, parent: drawnParent(id), holds: holds.get(id) ?? [] }));
 }
 
+/** The route an element belongs to: itself (a route), the route of its file, or of its declaration's file. */
+export function routeOf(s: Snapshot, id: string): string | undefined {
+  const n = s.nodes[id];
+  if (!n) return undefined;
+  if (n.kind === "route") return id;
+  const file = n.kind === "module" ? id : n.moduleId;
+  return file ? routeOfFile(s, file) : undefined;
+}
+
+/** Shared UI along a URL, outermost first: what every route above (and at) it contributes. */
+const CHAIN_SHARED = ["layout", "template", "loading", "error", "global-error", "not-found"];
+
+/**
+ * Everything that renders a route's URL, root first: each enclosing route (groups included) with its
+ * layout, template, loading, error and not-found files, then the route with those and its page (or
+ * route.ts for an API). The route nodes themselves too, so the chain shows as nested frames.
+ */
+export function routeChain(s: Snapshot, routeId: string): string[] {
+  const chain: string[] = [];
+  for (let cur: string | undefined = routeId; cur; cur = s.nodes[cur]?.route?.parent) chain.unshift(cur);
+  const ids: string[] = [];
+  for (const r of chain) {
+    const info = s.nodes[r]?.route;
+    if (!info) continue;
+    ids.push(r);
+    for (const role of CHAIN_SHARED) if (info.files[role]) ids.push(info.files[role]!);
+    if (r === routeId) for (const role of ["page", "route"]) if (info.files[role]) ids.push(info.files[role]!);
+  }
+  return [...new Set(ids)];
+}
+
 /** Nodes drawn inside a route frame: its files (and their declarations) and its nested routes' — for removing it. */
 export function nodesUnderRoute(snapshot: Snapshot, visible: readonly string[], routeId: string): string[] {
   const inside = (r: string | undefined): boolean => {

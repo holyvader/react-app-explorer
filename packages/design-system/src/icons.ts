@@ -42,6 +42,7 @@ export {
   CircleCheck as IconDone,
   Braces as IconType,
   Signpost as IconRoute,
+  Layers as IconRouteChain,
   FileImage as IconAsset,
   TriangleAlert as IconWarning,
 } from "lucide-react";

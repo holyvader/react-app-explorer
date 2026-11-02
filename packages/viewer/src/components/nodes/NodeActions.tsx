@@ -1,4 +1,4 @@
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRemoveWithContents, IconUnwrap } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRemoveWithContents, IconRouteChain, IconUnwrap } from "@rae/design-system/icons";
 import type { MouseEvent, ReactNode } from "react";
 import { useExplorer } from "../../store.ts";
 import type { ElementNodeData } from "./types.ts";
@@ -26,7 +26,7 @@ const I = 13;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, expandFolder, showParentFolders, hideNode, arrange } = useExplorer.getState();
+  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange } = useExplorer.getState();
   const { element, node, parents, children, hiddenParents, hiddenChildren, can } = data;
   const id = element.id;
   return (
@@ -41,6 +41,9 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       )}
       {node && can.allChildren && (
         <IconBtn label="Show all children down to the leaves" icon={<IconChevronsDown size={I} />} onClick={() => expand(id, "children", true)} />
+      )}
+      {node && can.routeChain && (
+        <IconBtn label="Show the route chain (layouts down to the page)" icon={<IconRouteChain size={I} />} onClick={() => showRouteChain(id)} />
       )}
       {element.kind === "folder" && can.parents && (
         <IconBtn label="Show the parent folder" icon={<IconArrowUp size={I} />} onClick={() => showParentFolders(id, false)} />

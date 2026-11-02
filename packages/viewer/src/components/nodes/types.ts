@@ -13,7 +13,8 @@ export type ElementNodeData = {
   hiddenParents: number;
   hiddenChildren: number;
   /** Whether each expand action would add anything (else its button isn't shown). */
-  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean };
+  /** Which expansions would add something; `routeChain`: routes and route files whose chain isn't all drawn. */
+  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; routeChain?: boolean };
   /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
   scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */

@@ -1,6 +1,6 @@
 import type { Snapshot } from "@rae/schema";
 import { create } from "zustand";
-import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute } from "./graph/drawn.ts";
+import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute, routeChain, routeOf } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
@@ -116,6 +116,8 @@ interface ExplorerState {
   expand: (id: string, dir: "parents" | "children", deep: boolean) => void;
   /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
   expandFolder: (id: string, deep: boolean) => void;
+  /** Routes (and route files): add every route and file that renders its URL, root first. */
+  showRouteChain: (id: string) => void;
   /** Folders: add the parent folder, or every folder above it up to the project root. */
   showParentFolders: (id: string, all: boolean) => void;
   confirmPending: () => void;
@@ -376,6 +378,14 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         return;
       }
       get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id });
+    },
+
+    showRouteChain: (id) => {
+      const s = get();
+      if (!s.snapshot) return;
+      const route = routeOf(s.snapshot, id);
+      if (!route) return;
+      s.requestAdd(routeChain(s.snapshot, route), `The route chain of ${s.snapshot.nodes[route]!.name}`, id);
     },
 
     showParentFolders: (id, all) => {

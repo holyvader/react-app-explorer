@@ -27,6 +27,7 @@ import {
   IconCopy,
   IconFocus,
   IconOpen,
+  IconRouteChain,
 } from "@rae/design-system/icons";
 import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
@@ -37,6 +38,7 @@ import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
 import { FolderDetails } from "./FolderDetails.tsx";
+import { routeOf } from "../graph/drawn.ts";
 import { RenderTree } from "./RenderTree.tsx";
 import { TypeText } from "./TypeText.tsx";
 
@@ -138,6 +140,15 @@ export function DetailsPanel() {
             </Button>
           )}
           <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />
+          {snapshot && routeOf(snapshot, node.id) && (
+            <ActionIconButton
+              label={`Show the route chain of ${snapshot.nodes[routeOf(snapshot, node.id)!]!.route!.url} (layouts down to the page)`}
+              icon={<IconRouteChain />}
+              size="sm"
+              variant="outline"
+              onClick={() => useExplorer.getState().showRouteChain(node.id)}
+            />
+          )}
           <Box flex="1" />
           <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
             <ActionIconButton label="Show parents" icon={<IconArrowUp />} size="xs" onClick={() => expand(node.id, "parents", false)} />
