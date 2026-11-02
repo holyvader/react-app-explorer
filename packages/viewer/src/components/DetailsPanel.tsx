@@ -148,6 +148,12 @@ export function DetailsPanel() {
         </Flex>
       </PanelHeader>
 
+      {node.kind === "type" && (node.typeParams?.length || node.extends?.length) ? (
+        <PanelSection title={node.extends?.length ? (node.typeParams?.length ? "Generics & extends" : "Extends") : "Generics"}>
+          <Generics node={node} />
+        </PanelSection>
+      ) : null}
+
       {node.kind === "type" && node.typeText && (
         <PanelSection title="Definition">
           <Box bg="syntax.bg" rounded="l2" px="3" py="2.5" fontFamily="mono" fontSize="xs" lineHeight="1.7" borderWidth="1px" borderColor="border.muted" overflowX="auto">
@@ -343,12 +349,62 @@ function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
   );
 }
 
-/** Inputs (one parameter per row) and output; object types laid out over several lines. */
-function Signature({ node }: { node: GraphNode }) {
-  const sig = node.signature!;
-  const box = { bg: "syntax.bg", rounded: "l2", px: "3", py: "2", fontFamily: "mono", fontSize: "xs", lineHeight: "1.7", borderWidth: "1px", borderColor: "border.muted" } as const;
+const CODE_BOX = { bg: "syntax.bg", rounded: "l2", px: "3", py: "2", fontFamily: "mono", fontSize: "xs", lineHeight: "1.7", borderWidth: "1px", borderColor: "border.muted" } as const;
+
+/**
+ * Generic type parameters (`T extends Item = Item`, one per row) and, for interfaces, what they
+ * extend — named types are links, like everywhere in the details.
+ */
+function Generics({ node }: { node: GraphNode }) {
   return (
     <Stack gap="3">
+      {node.typeParams?.length ? (
+        <Box>
+          <Eyebrow>Type parameters</Eyebrow>
+          <Stack gap="1.5" mt="1.5">
+            {node.typeParams.map((t) => (
+              <Box key={t.name} {...CODE_BOX} wordBreak="break-word">
+                <CodeToken kind="name">{t.name}</CodeToken>
+                {t.constraint && (
+                  <>
+                    <CodeToken kind="keyword"> extends </CodeToken>
+                    <TypeText text={t.constraint} owner={node} pretty />
+                  </>
+                )}
+                {t.default && (
+                  <>
+                    <CodeToken kind="punct"> = </CodeToken>
+                    <TypeText text={t.default} owner={node} pretty />
+                  </>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      ) : null}
+      {node.extends?.length ? (
+        <Box>
+          <Eyebrow>Extends</Eyebrow>
+          <Stack gap="1.5" mt="1.5">
+            {node.extends.map((x, i) => (
+              <Box key={i} {...CODE_BOX} wordBreak="break-word">
+                <TypeText text={x} owner={node} pretty />
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      ) : null}
+    </Stack>
+  );
+}
+
+/** Type parameters (if generic), inputs (one parameter per row) and output; object types over several lines. */
+function Signature({ node }: { node: GraphNode }) {
+  const sig = node.signature!;
+  const box = CODE_BOX;
+  return (
+    <Stack gap="3">
+      {node.typeParams?.length ? <Generics node={node} /> : null}
       <Box>
         <Eyebrow>Inputs</Eyebrow>
         {sig.params.length ? (

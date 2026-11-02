@@ -205,3 +205,33 @@ describe("aliases and externals: only packages are external", () => {
     expect(Object.values(s.nodes).filter((n) => n.kind === "external")).toEqual([]);
   });
 });
+
+describe("generics and extends", () => {
+  test("type parameters with constraints/defaults, interface extends, and their type links", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const root = mkdtempSync(join(tmpdir(), "rae-gen-"));
+    mkdirSync(join(root, "src"));
+    writeFileSync(join(root, "package.json"), `{ "name": "gen" }`);
+    writeFileSync(
+      join(root, "src/list.tsx"),
+      [
+        `export interface Item { id: string }`,
+        `export interface Base<T> { items: T[] }`,
+        `export interface ListProps<T extends Item = Item> extends Base<T>, Omit<Base<T>, "items"> { onSelect?: (item: T) => void }`,
+        `export function List<T extends Item>({ items }: ListProps<T>) { return <ul>{items.length}</ul>; }`,
+        `export const pick = <T, K extends keyof T>(o: T, k: K): T[K] => o[k];`,
+      ].join("\n"),
+    );
+    const s = await scan(join(root, "src/list.tsx"), { cache: false, types: false });
+    expect(s.nodes["src/list.tsx#ListProps"]).toMatchObject({
+      typeParams: [{ name: "T", constraint: "Item", default: "Item" }],
+      extends: ["Base<T>", `Omit<Base<T>, "items">`],
+      typeRefs: { Base: "src/list.tsx#Base", Item: "src/list.tsx#Item" },
+    });
+    expect(s.nodes["src/list.tsx#List"]!.typeParams).toEqual([{ name: "T", constraint: "Item" }]);
+    expect(s.nodes["src/list.tsx#pick"]!.typeParams).toEqual([{ name: "T" }, { name: "K", constraint: "keyof T" }]);
+    expect(edge(s, "usesType", "src/list.tsx#ListProps", "src/list.tsx#Base")).toBeDefined();
+  });
+});

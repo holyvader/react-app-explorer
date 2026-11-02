@@ -77,6 +77,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         signature: d.kind === "type" ? undefined : { params: d.params, returnType: d.returnType },
         typeText: d.typeText,
         typeKind: d.typeKind,
+        typeParams: d.typeParams,
+        extends: d.extends,
         functions: d.functions.length ? d.functions.map(({ pos: _pos, ...fn }) => fn) : undefined,
       };
     }

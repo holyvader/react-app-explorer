@@ -1,4 +1,4 @@
-import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef } from "@rae/schema";
+import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef, TypeParam } from "@rae/schema";
 
 /** Result of resolving an import specifier. */
 export type Resolved =
@@ -98,6 +98,10 @@ export interface DeclExtract {
   typeKind?: "interface" | "type" | "enum";
   /** Names of types this declaration refers to in its type annotations (resolved in the graph). */
   typeRefs?: string[];
+  /** Generic type parameters, as written. */
+  typeParams?: TypeParam[];
+  /** Interfaces: their `extends` clauses, as written. */
+  extends?: string[];
 }
 
 export interface FileExtract {

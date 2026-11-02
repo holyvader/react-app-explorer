@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { FileExtract } from "./extract/types.ts";
 
 /** Bump when extract output changes shape/semantics to invalidate caches. */
-export const EXTRACT_VERSION = 8; // 8: type text kept up to 1000 chars (was 200)
+export const EXTRACT_VERSION = 9; // 9: generic type parameters and interface extends
 
 export function cachePath(rootDir: string) {
   return join(rootDir, ".explorer", "cache", `extract-v${EXTRACT_VERSION}.json`);

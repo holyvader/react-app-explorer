@@ -36,6 +36,8 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    is the declaration as written (`SourceText.raw`, the UI's preview) and `typeKind` says which kind.
    Every declaration records `typeRefs` (names in its annotations → node ids, resolved through
    imports) and `usesType` edges to type nodes. The tsgo pass skips `type` declarations.
+   Generics: `typeParams` (`{ name, constraint?, default? }`, as written) on types and functions;
+   interfaces also keep `extends` (as written), and their extends clauses count as type references.
 6. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else
    is the project's own:

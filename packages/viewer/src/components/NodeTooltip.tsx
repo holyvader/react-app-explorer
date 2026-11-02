@@ -75,8 +75,60 @@ const hookNames = (n: GraphNode) => {
   return [...counts].map(([name, c]) => (c > 1 ? `${name} ×${c}` : name));
 };
 
+/** `<T extends Item = Item, K>` and what an interface extends, when there is any. */
+function GenericsSection({ n }: { n: GraphNode }) {
+  if (!n.typeParams?.length && !n.extends?.length) return null;
+  return (
+    <>
+      {n.typeParams?.length ? (
+        <Section label="Type parameters">
+          <div className="rae-tip__code">
+            {n.typeParams.slice(0, MAX_ROWS).map((t) => (
+              <div key={t.name}>
+                <Tok k="name">{t.name}</Tok>
+                {t.constraint && (
+                  <>
+                    <Tok k="keyword"> extends </Tok>
+                    <Tok k="type">{t.constraint}</Tok>
+                  </>
+                )}
+                {t.default && (
+                  <>
+                    <Tok k="punct"> = </Tok>
+                    <Tok k="type">{t.default}</Tok>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+      {n.extends?.length ? (
+        <Section label="Extends">
+          <div className="rae-tip__code">
+            {n.extends.slice(0, MAX_ROWS).map((x, i) => (
+              <div key={i}>
+                <Tok k="type">{x}</Tok>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+    </>
+  );
+}
+
 /** What a node's tooltip says, by kind. */
 function content(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
+  return (
+    <>
+      <GenericsSection n={n} />
+      {kindContent(n, s, index)}
+    </>
+  );
+}
+
+function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
   const out = index.out.get(n.id) ?? [];
   const inc = index.in.get(n.id) ?? [];
   switch (n.kind) {

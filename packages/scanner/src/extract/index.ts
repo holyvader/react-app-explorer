@@ -1,4 +1,4 @@
-import type { ImportType, ParamDef, PropDef } from "@rae/schema";
+import type { ImportType, ParamDef, PropDef, TypeParam } from "@rae/schema";
 import { parseSync } from "oxc-parser";
 import { JsxAnalyzer } from "./jsx.ts";
 import type {
@@ -91,7 +91,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     const found = new Set<string>();
     const params = new Set<string>();
     const leftmost = (n: N): string | undefined => (n?.type === "Identifier" ? n.name : n?.type === "TSQualifiedName" || n?.type === "MemberExpression" ? leftmost(n.left ?? n.object) : undefined);
-    for (const root of roots) {
+    // roots may hold arrays (`extends`, params): walk() only takes single nodes
+    for (const root of roots.flat()) {
       walk(root, (n) => {
         if (n.type === "TSTypeParameter" && n.name) params.add(typeof n.name === "string" ? n.name : n.name.name);
         else if (n.type === "TSTypeReference") {
@@ -109,6 +110,16 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     for (const p of params) found.delete(p);
     if (self) found.delete(self);
     return [...found];
+  };
+
+  /** `<T extends Item = Item, K>` → [{ name: "T", constraint: "Item", default: "Item" }, { name: "K" }]. */
+  const typeParamsOf = (tp: N): TypeParam[] | undefined => {
+    const params = (tp?.params ?? []).map((p: N) => ({
+      name: typeof p.name === "string" ? p.name : p.name?.name,
+      constraint: p.constraint ? src.slice(p.constraint, 300) : undefined,
+      default: p.default ? src.slice(p.default, 300) : undefined,
+    }));
+    return params.length ? params : undefined;
   };
 
   const declNames = (decl: N): string[] => {
@@ -261,6 +272,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       typeText: src.raw(decl),
       typeKind,
       typeRefs: typeRefsIn([decl.typeAnnotation, decl.body, decl.extends, decl.typeParameters], decl.id.name),
+      typeParams: typeParamsOf(decl.typeParameters),
+      extends: decl.extends?.length ? decl.extends.map((h: N) => src.slice(h, 300)) : undefined,
     });
   }
 
@@ -359,6 +372,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     if (c.fn) {
       const refs = typeRefsIn([...c.fn.params, c.fn.returnType, c.fn.typeParameters]);
       if (refs.length) decl.typeRefs = refs;
+      decl.typeParams = typeParamsOf(c.fn.typeParameters);
     }
 
     const body = c.fn ? c.fn.body : c.cls?.body;

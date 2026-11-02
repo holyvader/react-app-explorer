@@ -43,6 +43,8 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 ## Details sidebar & filters
 - The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
   Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.
+- Generics: a `Generics` block (type parameters `T extends X = D`, and interface `Extends`) is its own
+  section for types and sits at the top of Inputs & output for functions; the canvas tooltip shows it too.
 - Inputs & output (`Signature`): Inputs (one parameter per row) and Output, without the element's
   name. Object types are laid out over lines by `formatType` (lib/typeText.ts; `TypeText pretty`),
   and tooltips always show that layout. The scanner keeps type text up to 1000 chars (`MAX_TYPE`).

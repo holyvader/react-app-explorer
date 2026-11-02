@@ -8,6 +8,13 @@ export type NodeId = string;
 
 export type Framework = "next-app" | "next-pages" | "react";
 
+/** A generic type parameter: `T`, its constraint (`extends …`) and default (`= …`), as written. */
+export interface TypeParam {
+  name: string;
+  constraint?: string;
+  default?: string;
+}
+
 export type NodeKind = "module" | "component" | "hook" | "serverAction" | "function" | "type" | "external";
 
 export type ModuleType = "server" | "client" | "shared";
@@ -113,6 +120,10 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** Generic type parameters (`<T extends Item = Item>`) of a type, function, hook or component. */
+  typeParams?: TypeParam[];
+  /** Interfaces: what they extend, as written (`Base`, `Omit<Props, "x">`). */
+  extends?: string[];
   /** Type declarations (`kind: "type"`): the declaration as written — the type's full preview. */
   typeText?: string;
   typeKind?: "interface" | "type" | "enum";
