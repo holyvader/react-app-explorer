@@ -101,14 +101,15 @@ export function TypeText({ text, owner, block }: { text: string; owner?: GraphNo
   }
   parts.push(text.slice(last));
 
+  // block definitions are already shown in full, primitives need no preview; other inline types get the full-text tooltip
+  const hasTooltip = !(targets.size === 0 && (block || isPrimitiveType(text)));
   const body = (
-    <Box as="span" color="syntax.type" whiteSpace={block ? "pre-wrap" : undefined} wordBreak={block ? "break-word" : undefined} cursor="help">
+    <Box as="span" color="syntax.type" whiteSpace={block ? "pre-wrap" : undefined} wordBreak={block ? "break-word" : undefined} cursor={hasTooltip ? "help" : undefined}>
       {parts.map((p, i) => (
         <Fragment key={i}>{p}</Fragment>
       ))}
     </Box>
   );
-  // block definitions are already shown in full, primitives need no preview; other inline types get the full-text tooltip
-  if (targets.size === 0 && (block || isPrimitiveType(text))) return body;
+  if (!hasTooltip) return body;
   return <Tooltip content={<Preview text={block ? "" : text} targets={[...targets.values()]} />}>{body}</Tooltip>;
 }
