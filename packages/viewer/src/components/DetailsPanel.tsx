@@ -159,6 +159,12 @@ export function DetailsPanel() {
         </Flex>
       </PanelHeader>
 
+      {node.middleware && (
+        <PanelSection title="Middleware">
+          <MiddlewareView node={node} />
+        </PanelSection>
+      )}
+
       {node.route && (
         <PanelSection title="Route">
           <RouteInfoView node={node} />
@@ -392,6 +398,22 @@ function RouteInfoView({ node }: { node: GraphNode }) {
           ))}
         </Wrap>
       )}
+      {r.middleware && (
+        <Box>
+          <Eyebrow>Middleware</Eyebrow>
+          <Wrap gap="1.5" mt="1.5" align="center">
+            <NodeChip id={r.middleware.id} anchor={node.id} />
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+              {r.middleware.matcher ? `matcher ${r.middleware.matcher}` : "no matcher: runs on every route"}
+            </Text>
+            {r.middleware.conditions?.map((c) => (
+              <TagChip key={c} color="relation.runsBefore" mono>
+                {c}
+              </TagChip>
+            ))}
+          </Wrap>
+        </Box>
+      )}
       <Box>
         <Eyebrow>Files</Eyebrow>
         <Wrap gap="1.5" mt="1.5">
@@ -400,6 +422,44 @@ function RouteInfoView({ node }: { node: GraphNode }) {
           ))}
         </Wrap>
       </Box>
+    </Stack>
+  );
+}
+
+/** A middleware file: its matchers (with has / missing conditions) and how many routes they select. */
+function MiddlewareView({ node }: { node: GraphNode }) {
+  const routes = useExplorer((s) => (s.index?.out.get(node.id) ?? []).filter((e) => e.kind === "runsBefore").length);
+  const { matchers } = node.middleware!;
+  return (
+    <Stack gap="2">
+      {matchers.length ? (
+        matchers.map((m, i) => (
+          <Box key={i} {...CODE_BOX}>
+            <CodeToken kind="value">{m.source}</CodeToken>
+            {(m.has?.length || m.missing?.length) && (
+              <Wrap gap="1.5" mt="1.5">
+                {m.has?.map((c) => (
+                  <TagChip key={`h${c}`} color="relation.runsBefore" mono>
+                    has {c}
+                  </TagChip>
+                ))}
+                {m.missing?.map((c) => (
+                  <TagChip key={`m${c}`} color="relation.revalidates" mono>
+                    missing {c}
+                  </TagChip>
+                ))}
+              </Wrap>
+            )}
+          </Box>
+        ))
+      ) : (
+        <Text fontSize="sm" color="fg.muted">
+          No matcher: it runs before every route.
+        </Text>
+      )}
+      <Text fontSize="xs" color="fg.muted">
+        Runs before {routes} route{routes === 1 ? "" : "s"} (see Uses). Checks inside the function itself aren't evaluated.
+      </Text>
     </Stack>
   );
 }

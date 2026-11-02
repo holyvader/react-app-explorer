@@ -52,7 +52,8 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
   Route files leave the folder frames. Removing a route frame takes its contents
   (`nodesUnderRoute`). With Routes off, a route you added is a card linked by `routeFile` /
   `routeChild` edges (in the "Declares" group). Kind `route` is pink; the Navigation group holds
-  `navigates` (solid), `fetches` (dashed) and `revalidates` (dotted).
+  `navigates` (solid), `fetches` (dashed), `revalidates` (dotted) and `runsBefore` (red,
+  middleware → route). Show route chain starts with the route's middleware.
 - **Show route chain** (card, menu, details) on routes and route files or their declarations
   (`routeOf`). `routeChain` = every enclosing route, root first, with its layout, template, loading,
   error and not-found, then the route's own page (or route.ts) — through `requestAdd`. `can.routeChain`

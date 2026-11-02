@@ -42,11 +42,20 @@ export interface RouteInfo {
   methods?: string[];
   /** The nearest enclosing route. */
   parent?: NodeId;
+  /** The middleware (middleware.ts / proxy.ts) that runs before this route, and the matcher that selects it. */
+  middleware?: { id: NodeId; matcher?: string; conditions?: string[] };
+}
+
+/** One entry of a middleware's `config.matcher`, as written; `has` / `missing` as "cookie session", "header x-flag=1"… */
+export interface MiddlewareMatcher {
+  source: string;
+  has?: string[];
+  missing?: string[];
 }
 
 /** Where a declaration sends the user or a request, as written in the source. */
 export interface Navigation {
-  via: "link" | "push" | "replace" | "redirect" | "fetch" | "revalidate";
+  via: "link" | "push" | "replace" | "redirect" | "rewrite" | "fetch" | "revalidate";
   /** The target as written: `/blog/[…]` stands for a template part. */
   href: string;
   /** The route it matches, when it's a path of this app. */
@@ -156,6 +165,8 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** Middleware modules: their `config.matcher` (none → it runs on every route). */
+  middleware?: { matchers: MiddlewareMatcher[] };
   /** Route nodes (`kind: "route"`). */
   route?: RouteInfo;
   /** Where this declaration navigates / sends requests (matched to routes where possible). */
@@ -219,7 +230,9 @@ export type EdgeKind =
   | "routeChild"
   | "navigates"
   | "fetches"
-  | "revalidates";
+  | "revalidates"
+  /** Middleware (middleware.ts / proxy.ts) → each route its matcher selects (every route without a matcher). */
+  | "runsBefore";
 
 export type ImportType = "static" | "dynamic" | "lazy" | "next-dynamic" | "type-only" | "reexport";
 

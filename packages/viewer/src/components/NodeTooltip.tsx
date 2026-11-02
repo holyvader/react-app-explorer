@@ -194,6 +194,23 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
         </>
       );
     case "module": {
+      if (n.middleware) {
+        const ran = out.filter((e) => e.kind === "runsBefore").length;
+        return (
+          <>
+            <Section label="Matcher">
+              <div className="rae-tip__code">
+                {n.middleware.matchers.length ? n.middleware.matchers.map((m, i) => (
+                  <div key={i}>
+                    <Tok k="value">{m.source}</Tok>
+                  </div>
+                )) : <Tok k="punct">none — every route</Tok>}
+              </div>
+            </Section>
+            <div className="rae-tip__foot">Runs before {ran} route{ran === 1 ? "" : "s"}</div>
+          </>
+        );
+      }
       const decls = out.filter((e) => e.kind === "declares").map((e) => s.nodes[e.to]).filter((d): d is GraphNode => !!d);
       const exported = decls.filter((d) => d.exported);
       const reexports = out.filter((e) => e.kind === "imports" && e.importType === "reexport");
@@ -240,6 +257,15 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
           <Section label="Files">
             <Chips items={files.map(([role]) => ({ text: role, color: "kind.route.solid" }))} />
           </Section>
+          {r.middleware && (
+            <Section label="Middleware">
+              <div className="rae-tip__code">
+                <Tok k="name">{s.nodes[r.middleware.id]?.name ?? r.middleware.id}</Tok>
+                <Tok k="punct"> · </Tok>
+                <Tok k="value">{r.middleware.matcher ?? "every route"}</Tok>
+              </div>
+            </Section>
+          )}
           <div className="rae-tip__foot">Navigated to from {new Set(inc.filter((e) => e.kind === "navigates" || e.kind === "fetches").map((e) => e.from)).size} places</div>
         </>
       );

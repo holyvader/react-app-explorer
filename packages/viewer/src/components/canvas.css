@@ -325,6 +325,7 @@
 .rae-edge--navigates      { --e: var(--chakra-colors-relation-navigates); --dash: 10 4; --anim: rae-dash-14; --speed: 0.9s; --ew: 2.25px; }
 .rae-edge--fetches        { --e: var(--chakra-colors-relation-fetches); --dash: 6 4; --anim: rae-dash-9; --speed: 1s; --ew: 2px; }
 .rae-edge--revalidates    { --e: var(--chakra-colors-relation-revalidates); --dash: 1 4; --anim: rae-dash-5; --speed: 2s; --ew: 1.5px; }
+.rae-edge--runsBefore     { --e: var(--chakra-colors-relation-runs-before); --dash: 2 3; --anim: rae-dash-5; --speed: 1.2s; --ew: 2px; }
 .rae-edge--routeFile      { --e: var(--chakra-colors-relation-route-file); --dash: 3 4; --anim: rae-dash-7; --speed: 2.4s; --ew: 1.5px; }
 .rae-edge--invokes        { --e: var(--chakra-colors-kind-function-solid); --dash: 10 3 2 3; --anim: rae-dash-18; --speed: 0.7s; --ew: 1.75px; }
 .rae-edge--invokesAction  { --e: var(--chakra-colors-kind-server-action-solid); --dash: 6 3; --anim: rae-dash-9; --speed: 0.45s; --ew: 2.25px; }
@@ -376,6 +377,7 @@
 .rae-edge-label[data-kind="navigates"] { --e: var(--chakra-colors-relation-navigates); }
 .rae-edge-label[data-kind="fetches"] { --e: var(--chakra-colors-relation-fetches); }
 .rae-edge-label[data-kind="revalidates"] { --e: var(--chakra-colors-relation-revalidates); }
+.rae-edge-label[data-kind="runsBefore"] { --e: var(--chakra-colors-relation-runs-before); }
 .rae-edge-label[data-kind="routeFile"], .rae-edge-label[data-kind="routeChild"] { --e: var(--chakra-colors-relation-route-file); }
 .rae-edge-label[data-kind="invokes"] { --e: var(--chakra-colors-kind-function-solid); }
 .rae-edge-label[data-kind="invokesAction"] { --e: var(--chakra-colors-kind-server-action-solid); }

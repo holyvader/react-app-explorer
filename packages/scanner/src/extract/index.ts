@@ -1,4 +1,4 @@
-import type { ImportType, ParamDef, PropDef, TypeParam, Navigation } from "@rae/schema";
+import type { ImportType, ParamDef, PropDef, TypeParam, Navigation, MiddlewareMatcher } from "@rae/schema";
 import { parseSync } from "oxc-parser";
 import { JsxAnalyzer } from "./jsx.ts";
 import type {
@@ -155,13 +155,54 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
         const callee = unwrap(n.callee);
         const name = callee?.type === "MemberExpression" ? callee.property?.name : callee?.name;
         const arg = n.arguments?.[0];
-        if (callee?.type === "MemberExpression" && (name === "push" || name === "replace")) add(name, pathOf(arg));
+        const owner = callee?.type === "MemberExpression" ? unwrap(callee.object)?.name : undefined;
+        // middleware: NextResponse.redirect(new URL("/x", request.url)) / rewrite(…)
+        const urlArg = unwrap(arg)?.type === "NewExpression" && unwrap(arg).callee?.name === "URL" ? unwrap(arg).arguments?.[0] : arg;
+        if (owner === "NextResponse" && (name === "redirect" || name === "rewrite")) add(name, pathOf(urlArg));
+        else if (callee?.type === "MemberExpression" && (name === "push" || name === "replace")) add(name, pathOf(arg));
         else if (name === "redirect" || name === "permanentRedirect") add("redirect", pathOf(arg));
         else if (name === "revalidatePath") add("revalidate", pathOf(arg));
         else if (name === "fetch") add("fetch", pathOf(arg));
       }
     });
     return [...found.values()];
+  };
+
+  /**
+   * `export const config = { matcher: "/a/:path*" | ["/a", { source, has, missing }] }` → the
+   * matchers as written. String literals only: anything computed is left out.
+   */
+  const matcherOf = (decl: N): MiddlewareMatcher[] | undefined => {
+    if (decl?.type !== "VariableDeclaration") return undefined;
+    const d = decl.declarations.find((x: N) => x.id?.name === "config");
+    const init = unwrap(d?.init);
+    if (init?.type !== "ObjectExpression") return undefined;
+    const prop = init.properties.find((p: N) => p.type === "Property" && memberName(p.key) === "matcher");
+    if (!prop) return [];
+    const str = (n: N) => (n?.type === "Literal" && typeof n.value === "string" ? n.value : undefined);
+    const conditions = (n: N): string[] | undefined => {
+      if (n?.type !== "ArrayExpression") return undefined;
+      const out = n.elements
+        .filter((e: N) => e?.type === "ObjectExpression")
+        .map((e: N) => {
+          const get = (k: string) => str(e.properties.find((p: N) => memberName(p.key) === k)?.value);
+          const value = get("value");
+          return [get("type"), get("key")].filter(Boolean).join(" ") + (value ? `=${value}` : "");
+        });
+      return out.length ? out : undefined;
+    };
+    const entry = (e: N): MiddlewareMatcher | undefined => {
+      const s = str(e);
+      if (s) return { source: s };
+      if (e?.type !== "ObjectExpression") return undefined;
+      const get = (k: string) => e.properties.find((p: N) => p.type === "Property" && memberName(p.key) === k)?.value;
+      const source = str(get("source"));
+      if (!source) return undefined;
+      return { source, has: conditions(get("has")), missing: conditions(get("missing")) };
+    };
+    const v = unwrap(prop.value);
+    const list = v?.type === "ArrayExpression" ? v.elements.map(entry) : [entry(v)];
+    return list.filter((x: MiddlewareMatcher | undefined): x is MiddlewareMatcher => !!x);
   };
 
   const declNames = (decl: N): string[] => {
@@ -206,6 +247,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
           }
         } else if (stmt.declaration) {
           for (const name of declNames(stmt.declaration)) out.exports.push({ exported: name, local: name });
+          const matcher = matcherOf(stmt.declaration);
+          if (matcher) out.matcher = matcher;
           collectDecl(stmt.declaration);
         } else {
           for (const s of stmt.specifiers) {

@@ -1,4 +1,4 @@
-import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef, TypeParam, Navigation } from "@rae/schema";
+import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef, TypeParam, Navigation, MiddlewareMatcher } from "@rae/schema";
 
 /** Result of resolving an import specifier. */
 export type Resolved =
@@ -115,6 +115,8 @@ export interface FileExtract {
   imports: ImportRecord[];
   exports: ExportRecord[];
   decls: DeclExtract[];
+  /** `export const config = { matcher }` (middleware / proxy), as written; undefined when there's none. */
+  matcher?: MiddlewareMatcher[];
   /** JSX rendered at module level (outside declarations). */
   moduleRenders?: RawRef[];
   /** Declarations invoked by module-level code. */

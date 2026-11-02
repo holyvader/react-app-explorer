@@ -246,6 +246,19 @@ describe("routeChain: what renders a URL, root first", () => {
       "app/(shop)/p/[id]/page.tsx",
     ]);
   });
+  test("the middleware that runs before the route comes first", () => {
+    const withMw = {
+      ...snap,
+      nodes: {
+        ...snap.nodes,
+        "proxy.ts": { id: "proxy.ts", kind: "module", name: "proxy.ts", filePath: "proxy.ts", middleware: { matchers: [] } },
+        "route:/(shop)/p/[id]": { ...snap.nodes["route:/(shop)/p/[id]"]!, route: { ...snap.nodes["route:/(shop)/p/[id]"]!.route!, middleware: { id: "proxy.ts" } } },
+      },
+    } as typeof snap;
+    expect(routeChain(withMw, "route:/(shop)/p/[id]")[0]).toBe("proxy.ts");
+    expect(routeChain(withMw, "route:/(shop)/other")).not.toContain("proxy.ts");
+  });
+
   test("a page's component and its file lead to their route", () => {
     expect(routeOf(snap, "app/(shop)/p/[id]/page.tsx#Product")).toBe("route:/(shop)/p/[id]");
     expect(routeOf(snap, "app/(shop)/p/[id]/page.tsx")).toBe("route:/(shop)/p/[id]");

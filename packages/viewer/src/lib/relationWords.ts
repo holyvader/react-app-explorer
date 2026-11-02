@@ -32,11 +32,13 @@ export function relationWord(e: GraphEdge): string {
     case "routeChild":
       return "nested route";
     case "navigates":
-      return e.via === "redirect" ? "redirects" : e.via === "push" || e.via === "replace" ? `router.${e.via}` : "links to";
+      return e.via === "redirect" ? "redirects" : e.via === "rewrite" ? "rewrites to" : e.via === "push" || e.via === "replace" ? `router.${e.via}` : "links to";
     case "fetches":
       return "calls API";
     case "revalidates":
       return "revalidates";
+    case "runsBefore":
+      return "runs before";
   }
 }
 
@@ -66,5 +68,7 @@ export function relationToken(e: GraphEdge): string {
       return "relation.fetches";
     case "revalidates":
       return "relation.revalidates";
+    case "runsBefore":
+      return "relation.runsBefore";
   }
 }

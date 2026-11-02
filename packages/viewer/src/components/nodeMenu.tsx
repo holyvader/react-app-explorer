@@ -36,6 +36,7 @@ const RELATIONS: { kinds: EdgeKind[]; out: string; in: string }[] = [
   { kinds: ["navigates"], out: "Navigates to", in: "Navigated to from" },
   { kinds: ["fetches"], out: "Calls APIs", in: "API called by" },
   { kinds: ["revalidates"], out: "Revalidates", in: "Revalidated by" },
+  { kinds: ["runsBefore"], out: "Runs before routes", in: "Middleware" },
   { kinds: ["routeFile"], out: "Route files", in: "Route" },
   { kinds: ["routeChild"], out: "Nested routes", in: "Parent route" },
 ];

@@ -47,7 +47,13 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    matched to routes, most specific first, and become `navigates` / `fetches` / `revalidates` edges.
    A `[…]` only fills dynamic segments. Intercepting routes (`(.)x` anywhere on the way, often on a
    parent folder) get segment kind `intercept`, are named as Next prints them (`/(.)photos/[id]`) and
-   are never link targets. Pages Router isn't modelled (by choice). A real-world test project:
+   are never link targets. Middleware (`middleware.ts` / `proxy.ts`, root or src/): `config.matcher`
+   is read as written (strings, arrays, `{ source, has, missing }`) onto the module's `middleware`.
+   `matcherRegex` (path-to-regexp `:p` `:p?` `:p*` `:p+`, raw `(…)` groups) is tested against
+   `samplePaths` of each page / API route (intercepting ones included). Matches get `runsBefore` edges
+   and `route.middleware` (with the matcher and has/missing conditions). No matcher means every route.
+   `NextResponse.redirect` / `rewrite(new URL("/x", …))` are navigations. Checks inside the function
+   aren't evaluated. Pages Router isn't modelled (by choice). A real-world test project:
    ~/IdeaProjects/next-shop-demo (every route kind, API methods, navigation, generics).
 7. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else

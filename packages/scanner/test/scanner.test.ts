@@ -288,3 +288,57 @@ describe("App Router routes", () => {
     expect(edge(s, "routeChild", "route:/", "route:/blog/[slug]")).toBeDefined();
   });
 });
+
+describe("middleware matching", () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  const app = (middleware: string) => {
+    const root = mkdtempSync(join(tmpdir(), "rae-mw-"));
+    const files: Record<string, string> = {
+      "package.json": `{ "name": "m", "dependencies": { "next": "16" } }`,
+      "app/layout.tsx": `export default function L({ children }: { children: unknown }) { return <html>{children as never}</html>; }`,
+      "app/page.tsx": `export default function Home() { return <p />; }`,
+      "app/dashboard/page.tsx": `export default function D() { return <p />; }`,
+      "app/dashboard/[team]/page.tsx": `export default function T() { return <p />; }`,
+      "app/api/data/route.ts": `export function GET() { return Response.json({}); }`,
+      "proxy.ts": middleware,
+    };
+    for (const [p, t] of Object.entries(files)) {
+      mkdirSync(join(root, p, ".."), { recursive: true });
+      writeFileSync(join(root, p), t);
+    }
+    return root;
+  };
+  const targets = (s: Snapshot) => s.edges.filter((e) => e.kind === "runsBefore").map((e) => e.to).sort();
+
+  test("matcher patterns select routes; has/missing conditions are kept; redirect / rewrite targets navigate", async () => {
+    const root = app(
+      [
+        `import { NextResponse, type NextRequest } from "next/server";`,
+        `export function proxy(req: NextRequest) {`,
+        `  if (!req.cookies.get("s")) return NextResponse.redirect(new URL("/", req.url));`,
+        `  return NextResponse.rewrite(new URL("/dashboard", req.url));`,
+        `}`,
+        `export const config = { matcher: ["/dashboard/:path*", { source: "/api/:path+", has: [{ type: "header", key: "x-key" }], missing: [{ type: "cookie", key: "skip", value: "1" }] }] };`,
+      ].join("\n"),
+    );
+    const s = await scan(root, { cache: false, types: false });
+    expect(s.nodes["proxy.ts"]!.middleware!.matchers).toEqual([
+      { source: "/dashboard/:path*" },
+      { source: "/api/:path+", has: ["header x-key"], missing: ["cookie skip=1"] },
+    ]);
+    expect(targets(s)).toEqual(["route:/api/data", "route:/dashboard", "route:/dashboard/[team]"]);
+    expect(s.nodes["route:/api/data"]!.route!.middleware).toEqual({ id: "proxy.ts", matcher: "/api/:path+", conditions: ["has header x-key", "missing cookie skip=1"] });
+    expect(s.nodes["route:/"]!.route!.middleware).toBeUndefined();
+    expect(edge(s, "navigates", "proxy.ts#proxy", "route:/")?.via).toBe("redirect");
+    expect(edge(s, "navigates", "proxy.ts#proxy", "route:/dashboard")?.via).toBe("rewrite");
+  });
+
+  test("no matcher: it runs before every route; a negative-lookahead matcher skips what it excludes", async () => {
+    const all = await scan(app(`export function proxy() {}`), { cache: false, types: false });
+    expect(targets(all)).toEqual(["route:/", "route:/api/data", "route:/dashboard", "route:/dashboard/[team]"]);
+    const most = await scan(app(`export function proxy() {}\nexport const config = { matcher: ["/((?!api|_next/static).*)"] };`), { cache: false, types: false });
+    expect(targets(most)).toEqual(["route:/", "route:/dashboard", "route:/dashboard/[team]"]);
+  });
+});

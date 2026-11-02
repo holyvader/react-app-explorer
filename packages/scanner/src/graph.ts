@@ -349,6 +349,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         .map((seg) => (segmentKind(seg) === "intercept" ? seg.replace(/^(\((\.{1,3})\))+/, "") : seg));
 
     const routes: { id: NodeId; segs: string[]; kind: RouteInfo["kind"] }[] = [];
+    const intercepting: typeof routes = [];
+    const interceptingAndOthers = () => intercepting;
     for (const [dir, entry] of [...byDir].sort(([a], [b]) => a.localeCompare(b))) {
       const segs = urlSegments(dir);
       const url = "/" + segs.join("/");
@@ -391,6 +393,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       for (const mid of Object.values(entry.files)) if (mid) addEdge({ from: id, to: mid, kind: "routeFile" });
       // links go to the real route (Next does the intercepting), so intercepting routes aren't targets
       if (kind !== "segment" && kindOfSeg !== "intercept") routes.push({ id, segs, kind });
+      else if (kind !== "segment") intercepting.push({ id, segs, kind });
     }
 
     // most specific first: more static segments, then fewer catch-alls
@@ -412,6 +415,24 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       const path = href.split("/").filter(Boolean).map((p) => (p.includes("[…]") ? "[…]" : decodeURIComponent(p)));
       return routes.find((r) => (api ? r.kind === "api" : r.kind === "page") && matches(r.segs, path))?.id;
     };
+
+    // Middleware (middleware.ts / proxy.ts): which page and API routes its matcher selects.
+    for (const f of files.values()) {
+      if (nextRoleOf(f.absPath, info) !== "middleware") continue;
+      const mid = moduleId(f.absPath);
+      const matchers = f.matcher ?? [];
+      nodes[mid]!.middleware = { matchers };
+      const tests = matchers.map((m) => ({ m, re: matcherRegex(m.source) }));
+      for (const r of [...routes, ...interceptingAndOthers()]) {
+        const samples = samplePaths(r.segs);
+        // no matcher: it runs on every route
+        const hit = tests.length ? tests.find((t) => t.re && samples.some((p) => t.re!.test(p))) : { m: undefined };
+        if (!hit) continue;
+        const conditions = hit.m ? [...(hit.m.has ?? []).map((c) => `has ${c}`), ...(hit.m.missing ?? []).map((c) => `missing ${c}`)] : [];
+        nodes[r.id]!.route!.middleware = { id: mid, matcher: hit.m?.source, conditions: conditions.length ? conditions : undefined };
+        addEdge({ from: mid, to: r.id, kind: "runsBefore" });
+      }
+    }
 
     for (const f of files.values()) {
       for (const d of f.decls) {
@@ -514,3 +535,58 @@ function propagateModuleTypes(
 }
 
 export type { Condition };
+
+/**
+ * A middleware matcher (path-to-regexp, as Next reads it) as a RegExp: `:p` one segment, `:p?`
+ * optional, `:p*` zero or more segments, `:p+` one or more; `(…)` groups are raw regex
+ * (`/((?!api|_next).*)`). A trailing slash is allowed. Undefined if it can't be read.
+ */
+export function matcherRegex(source: string): RegExp | undefined {
+  let re = "";
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i]!;
+    if (c === "(") {
+      let depth = 0;
+      let j = i;
+      for (; j < source.length; j++) {
+        if (source[j] === "\\") j++;
+        else if (source[j] === "(") depth++;
+        else if (source[j] === ")" && --depth === 0) break;
+      }
+      re += source.slice(i, j + 1);
+      i = j;
+      const next = source[i + 1];
+      if (next && "?*+".includes(next)) re += source[++i];
+    } else if (c === ":") {
+      const name = /^[A-Za-z_]\w*/.exec(source.slice(i + 1))?.[0] ?? "";
+      i += name.length;
+      const mod = source[i + 1];
+      // "/:p*" and "/:p?" make the slash before them optional too
+      const slash = re.endsWith("\\/");
+      if (mod === "*" || mod === "?") {
+        if (slash) re = re.slice(0, -2);
+        re += mod === "*" ? "(?:\\/[^/]+)*" : "(?:\\/[^/]+)?";
+        i++;
+      } else if (mod === "+") {
+        if (slash) re = re.slice(0, -2);
+        re += "(?:\\/[^/]+)+";
+        i++;
+      } else re += "[^/]+";
+    } else re += /[.*+?^${}|[\]\\/]/.test(c) ? `\\${c}` : c;
+  }
+  try {
+    return new RegExp(`^${re}\\/?$`);
+  } catch {
+    return undefined;
+  }
+}
+
+/** URLs that land on a route, for testing matchers: dynamic segments filled, optional catch-alls both empty and filled. */
+function samplePaths(segs: string[]): string[] {
+  const fill = (optional: "empty" | "filled") =>
+    "/" +
+    segs
+      .flatMap((s) => (s.startsWith("[[...") ? (optional === "empty" ? [] : ["sample"]) : [s.startsWith("[") ? "sample" : s]))
+      .join("/");
+  return [...new Set([fill("empty"), fill("filled")])];
+}

@@ -195,7 +195,9 @@ const CHAIN_SHARED = ["layout", "template", "loading", "error", "global-error", 
 export function routeChain(s: Snapshot, routeId: string): string[] {
   const chain: string[] = [];
   for (let cur: string | undefined = routeId; cur; cur = s.nodes[cur]?.route?.parent) chain.unshift(cur);
-  const ids: string[] = [];
+  // the middleware runs before all of it
+  const middleware = s.nodes[routeId]?.route?.middleware?.id;
+  const ids: string[] = middleware && s.nodes[middleware] ? [middleware] : [];
   for (const r of chain) {
     const info = s.nodes[r]?.route;
     if (!info) continue;
