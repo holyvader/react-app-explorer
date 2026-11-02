@@ -2,7 +2,7 @@ import type { Edge, EdgeKind, NodeKind, Snapshot } from "@rae/schema";
 import { isFiltered, type LibraryFilter } from "./packages.ts";
 
 /** Edge groups the user can toggle in the toolbar. */
-export type EdgeGroup = "imports" | "declares" | "renders" | "hooks" | "invokes" | "types";
+export type EdgeGroup = "imports" | "declares" | "renders" | "hooks" | "invokes" | "types" | "navigation";
 
 export const EDGE_GROUP_OF: Record<EdgeKind, EdgeGroup> = {
   imports: "imports",
@@ -12,6 +12,12 @@ export const EDGE_GROUP_OF: Record<EdgeKind, EdgeGroup> = {
   invokes: "invokes",
   invokesAction: "invokes",
   usesType: "types",
+  // a route's files and nested routes are structure, like what a file declares
+  routeFile: "declares",
+  routeChild: "declares",
+  navigates: "navigation",
+  fetches: "navigation",
+  revalidates: "navigation",
 };
 
 export const EDGE_GROUPS: { group: EdgeGroup; label: string }[] = [
@@ -21,16 +27,18 @@ export const EDGE_GROUPS: { group: EdgeGroup; label: string }[] = [
   { group: "hooks", label: "Hooks" },
   { group: "invokes", label: "Invokes" },
   { group: "types", label: "Types" },
+  { group: "navigation", label: "Navigation" },
 ];
 
 /** Which outgoing edge kinds count as "children" for each node kind. */
 const CHILD_KINDS: Record<NodeKind, ReadonlySet<EdgeKind>> = {
   module: new Set(["imports", "declares", "renders", "invokes", "invokesAction"]),
-  component: new Set(["renders", "usesHook", "invokes", "invokesAction", "usesType"]),
-  hook: new Set(["usesHook", "invokes", "invokesAction", "usesType"]),
-  serverAction: new Set(["invokes", "invokesAction", "usesHook", "usesType"]),
-  function: new Set(["invokes", "usesHook", "invokesAction", "usesType"]),
+  component: new Set(["renders", "usesHook", "invokes", "invokesAction", "usesType", "navigates", "fetches", "revalidates"]),
+  hook: new Set(["usesHook", "invokes", "invokesAction", "usesType", "navigates", "fetches", "revalidates"]),
+  serverAction: new Set(["invokes", "invokesAction", "usesHook", "usesType", "navigates", "fetches", "revalidates"]),
+  function: new Set(["invokes", "usesHook", "invokesAction", "usesType", "navigates", "fetches", "revalidates"]),
   type: new Set(["usesType"]),
+  route: new Set(["routeChild", "routeFile"]),
   external: new Set(),
 };
 

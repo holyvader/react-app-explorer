@@ -46,6 +46,13 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 - Folders are selectable nodes (`dir:<path>`, not in the snapshot). `FolderDetails` shows what they contain (`graph/folder.ts`: files, declarations, subfolders, counts per kind). Their actions are ↓ show the files inside and ↓↓ show everything inside (`expandFolder`, which asks above 300), tidy and remove. Header buttons, the context menu and the sidebar all offer them. Folder headers show the scanned-element count; folders have no tooltip. A selected frame highlights everything inside it.
 - ⌘A selects every drawn element, folders included. Folders' ↑ / ↑↑ add the parent folder, or
   all folders up to the project root (`parentFolders`, `showParentFolders`).
+- **Routes mode** (toolbar Routes toggle, `routes` in the store, on by default): `routesFor` in
+  drawn.ts puts each drawn route file (or a declaration in one whose file isn't drawn) inside its
+  route frame, and routes inside their parent routes. Single-child chains collapse, like folders.
+  Route files leave the folder frames. Removing a route frame takes its contents
+  (`nodesUnderRoute`). With Routes off, a route you added is a card linked by `routeFile` /
+  `routeChild` edges (in the "Declares" group). Kind `route` is pink; the Navigation group holds
+  `navigates` (solid), `fetches` (dashed) and `revalidates` (dotted).
 - Kind `type` (green, square-ish card) and relation `usesType` (group "Types", dotted green).
 - Folders can be **added explicitly**: their `dir:<path>` id goes into `visible`, from the picker (the row ticks folder → with the files inside → off) or from quick add (the folder lands at the clicked point). `drawnGraph` draws an explicit folder even when empty, as a dashed folder card (`CardNode` folder branch), and never collapses it into a chain. Removing a folder also removes explicit subfolders. Removing anything else **keeps the drawn folders around it**: `hideNodes` makes them explicit, so a folder left empty stays as a folder card. Folders can add their subfolders, all or one: a "Subfolders" submenu in the context menu and "Add all" or chips in `FolderDetails`.
 - Adding, as in noesis:

@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
-import { KIND_META, fileNote } from "../../lib/kinds.tsx";
+import { KIND_META, fileNote, routeCaption } from "../../lib/kinds.tsx";
 import { CardShape } from "./CardShape.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -39,7 +39,7 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   if (!node) return null;
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
-  const caption = [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   return (
     <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />

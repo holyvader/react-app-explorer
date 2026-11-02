@@ -6,7 +6,7 @@ import { isFiltered, type LibraryFilter } from "./packages.ts";
  * libraries. Folder chains holding a single folder are one row (`src/components`), as on the canvas.
  */
 
-export type TreeKind = "folder" | "file" | "decl" | "libraries" | "library";
+export type TreeKind = "folder" | "file" | "decl" | "libraries" | "library" | "routes" | "route";
 
 export interface TreeNode {
   key: string;
@@ -62,6 +62,22 @@ export function buildTree(s: Snapshot, filter: LibraryFilter): TreeNode[] {
     return cur;
   };
   const top = compress(root).children;
+  // Next.js routes first, nested like the route tree (a route is an element of its own)
+  const routeNodes = Object.values(s.nodes).filter((n) => n.kind === "route");
+  if (routeNodes.length) {
+    const rows = new Map(routeNodes.map((n) => [n.id, { key: n.id, kind: "route" as const, name: n.name, path: n.route?.url ?? n.name, id: n.id, children: [] as TreeNode[] }]));
+    const roots: TreeNode[] = [];
+    for (const n of routeNodes) {
+      const parent = n.route?.parent ? rows.get(n.route.parent) : undefined;
+      (parent ? parent.children : roots).push(rows.get(n.id)!);
+    }
+    const sortRoutes = (list: TreeNode[]) => {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      for (const r of list) sortRoutes(r.children);
+    };
+    sortRoutes(roots);
+    top.unshift({ key: "routes", kind: "routes", name: "Routes", path: "", children: roots });
+  }
   if (libraries.length) {
     top.push({ key: "libraries", kind: "libraries", name: "Libraries", path: "", children: libraries.sort((a, b) => a.name.localeCompare(b.name)) });
   }

@@ -41,6 +41,7 @@ export {
   FolderTree as IconFolderTree,
   CircleCheck as IconDone,
   Braces as IconType,
+  Signpost as IconRoute,
   FileImage as IconAsset,
   TriangleAlert as IconWarning,
 } from "lucide-react";

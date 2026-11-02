@@ -1,6 +1,6 @@
 import type { Snapshot } from "@rae/schema";
 import { create } from "zustand";
-import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder } from "./graph/drawn.ts";
+import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
@@ -67,6 +67,8 @@ interface ExplorerState {
   /** Library filter: packages hidden everywhere (canvas, search, relations). */
   excluded: string[];
   hideAllLibraries: boolean;
+  /** Next.js: routes as frames around their files (a toggle next to Folders). */
+  routes: boolean;
   /** Asset files (CSS, images, JSON) on the canvas and in lists; off by default. */
   showAssets: boolean;
   /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
@@ -121,6 +123,7 @@ interface ExplorerState {
   toggleGroup: (g: EdgeGroup) => void;
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
   setShowAssets: (on: boolean) => void;
+  setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
   notify: (message: string | undefined) => void;
   setFolders: (on: boolean) => void;
@@ -137,7 +140,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", assets: "rae.showAssets", sidebar: "rae.sidebarWidth" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -171,7 +174,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const next = { ...get(), ...patch };
     if (!next.snapshot) return set(patch);
     const f = relationFilterOf(next);
-    const graph = drawnGraph(next.snapshot, next.visible, { enabled: next.enabled, filter: f.libraries, folders: next.folders }, next.index);
+    const graph = drawnGraph(next.snapshot, next.visible, { enabled: next.enabled, filter: f.libraries, folders: next.folders, routes: next.routes }, next.index);
     if (!graph.elements.length) return set({ ...patch, graph, placed: [] });
     // Small changes are placed beside their anchor; big ones (e.g. "children down to the leaves") get a full layout.
     const placedIds = new Set(next.placed.map((p) => p.element.id));
@@ -194,7 +197,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     if (!s.snapshot) return;
     const visible = entry.visible.filter((id) => isKnown(s.snapshot, id));
     const f = relationFilterOf(s);
-    const graph = drawnGraph(s.snapshot, visible, { enabled: s.enabled, filter: f.libraries, folders: s.folders }, s.index);
+    const graph = drawnGraph(s.snapshot, visible, { enabled: s.enabled, filter: f.libraries, folders: s.folders, routes: s.routes }, s.index);
     const selectedId = entry.selectedId && isKnown(s.snapshot, entry.selectedId) ? entry.selectedId : undefined;
     const selection = selectedId ? [selectedId] : [];
     if (!graph.elements.length) return set({ ...extra, visible, selectedId, selection, graph, placed: [] });
@@ -211,10 +214,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     menu: null,
     past: [],
     future: [],
-    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true },
+    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true },
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),
+    routes: readJson(KEYS.routes, true),
     sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
     folders: readJson(KEYS.folders, true),
     editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
@@ -294,6 +298,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
           gone.add(id);
           for (const v of s.visible) if (isFolder(v) && v.slice(FOLDER_PREFIX.length).startsWith(dir + "/")) gone.add(v);
           for (const v of nodesUnderFolder(s.snapshot, s.visible, id)) gone.add(v);
+        }
+        else if (s.snapshot.nodes[id]?.kind === "route" && !opts?.keepContents) {
+          // a route frame goes with its files, their declarations and its nested routes
+          gone.add(id);
+          for (const v of nodesUnderRoute(s.snapshot, s.visible, id)) gone.add(v);
         }
         else if (s.snapshot.nodes[id]?.kind === "module" && !opts?.keepContents) {
           // A file block goes with everything drawn in it.
@@ -400,6 +409,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setSidebarWidth: (width) => {
       localStorage.setItem(KEYS.sidebar, JSON.stringify(width));
       set({ sidebarWidth: width });
+    },
+
+    setRoutes: (on) => {
+      localStorage.setItem(KEYS.routes, JSON.stringify(on));
+      redraw({ routes: on }, null);
     },
 
     setShowAssets: (on) => {

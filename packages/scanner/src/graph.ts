@@ -1,15 +1,5 @@
-import { basename, relative } from "node:path";
-import type {
-  Condition,
-  Edge,
-  EdgeKind,
-  GraphNode,
-  HookUsage,
-  ImportType,
-  JsxNode,
-  ModuleType,
-  NodeId,
-} from "@rae/schema";
+import { basename, dirname, join, relative } from "node:path";
+import type { Condition, Edge, EdgeKind, GraphNode, HookUsage, ImportType, JsxNode, ModuleType, NodeId, RouteInfo, SegmentKind } from "@rae/schema";
 import type { FileExtract, RawJsxNode, Resolved } from "./extract/types.ts";
 import { nextRoleOf, type ProjectInfo } from "./project.ts";
 
@@ -310,7 +300,132 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
   }
 
   propagateModuleTypes(files, info, nodes, moduleId);
+  if (info.appDir) addRoutes(info.appDir);
   return { nodes, edges };
+
+  /**
+   * The App Router as nodes: one route per app/ directory holding special files (page, layout,
+   * loading, error, not-found, template, default, route), nested by directory. Then every
+   * declaration's navigations are matched to routes: navigates / fetches / revalidates edges.
+   */
+  function addRoutes(appDir: string) {
+    const HTTP = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
+    const byDir = new Map<string, { files: Record<string, NodeId>; methods: string[] }>();
+    for (const f of files.values()) {
+      if (!f.absPath.startsWith(appDir + "/")) continue;
+      const role = nextRoleOf(f.absPath, info);
+      if (!role) continue;
+      const dir = dirname(f.absPath).slice(appDir.length).replace(/^\//, "");
+      const entry = byDir.get(dir) ?? { files: {}, methods: [] };
+      const base = basename(f.absPath).replace(/\.[^.]+$/, "");
+      entry.files[base === "global-error" ? "global-error" : role] = moduleId(f.absPath);
+      if (role === "route") entry.methods.push(...f.exports.map((e) => e.exported).filter((n) => HTTP.has(n)));
+      byDir.set(dir, entry);
+    }
+    if (!byDir.size) return;
+
+    const segmentKind = (seg: string): SegmentKind =>
+      seg === ""
+        ? "root"
+        : seg.startsWith("@")
+          ? "slot"
+          : /^\((\.{1,3}|\.\.\)\(\.\.)\)/.test(seg)
+            ? "intercept"
+            : seg.startsWith("(") && seg.endsWith(")")
+              ? "group"
+              : seg.startsWith("[[...")
+                ? "optionalCatchAll"
+                : seg.startsWith("[...")
+                  ? "catchAll"
+                  : seg.startsWith("[")
+                    ? "dynamic"
+                    : "static";
+    const routeId = (dir: string) => `route:/${dir}`;
+    const urlSegments = (dir: string) =>
+      dir
+        .split("/")
+        .filter(Boolean)
+        .filter((seg) => !["group", "slot"].includes(segmentKind(seg)))
+        .map((seg) => (segmentKind(seg) === "intercept" ? seg.replace(/^(\((\.{1,3})\))+/, "") : seg));
+
+    const routes: { id: NodeId; segs: string[]; kind: RouteInfo["kind"] }[] = [];
+    for (const [dir, entry] of [...byDir].sort(([a], [b]) => a.localeCompare(b))) {
+      const segs = urlSegments(dir);
+      const url = "/" + segs.join("/");
+      const last = dir.split("/").pop() ?? "";
+      const kindOfSeg = segmentKind(dir === "" ? "" : last);
+      const kind: RouteInfo["kind"] = entry.files.page ? "page" : entry.files.route ? "api" : "segment";
+      // parent: the nearest enclosing directory that is a route too
+      let parent: NodeId | undefined;
+      for (let up = dir; up !== ""; ) {
+        up = up.includes("/") ? up.slice(0, up.lastIndexOf("/")) : "";
+        if (byDir.has(up)) {
+          parent = routeId(up);
+          break;
+        }
+      }
+      const id = routeId(dir);
+      nodes[id] = {
+        id,
+        kind: "route",
+        // groups and slots share their parent's URL: name them by their segment too
+        name: kindOfSeg === "group" || kindOfSeg === "slot" ? `${url} ${last}` : url,
+        filePath: rel(join(appDir, dir)) || ".",
+        absPath: join(appDir, dir),
+        route: {
+          url,
+          segment: last,
+          segmentKind: kindOfSeg,
+          params: segs.filter((s) => s.startsWith("[")).map((s) => s.replace(/^\[+(\.\.\.)?|\]+$/g, "")),
+          kind,
+          files: entry.files,
+          methods: entry.methods.length ? [...new Set(entry.methods)] : undefined,
+          parent,
+        },
+      };
+      if (parent) addEdge({ from: parent, to: id, kind: "routeChild" });
+      for (const mid of Object.values(entry.files)) if (mid) addEdge({ from: id, to: mid, kind: "routeFile" });
+      if (kind !== "segment") routes.push({ id, segs, kind });
+    }
+
+    // most specific first: more static segments, then fewer catch-alls
+    const score = (segs: string[]) => segs.reduce((n, s) => n + (s.startsWith("[[") ? 0 : s.startsWith("[...") ? 1 : s.startsWith("[") ? 2 : 4), 0);
+    routes.sort((a, b) => score(b.segs) - score(a.segs) || b.segs.length - a.segs.length);
+    const matches = (segs: string[], path: string[]) => {
+      let i = 0;
+      for (const seg of segs) {
+        if (seg.startsWith("[[...")) return true;
+        if (seg.startsWith("[...")) return i < path.length;
+        if (i >= path.length) return false;
+        // a static segment needs that exact text; a template part ("[…]") only fills dynamic segments
+        if (!seg.startsWith("[") && seg !== path[i]) return false;
+        i++;
+      }
+      return i === path.length;
+    };
+    const match = (href: string, api: boolean) => {
+      const path = href.split("/").filter(Boolean).map((p) => (p.includes("[…]") ? "[…]" : decodeURIComponent(p)));
+      return routes.find((r) => (api ? r.kind === "api" : r.kind === "page") && matches(r.segs, path))?.id;
+    };
+
+    for (const f of files.values()) {
+      for (const d of f.decls) {
+        if (!d.navigations?.length) continue;
+        const did = declId(f.absPath, d.local);
+        const node = nodes[did];
+        if (!node) continue;
+        node.navigations = d.navigations.map((n) => {
+          // fetch targets API routes; links, router calls, redirects and revalidatePath pages, falling back to APIs (<Link href="/rss.xml">)
+          const route = n.via === "fetch" ? match(n.href, true) : (match(n.href, false) ?? match(n.href, true));
+          if (route) {
+            const kind = n.via === "fetch" ? "fetches" : n.via === "revalidate" ? "revalidates" : "navigates";
+            addEdge({ from: did, to: route, kind, href: n.href, via: n.via }, `${kind}\0${did}\0${route}\0${n.via}`);
+          }
+          return route ? { ...n, route } : n;
+        });
+      }
+    }
+  }
 }
 
 /**

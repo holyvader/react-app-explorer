@@ -57,6 +57,15 @@ function edgeLook(e: GraphEdge): { className: string; color: string } {
       return { className: "rae-edge rae-edge--declares", color: cssVar("kind.module.muted") };
     case "usesType":
       return { className: "rae-edge rae-edge--usesType", color: cssVar("relation.usesType") };
+    case "routeFile":
+    case "routeChild":
+      return { className: "rae-edge rae-edge--routeFile", color: cssVar("relation.routeFile") };
+    case "navigates":
+      return { className: "rae-edge rae-edge--navigates", color: cssVar("relation.navigates") };
+    case "fetches":
+      return { className: "rae-edge rae-edge--fetches", color: cssVar("relation.fetches") };
+    case "revalidates":
+      return { className: "rae-edge rae-edge--revalidates", color: cssVar("relation.revalidates") };
   }
 }
 

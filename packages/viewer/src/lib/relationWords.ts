@@ -27,6 +27,16 @@ export function relationWord(e: GraphEdge): string {
       return "declares";
     case "usesType":
       return "uses type";
+    case "routeFile":
+      return "route file";
+    case "routeChild":
+      return "nested route";
+    case "navigates":
+      return e.via === "redirect" ? "redirects" : e.via === "push" || e.via === "replace" ? `router.${e.via}` : "links to";
+    case "fetches":
+      return "calls API";
+    case "revalidates":
+      return "revalidates";
   }
 }
 
@@ -47,5 +57,14 @@ export function relationToken(e: GraphEdge): string {
       return "relation.declares";
     case "usesType":
       return "relation.usesType";
+    case "routeFile":
+    case "routeChild":
+      return "relation.routeFile";
+    case "navigates":
+      return "relation.navigates";
+    case "fetches":
+      return "relation.fetches";
+    case "revalidates":
+      return "relation.revalidates";
   }
 }

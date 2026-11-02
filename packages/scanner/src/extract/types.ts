@@ -1,4 +1,4 @@
-import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef, TypeParam } from "@rae/schema";
+import type { Condition, ImportType, JsxProp, Loc, ParamDef, PropDef, TypeParam, Navigation } from "@rae/schema";
 
 /** Result of resolving an import specifier. */
 export type Resolved =
@@ -102,6 +102,8 @@ export interface DeclExtract {
   typeParams?: TypeParam[];
   /** Interfaces: their `extends` clauses, as written. */
   extends?: string[];
+  /** Where it navigates or sends requests (in-app paths only), as written. */
+  navigations?: { via: Navigation["via"]; href: string }[];
 }
 
 export interface FileExtract {

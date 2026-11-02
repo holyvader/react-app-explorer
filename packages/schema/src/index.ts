@@ -15,7 +15,43 @@ export interface TypeParam {
   default?: string;
 }
 
-export type NodeKind = "module" | "component" | "hook" | "serverAction" | "function" | "type" | "external";
+export type NodeKind = "module" | "component" | "hook" | "serverAction" | "function" | "type" | "route" | "external";
+
+/**
+ * How a route segment (an app/ directory) takes part in the URL: `static` (`blog`), `dynamic`
+ * (`[slug]`), `catchAll` (`[...slug]`), `optionalCatchAll` (`[[...slug]]`), `group` (`(marketing)`,
+ * not in the URL), `slot` (`@modal`, parallel route, not in the URL), `intercept` (`(.)photo`),
+ * `root` (app/ itself).
+ */
+export type SegmentKind = "root" | "static" | "dynamic" | "catchAll" | "optionalCatchAll" | "group" | "slot" | "intercept";
+
+/** A Next.js App Router route: one app/ directory with special files. */
+export interface RouteInfo {
+  /** The URL pattern (`/blog/[slug]`); groups and slots don't appear in it. */
+  url: string;
+  /** This directory's segment as written (`[slug]`, `(app)`, `@modal`), "" for app/ itself. */
+  segment: string;
+  segmentKind: SegmentKind;
+  /** Dynamic parameters along the URL (`["slug"]`). */
+  params: string[];
+  /** What the route serves: a page, an API (route.ts), or only shared UI (layout, loading…). */
+  kind: "page" | "api" | "segment";
+  /** Its special files by role (`page`, `layout`, `loading`, `error`, `not-found`, `template`, `default`, `route`) → module ids. */
+  files: Partial<Record<string, NodeId>>;
+  /** API routes: the HTTP methods route.ts exports. */
+  methods?: string[];
+  /** The nearest enclosing route. */
+  parent?: NodeId;
+}
+
+/** Where a declaration sends the user or a request, as written in the source. */
+export interface Navigation {
+  via: "link" | "push" | "replace" | "redirect" | "fetch" | "revalidate";
+  /** The target as written: `/blog/[…]` stands for a template part. */
+  href: string;
+  /** The route it matches, when it's a path of this app. */
+  route?: NodeId;
+}
 
 export type ModuleType = "server" | "client" | "shared";
 
@@ -120,6 +156,10 @@ export interface GraphNode {
   name: string;
   /** Path relative to Snapshot.rootDir (for external: the module specifier). */
   filePath: string;
+  /** Route nodes (`kind: "route"`). */
+  route?: RouteInfo;
+  /** Where this declaration navigates / sends requests (matched to routes where possible). */
+  navigations?: Navigation[];
   /** Generic type parameters (`<T extends Item = Item>`) of a type, function, hook or component. */
   typeParams?: TypeParam[];
   /** Interfaces: what they extend, as written (`Base`, `Omit<Props, "x">`). */
@@ -161,8 +201,25 @@ export interface GraphNode {
  * - invokesAction: the same, when the target is a server action.
  * (Schema v1 named these `calls` / `callsAction`.)
  */
-/** `usesType`: a declaration's annotations (props, params, return type, extends…) refer to a type declaration. */
-export type EdgeKind = "imports" | "declares" | "renders" | "invokes" | "usesHook" | "invokesAction" | "usesType";
+/**
+ * `usesType`: a declaration's annotations (props, params, return type, extends…) refer to a type declaration.
+ * Routes: `routeFile` (route → its page/layout/… module), `routeChild` (route → nested route),
+ * `navigates` (Link / router.push / redirect → page route), `fetches` (fetch → API route),
+ * `revalidates` (revalidatePath → route).
+ */
+export type EdgeKind =
+  | "imports"
+  | "declares"
+  | "renders"
+  | "invokes"
+  | "usesHook"
+  | "invokesAction"
+  | "usesType"
+  | "routeFile"
+  | "routeChild"
+  | "navigates"
+  | "fetches"
+  | "revalidates";
 
 export type ImportType = "static" | "dynamic" | "lazy" | "next-dynamic" | "type-only" | "reexport";
 
@@ -177,6 +234,9 @@ export interface Edge {
   variants?: Condition[][];
   /** Imported / used names. */
   specifiers?: string[];
+  /** Navigation edges: the target as written, and how (`link`, `push`, `redirect`…). */
+  href?: string;
+  via?: Navigation["via"];
 }
 
 export interface ScanStats {

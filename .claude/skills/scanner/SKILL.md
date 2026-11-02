@@ -38,7 +38,15 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    imports) and `usesType` edges to type nodes. The tsgo pass skips `type` declarations.
    Generics: `typeParams` (`{ name, constraint?, default? }`, as written) on types and functions;
    interfaces also keep `extends` (as written), and their extends clauses count as type references.
-6. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
+6. **Next.js App Router routes** (graph.ts `addRoutes`): one `route` node per app/ directory with
+   special files. The id is `route:/<dir under app>` (groups and slots stay distinct) and the name is
+   the URL (groups and slots also show their segment). `RouteInfo` holds the URL, segment kind,
+   params, kind (page / api / segment), files by role, API methods and the parent route. Edges:
+   `routeChild` and `routeFile`. Each declaration's `navigations` (Link/`<a>` href, router.push /
+   replace, redirect, fetch, revalidatePath; in-app "/…" paths only, template parts → `[…]`) are
+   matched to routes, most specific first, and become `navigates` / `fetches` / `revalidates` edges.
+   A `[…]` only fills dynamic segments. Pages Router isn't modelled (by choice).
+7. **Only packages are external**: imports resolved into node_modules, Node built-ins, and bare names
    that match no tsconfig alias. They become `external` nodes and are never scanned. Everything else
    is the project's own:
    - local non-source files are `module` nodes with `asset: true`;

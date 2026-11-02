@@ -1,4 +1,4 @@
-import type { ImportType, ParamDef, PropDef, TypeParam } from "@rae/schema";
+import type { ImportType, ParamDef, PropDef, TypeParam, Navigation } from "@rae/schema";
 import { parseSync } from "oxc-parser";
 import { JsxAnalyzer } from "./jsx.ts";
 import type {
@@ -120,6 +120,48 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       default: p.default ? src.slice(p.default, 300) : undefined,
     }));
     return params.length ? params : undefined;
+  };
+
+  /**
+   * Where code sends the user or a request: `<Link href>` / `<a href>`, `router.push/replace`,
+   * `redirect` / `permanentRedirect`, `fetch`, `revalidatePath`. In-app paths only ("/…"); template
+   * parts become `[…]`, query strings and hashes are dropped.
+   */
+  const navigationsIn = (root: N): { via: Navigation["via"]; href: string }[] => {
+    const found = new Map<string, { via: Navigation["via"]; href: string }>();
+    const pathOf = (e: N): string | undefined => {
+      const x = unwrap(e);
+      let s: string | undefined;
+      if (x?.type === "Literal" && typeof x.value === "string") s = x.value;
+      else if (x?.type === "TemplateLiteral") s = x.quasis.map((q: N) => q.value?.cooked ?? "").join("[…]");
+      else if (x?.type === "ObjectExpression") {
+        const p = x.properties.find((p: N) => p.type === "Property" && memberName(p.key) === "pathname");
+        return p ? pathOf(p.value) : undefined;
+      }
+      if (!s || !s.startsWith("/") || s.startsWith("//")) return undefined;
+      return s.replace(/[?#].*$/, "") || "/";
+    };
+    const add = (via: Navigation["via"], href: string | undefined) => {
+      if (href) found.set(`${via}\0${href}`, { via, href });
+    };
+    walk(root, (n) => {
+      if (n.type === "JSXOpeningElement") {
+        const tag = n.name?.type === "JSXIdentifier" ? n.name.name : n.name?.type === "JSXMemberExpression" ? n.name.property?.name : undefined;
+        if (tag !== "Link" && tag !== "a" && tag !== "NextLink") return;
+        const href = n.attributes?.find((a: N) => a.type === "JSXAttribute" && a.name?.name === "href");
+        const v = href?.value;
+        add("link", v?.type === "JSXExpressionContainer" ? pathOf(v.expression) : pathOf(v));
+      } else if (n.type === "CallExpression") {
+        const callee = unwrap(n.callee);
+        const name = callee?.type === "MemberExpression" ? callee.property?.name : callee?.name;
+        const arg = n.arguments?.[0];
+        if (callee?.type === "MemberExpression" && (name === "push" || name === "replace")) add(name, pathOf(arg));
+        else if (name === "redirect" || name === "permanentRedirect") add("redirect", pathOf(arg));
+        else if (name === "revalidatePath") add("revalidate", pathOf(arg));
+        else if (name === "fetch") add("fetch", pathOf(arg));
+      }
+    });
+    return [...found.values()];
   };
 
   const declNames = (decl: N): string[] => {
@@ -377,6 +419,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
 
     const body = c.fn ? c.fn.body : c.cls?.body;
     collectBody(body, decl);
+    const navs = navigationsIn(body);
+    if (navs.length) decl.navigations = navs;
     if (c.cls) decl.functions = classMethods(c.cls);
     return decl;
   }

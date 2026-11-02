@@ -32,6 +32,11 @@ const RELATIONS: { kinds: EdgeKind[]; out: string; in: string }[] = [
   { kinds: ["usesHook"], out: "Uses hooks", in: "Hook used by" },
   { kinds: ["invokes", "invokesAction"], out: "Invokes", in: "Invoked by" },
   { kinds: ["usesType"], out: "Uses types", in: "Type used by" },
+  { kinds: ["navigates"], out: "Navigates to", in: "Navigated to from" },
+  { kinds: ["fetches"], out: "Calls APIs", in: "API called by" },
+  { kinds: ["revalidates"], out: "Revalidates", in: "Revalidated by" },
+  { kinds: ["routeFile"], out: "Route files", in: "Route" },
+  { kinds: ["routeChild"], out: "Nested routes", in: "Parent route" },
 ];
 
 /** Items listed per submenu before "Show all" is the way to get the rest. */

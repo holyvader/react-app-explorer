@@ -222,6 +222,28 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
         </>
       );
     }
+    case "route": {
+      const r = n.route!;
+      const files = Object.entries(r.files).filter(([, id]) => !!id);
+      return (
+        <>
+          <Section label="URL">
+            <div className="rae-tip__code">
+              <Tok k="value">{r.url}</Tok>
+            </div>
+          </Section>
+          {r.methods?.length ? (
+            <Section label="Methods">
+              <Chips items={r.methods.map((m) => ({ text: m, color: "relation.fetches" }))} />
+            </Section>
+          ) : null}
+          <Section label="Files">
+            <Chips items={files.map(([role]) => ({ text: role, color: "kind.route.solid" }))} />
+          </Section>
+          <div className="rae-tip__foot">Navigated to from {new Set(inc.filter((e) => e.kind === "navigates" || e.kind === "fetches").map((e) => e.from)).size} places</div>
+        </>
+      );
+    }
     case "type":
       return (
         <>

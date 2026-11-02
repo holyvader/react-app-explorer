@@ -40,6 +40,12 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
+## Toolbar
+- It must fit from 1280px up. The view buttons (Folders, Routes, Assets, Libraries) show text only
+  from 2080px (`Label`; `aria-label` keeps their names). The brand text shows from 2240px and the
+  stats from 2400px. The relation toggles may shrink and scroll sideways. Re-measure after adding
+  anything (scrollWidth vs clientWidth at 1280 / 1600 / 1920).
+
 ## Details sidebar & filters
 - The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
   Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.

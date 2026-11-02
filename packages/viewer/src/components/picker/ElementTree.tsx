@@ -38,7 +38,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
 
   const roots = useMemo(() => {
     if (!snapshot) return [];
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true }, excluded, hideAllLibraries: hideAll, showAssets });
+    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true }, excluded, hideAllLibraries: hideAll, showAssets });
     return buildTree(snapshot, f.libraries);
   }, [snapshot, excluded, hideAll, showAssets]);
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);
@@ -56,7 +56,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const activate = (n: TreeNode) => {
     const note = inactive?.(n);
     // Folders are addable too (the chevron / → opens them); the Libraries group only opens.
-    if (n.kind === "libraries" || note) return toggleOpen(n.key);
+    if (n.kind === "libraries" || n.kind === "routes" || note) return toggleOpen(n.key);
     onActivate(n);
   };
 
@@ -115,7 +115,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
         {rows.map((r, i) => {
           const n = r.node;
           const node = n.id ? snapshot?.nodes[n.id] : undefined;
-          const Icon = n.kind === "folder" ? IconFolder : n.kind === "libraries" ? IconLibrary : KIND_META[node?.kind ?? "module"].icon;
+          const Icon = n.kind === "folder" ? IconFolder : n.kind === "libraries" ? IconLibrary : n.kind === "routes" ? KIND_META.route.icon : KIND_META[node?.kind ?? "module"].icon;
           const tick = mode === "toggle" ? tickOf?.(n) : null;
           const note = inactive?.(n);
           return (
@@ -150,7 +150,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
                   {TICK[tick]}
                 </span>
               )}
-              <span className="rae-tree__icon" data-kind={n.kind === "folder" || n.kind === "libraries" ? n.kind : node?.kind}>
+              <span className="rae-tree__icon" data-kind={n.kind === "folder" || n.kind === "libraries" ? n.kind : n.kind === "routes" ? "route" : node?.kind}>
                 <Icon size={14} />
               </span>
               <span className="rae-tree__name">{n.name}</span>

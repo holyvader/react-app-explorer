@@ -1,7 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xyflow/react";
 import { memo, type MouseEvent, type PointerEvent } from "react";
-import { KIND_META } from "../../lib/kinds.tsx";
+import { KIND_META, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -75,10 +75,11 @@ function useRoomAsCanvas() {
 function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
   const { node, element, refused } = data;
   const folder = element.kind === "folder";
-  const Icon = folder ? IconFolder : KIND_META.module.icon;
+  const route = element.kind === "route" ? node?.route : undefined;
+  const Icon = folder ? IconFolder : route ? KIND_META.route.icon : KIND_META.module.icon;
   const room = useRoomAsCanvas();
   return (
-    <div className="rae-frame" data-kind={folder ? "folder" : "module"} data-refused={refused || undefined}>
+    <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-refused={refused || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
       <div className={`rae-frame__header ${FRAME_HANDLE}`}>
         <span className="rae-icon">
@@ -88,7 +89,8 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
           <div className="rae-name" title={data.path ?? node?.filePath}>
             {element.name}
           </div>
-          {!folder && node && <div className="rae-sub">{node.filePath}</div>}
+          {route && <div className="rae-sub">{routeCaption(route)}</div>}
+          {!folder && !route && node && <div className="rae-sub">{node.filePath}</div>}
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
         {node?.nextRole && <span className="rae-badge rae-badge--outline">{node.nextRole}</span>}

@@ -40,6 +40,8 @@ export interface DrawOptions {
   filter: LibraryFilter;
   /** Draw folders as frames around file modules. */
   folders: boolean;
+  /** Next.js: draw routes as frames around their files (page, layout…), nested by the route tree. */
+  routes?: boolean;
 }
 
 export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts: DrawOptions, index?: GraphIndex): DrawnGraph {
@@ -64,8 +66,20 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
   }
 
   const elements: DrawnElement[] = [];
+  // Routes first: the files (and declarations) they hold leave the folder frames.
+  const inRoute = new Set<string>();
+  if (opts.routes) {
+    for (const r of routesFor(snapshot, shown)) {
+      if (!shown.has(r.id)) elements.push({ id: r.id, kind: "route", name: nodes[r.id]!.name, parent: r.parent });
+      else parentOf.set(r.id, r.parent);
+      for (const held of r.holds) {
+        parentOf.set(held, r.id);
+        inRoute.add(held);
+      }
+    }
+  }
   if (opts.folders) {
-    const { frames, nearest } = foldersFor(snapshot, shown, explicitFolders);
+    const { frames, nearest } = foldersFor(snapshot, new Set([...shown].filter((id) => !inRoute.has(id) && nodes[id]!.kind !== "route")), explicitFolders);
     for (const f of frames) {
       elements.push(f.element);
       for (const file of f.files) parentOf.set(file, f.element.id);
@@ -73,7 +87,7 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
     // A declaration whose file isn't drawn sits in the nearest drawn folder, if any.
     for (const id of shown) {
       const n = nodes[id]!;
-      if (n.kind === "module" || n.kind === "external" || parentOf.get(id)) continue;
+      if (n.kind === "module" || n.kind === "external" || n.kind === "route" || parentOf.get(id)) continue;
       const slash = n.filePath.lastIndexOf("/");
       if (slash > 0) parentOf.set(id, nearest(n.filePath.slice(0, slash)));
     }
@@ -107,6 +121,73 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
     relations.push({ id, source: e.from, target: e.to, edge: e });
   }
   return { elements, relations };
+}
+
+/** Which route each route file belongs to (module id → route id), per snapshot. */
+const routeFileIndex = new WeakMap<Snapshot, Map<string, string>>();
+export function routeOfFile(s: Snapshot, moduleId: string): string | undefined {
+  let m = routeFileIndex.get(s);
+  if (!m) {
+    m = new Map();
+    for (const n of Object.values(s.nodes)) for (const f of Object.values(n.route?.files ?? {})) if (f) m.set(f, n.id);
+    routeFileIndex.set(s, m);
+  }
+  return m.get(moduleId);
+}
+
+/**
+ * Route frames: every drawn route file (or a declaration in one, when its file isn't drawn) puts its
+ * route — and the routes around it — on the canvas, like folders around files. A route holding
+ * nothing drawn but exactly one drawn route is skipped (as folder chains are), unless it was added.
+ */
+function routesFor(snapshot: Snapshot, shown: Set<string>): { id: string; parent: string | null; holds: string[] }[] {
+  const nodes = snapshot.nodes;
+  const holds = new Map<string, string[]>();
+  for (const id of shown) {
+    const n = nodes[id]!;
+    if (n.kind === "route") {
+      if (!holds.has(id)) holds.set(id, []);
+      continue;
+    }
+    // a file of a route; or a declaration in one whose file isn't drawn
+    const file = n.kind === "module" ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
+    const route = file ? routeOfFile(snapshot, file) : undefined;
+    if (route) holds.set(route, [...(holds.get(route) ?? []), id]);
+  }
+  if (!holds.size) return [];
+  // every route above a drawn one, with its drawn child routes
+  const parentRoute = (id: string) => nodes[id]?.route?.parent ?? null;
+  const children = new Map<string, Set<string>>();
+  const all = new Set<string>();
+  for (const id of holds.keys()) {
+    for (let cur: string | null = id; cur; cur = parentRoute(cur)) {
+      all.add(cur);
+      const up = parentRoute(cur);
+      if (up) (children.get(up) ?? children.set(up, new Set()).get(up)!).add(cur);
+    }
+  }
+  const collapsed = (id: string) => !shown.has(id) && !(holds.get(id)?.length) && (children.get(id)?.size ?? 0) === 1;
+  const drawnParent = (id: string): string | null => {
+    let up = parentRoute(id);
+    while (up && collapsed(up)) up = parentRoute(up);
+    return up;
+  };
+  return [...all].filter((id) => !collapsed(id)).map((id) => ({ id, parent: drawnParent(id), holds: holds.get(id) ?? [] }));
+}
+
+/** Nodes drawn inside a route frame: its files (and their declarations) and its nested routes' — for removing it. */
+export function nodesUnderRoute(snapshot: Snapshot, visible: readonly string[], routeId: string): string[] {
+  const inside = (r: string | undefined): boolean => {
+    for (let cur = r; cur; cur = snapshot.nodes[cur]?.route?.parent) if (cur === routeId) return true;
+    return false;
+  };
+  return visible.filter((id) => {
+    const n = snapshot.nodes[id];
+    if (!n) return false;
+    if (n.kind === "route") return inside(n.route?.parent) || id === routeId;
+    const file = n.kind === "module" ? id : n.moduleId;
+    return !!file && inside(routeOfFile(snapshot, file));
+  });
 }
 
 /**

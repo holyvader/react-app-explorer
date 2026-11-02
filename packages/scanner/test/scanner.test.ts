@@ -235,3 +235,52 @@ describe("generics and extends", () => {
     expect(edge(s, "usesType", "src/list.tsx#ListProps", "src/list.tsx#Base")).toBeDefined();
   });
 });
+
+describe("App Router routes", () => {
+  test("route tree, segment kinds, API methods, and navigation matched to routes", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const root = mkdtempSync(join(tmpdir(), "rae-routes-"));
+    const files: Record<string, string> = {
+      "package.json": `{ "name": "r", "dependencies": { "next": "15" } }`,
+      "app/layout.tsx": `export default function Root({ children }: { children: unknown }) { return <html>{children as never}</html>; }`,
+      "app/(marketing)/layout.tsx": `export default function M({ children }: { children: unknown }) { return <div>{children as never}</div>; }`,
+      "app/(marketing)/page.tsx": [
+        `import Link from "next/link";`,
+        `export default function Home({ slug }: { slug: string }) {`,
+        `  return <><Link href="/blog/new">new</Link><Link href={\`/blog/\${slug}\`}>post</Link><a href="/docs/a/b?x=1">docs</a><a href="https://x.dev">out</a></>;`,
+        `}`,
+      ].join("\n"),
+      "app/blog/[slug]/page.tsx": `import { redirect } from "next/navigation";\nexport default async function Post() { const r = await fetch("/api/posts"); if (!r.ok) redirect("/"); return <p />; }`,
+      "app/blog/new/page.tsx": `export default function New() { return <p />; }`,
+      "app/blog/@modal/default.tsx": `export default function D() { return null; }`,
+      "app/docs/[[...slug]]/page.tsx": `export default function Docs() { return <p />; }`,
+      "app/api/posts/route.ts": `export async function GET() { return Response.json([]); }\nexport async function POST() { return Response.json({}); }`,
+    };
+    for (const [p, t] of Object.entries(files)) {
+      mkdirSync(join(root, p, ".."), { recursive: true });
+      writeFileSync(join(root, p), t);
+    }
+    const s = await scan(root, { cache: false, types: false });
+    const r = (id: string) => s.nodes[id]!.route!;
+    expect(r("route:/")).toMatchObject({ url: "/", segmentKind: "root", kind: "segment" });
+    expect(r("route:/(marketing)")).toMatchObject({ url: "/", segmentKind: "group", kind: "page", parent: "route:/" });
+    expect(s.nodes["route:/(marketing)"]!.name).toBe("/ (marketing)");
+    expect(r("route:/blog/[slug]")).toMatchObject({ url: "/blog/[slug]", segmentKind: "dynamic", params: ["slug"], kind: "page" });
+    expect(r("route:/blog/@modal")).toMatchObject({ url: "/blog", segmentKind: "slot", kind: "segment" });
+    expect(r("route:/docs/[[...slug]]")).toMatchObject({ segmentKind: "optionalCatchAll", params: ["slug"] });
+    expect(r("route:/api/posts")).toMatchObject({ kind: "api", methods: ["GET", "POST"], files: { route: "app/api/posts/route.ts" } });
+
+    const home = "app/(marketing)/page.tsx#Home";
+    // static beats dynamic; a template part matches a dynamic segment; query strings are dropped; external links ignored
+    expect(edge(s, "navigates", home, "route:/blog/new")?.href).toBe("/blog/new");
+    expect(edge(s, "navigates", home, "route:/blog/[slug]")?.href).toBe("/blog/[…]");
+    expect(edge(s, "navigates", home, "route:/docs/[[...slug]]")?.href).toBe("/docs/a/b");
+    expect(s.nodes[home]!.navigations!.some((n) => n.href.includes("x.dev"))).toBe(false);
+    expect(edge(s, "fetches", "app/blog/[slug]/page.tsx#Post", "route:/api/posts")).toBeDefined();
+    expect(edge(s, "navigates", "app/blog/[slug]/page.tsx#Post", "route:/(marketing)")?.via).toBe("redirect");
+    expect(edge(s, "routeChild", "route:/blog", "route:/blog/[slug]")).toBeUndefined(); // app/blog has no special files: not a route
+    expect(edge(s, "routeChild", "route:/", "route:/blog/[slug]")).toBeDefined();
+  });
+});

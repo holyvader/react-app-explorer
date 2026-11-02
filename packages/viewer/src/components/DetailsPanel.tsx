@@ -32,7 +32,7 @@ import { type ReactNode, useMemo } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl, openInEditor } from "../lib/editor.ts";
-import { KIND_META, fileNote } from "../lib/kinds.tsx";
+import { KIND_META, fileNote, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
@@ -74,7 +74,7 @@ export function DetailsPanel() {
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
-  const caption = [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
@@ -147,6 +147,12 @@ export function DetailsPanel() {
           </HStack>
         </Flex>
       </PanelHeader>
+
+      {node.route && (
+        <PanelSection title="Route">
+          <RouteInfoView node={node} />
+        </PanelSection>
+      )}
 
       {node.kind === "type" && (node.typeParams?.length || node.extends?.length) ? (
         <PanelSection title={node.extends?.length ? (node.typeParams?.length ? "Generics & extends" : "Extends") : "Generics"}>
@@ -349,6 +355,44 @@ function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
   );
 }
 
+/** A route: its URL, parameters, HTTP methods and special files (layout first, then page…), each addable. */
+const FILE_ORDER = ["layout", "template", "page", "route", "loading", "error", "global-error", "not-found", "default"];
+function RouteInfoView({ node }: { node: GraphNode }) {
+  const r = node.route!;
+  const files = Object.entries(r.files)
+    .filter(([, id]) => !!id)
+    .sort(([a], [b]) => FILE_ORDER.indexOf(a) - FILE_ORDER.indexOf(b));
+  return (
+    <Stack gap="3">
+      <Box {...CODE_BOX}>
+        <CodeToken kind="value">{r.url}</CodeToken>
+      </Box>
+      {(r.params.length > 0 || (r.methods?.length ?? 0) > 0) && (
+        <Wrap gap="1.5">
+          {r.methods?.map((m) => (
+            <TagChip key={m} color="relation.fetches" mono>
+              {m}
+            </TagChip>
+          ))}
+          {r.params.map((p) => (
+            <TagChip key={p} color="kind.route.solid" mono>
+              {p}
+            </TagChip>
+          ))}
+        </Wrap>
+      )}
+      <Box>
+        <Eyebrow>Files</Eyebrow>
+        <Wrap gap="1.5" mt="1.5">
+          {files.map(([role, id]) => (
+            <NodeChip key={role} id={id!} anchor={node.id} suffix={role} />
+          ))}
+        </Wrap>
+      </Box>
+    </Stack>
+  );
+}
+
 const CODE_BOX = { bg: "syntax.bg", rounded: "l2", px: "3", py: "2", fontFamily: "mono", fontSize: "xs", lineHeight: "1.7", borderWidth: "1px", borderColor: "border.muted" } as const;
 
 /**
@@ -469,6 +513,7 @@ function NodeChip({ id, anchor, suffix }: { id: string; anchor: string; suffix?:
 
 /** Relation groups, most important first: what renders and runs before files and packages. */
 const GROUP_ORDER: { kinds: string[]; label: string }[] = [
+  { kinds: ["route"], label: "Routes" },
   { kinds: ["component"], label: "Components" },
   { kinds: ["serverAction"], label: "Server actions" },
   { kinds: ["hook"], label: "Hooks" },
