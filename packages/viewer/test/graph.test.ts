@@ -180,3 +180,15 @@ describe("auto-placement", () => {
     expect(by.get("other/x.ts")).toMatchObject({ x: 200, y: 200 }); // folders aren't touched
   });
 });
+
+describe("isPrimitiveType: primitives get no type tooltip", () => {
+  const { isPrimitiveType } = require("../src/lib/typeText.ts") as typeof import("../src/lib/typeText.ts");
+  test("primitives and literals", () => {
+    for (const t of ["string", "number | undefined", "boolean[]", '"a" | "b"', "'x' | 1 | true", "null", "void", "(string | number)[]", "unknown", "-1 | 0n"])
+      expect([t, isPrimitiveType(t)]).toEqual([t, true]);
+  });
+  test("anything that names or shapes something", () => {
+    for (const t of ["User", "Promise<void>", "{ a: string }", "() => void", "string[] | Todo", "Record<string, number>", "React.ReactNode", "Element"])
+      expect([t, isPrimitiveType(t)]).toEqual([t, false]);
+  });
+});

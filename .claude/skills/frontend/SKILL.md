@@ -46,7 +46,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Uses / Used by are grouped by the other end's kind, most important first (`GROUP_ORDER`:
   components, server actions, hooks, functions, types, files, libraries).
 - Types render through `TypeText`. Hovering shows a tooltip with the whole type plus the definitions
-  of the project types it names; the names are links that add the type (`node.typeRefs`, falling
+  of the project types it names (primitive-only types — `string`, `number | undefined`, literals: `isPrimitiveType` in lib/typeText.ts — get no tooltip); the names are links that add the type (`node.typeRefs`, falling
   back to a unique type node of that name). A type node's details show its definition.
 - Assets (`asset` modules, old `asset:` externals) are hidden unless the toolbar's Assets toggle is
   on (`showAssets`, localStorage `rae.showAssets`): `isFiltered` applies everywhere the library

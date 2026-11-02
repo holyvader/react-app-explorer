@@ -1,9 +1,11 @@
 import { Box, Text, Tooltip } from "@rae/design-system";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, type ReactNode } from "react";
+import { isPrimitiveType } from "../lib/typeText.ts";
 import { useExplorer } from "../store.ts";
 
 const IDENT = /[A-Za-z_$][\w$]*/g;
+
 /** Lines of a definition shown in a tooltip before "…". */
 const PREVIEW_LINES = 24;
 
@@ -106,7 +108,7 @@ export function TypeText({ text, owner, block }: { text: string; owner?: GraphNo
       ))}
     </Box>
   );
-  // block definitions are already shown in full; inline types get the full-text tooltip
-  if (block && targets.size === 0) return body;
+  // block definitions are already shown in full, primitives need no preview; other inline types get the full-text tooltip
+  if (targets.size === 0 && (block || isPrimitiveType(text))) return body;
   return <Tooltip content={<Preview text={block ? "" : text} targets={[...targets.values()]} />}>{body}</Tooltip>;
 }
