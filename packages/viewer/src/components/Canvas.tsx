@@ -4,6 +4,7 @@ import {
   applyNodeChanges,
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   type Edge,
   MarkerType,
@@ -19,7 +20,9 @@ import { folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
 import { childEdges, hasUndrawn, parentEdges } from "../graph/relations.ts";
+import { IconBack, IconForward } from "@rae/design-system/icons";
 import { KIND_META } from "../lib/kinds.tsx";
+import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
@@ -86,7 +89,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ["⌘ Z", "Ctrl Z"], does: "Undo a step" },
   { keys: ["⇧ ⌘ Z", "Ctrl Y"], does: "Redo it" },
   { keys: ["Esc"], does: "Clear the selection, close the menu" },
-  { keys: ["Back", "⌘ ["], does: "The previously selected element (Forward / ⌘ ] again)" },
+  { keys: ["⌘ [", "Back"], does: "The previously selected element (⌘ ] / Forward: the next); also the ← → buttons below" },
 ];
 
 const RAISED_Z = 1000;
@@ -553,7 +556,9 @@ export function Canvas() {
         onlyRenderVisibleElements
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={cssVar("canvas.dot")} />
-        <Controls position="bottom-left" showInteractive={false} />
+        <Controls position="bottom-left" showInteractive={false}>
+          <HistoryButtons />
+        </Controls>
         <MiniMap
           pannable
           zoomable
@@ -586,5 +591,20 @@ export function Canvas() {
         }
       />
     </div>
+  );
+}
+
+/** Back / Forward through the selected elements (the desktop app has no browser buttons). */
+function HistoryButtons() {
+  const { canBack, canForward } = useSelectionHistory();
+  return (
+    <>
+      <ControlButton onClick={goBack} disabled={!canBack} title="Back: the previously selected element (⌘ [)" aria-label="Back to the previously selected element">
+        <IconBack size={14} />
+      </ControlButton>
+      <ControlButton onClick={goForward} disabled={!canForward} title="Forward (⌘ ])" aria-label="Forward to the next selected element">
+        <IconForward size={14} />
+      </ControlButton>
+    </>
   );
 }

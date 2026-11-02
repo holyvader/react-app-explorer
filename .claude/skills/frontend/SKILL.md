@@ -42,7 +42,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Types come from `@rae/schema`. The snapshot is read-only in the UI.
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
 - Persistence: everything goes in localStorage under `rae.*` keys (settings, `rae.lastSnapshot`, each project's diagram `rae.diagram:<rootDir>`, saved 300ms after a change and on `pagehide`). In the desktop app, `syncStorage()` (`src/lib/storage.ts`, awaited in main.tsx before rendering) restores them from the server's `/api/storage` and mirrors every `rae.*` write back. The app's server gets a new port each launch, so the web view's own localStorage starts empty. Always use `rae.*` keys, or it won't survive a restart.
-- Selection history (`src/lib/selectionHistory.ts`, imported in main.tsx): each newly selected node is a `history` entry (`{rae: id}`, the first one replaces the page's entry; a snapshot switch resets). Browser Back/Forward selects it again with `addNodes([id], {select, focus})`, so removed nodes come back. In the desktop app only (`serverIsDesktop`), the mouse back/forward buttons and ⌘[ / ⌘] call `history.back()/forward()`.
+- Selection history (`src/lib/selectionHistory.ts`, imported in main.tsx): each newly selected node is a `history` entry `{rae: id, i}` (`i` = step index; the first selection replaces the page's entry; a snapshot switch resets to 0). Back/Forward select it again with `addNodes([id], {select, focus})`, so removed nodes come back. Ways in, the same in both apps: the ← → `ControlButton`s in the canvas `Controls` (`useSelectionHistory()` for their disabled state), ⌘[ / ⌘] (handled by the viewer itself, never left to the browser), and the browser's own Back/Forward. The mouse's back/forward buttons are handled only in the desktop app (`serverIsDesktop`): a browser already does it, so handling it there too would step twice.
 - Details panel relations: "Uses" comes before "Used by"; "Used by" shows the first `USED_BY_LIMIT` (5) entries in group order, then "Show N more". Each row shows the other end's file path, dimmed and smaller (`2xs`). In "Used by", imported names equal to the viewed node's own name are dropped (a hook's users import the hook).
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
@@ -91,6 +91,25 @@ e2e/smoke.ts            headless smoke test (playwright-core)
   the newest left, or `unloadSnapshot()`.
 - Scanner side: `scanStructure` + `addTypes` (scan.ts); `scan()` still does both for the CLI/tests.
   `signal` cancels; `onCount(stage, done, total, loading?)` feeds the progress.
+
+## Same behaviour in the web app and the desktop app
+The viewer runs in two hosts: Chrome/any browser on the Vite dev server (`bun run dev`, 5173) and the desktop app, a **WebKit** web view (WKWebView on macOS) on the Bun sidecar (production build). Every feature must behave the same in both. Design for the desktop app's limits:
+- **No browser UI** in the app: no Back/Forward buttons, address bar, browser shortcuts or dev tools. Anything users would do with the browser needs an in-app control (e.g. the ← → history buttons; ⌘[ / ⌘] handled in JS for both apps).
+- **New origin every launch** (the sidecar uses `--port 0`): localStorage, sessionStorage, IndexedDB and cookies start empty. Keep state in `rae.*` localStorage keys only: `syncStorage()` mirrors exactly those to the server (`/api/storage`).
+- **WebKit, not Chromium**: no `alert`/`confirm`/`prompt` (use `Notice`/modals); other apps' URL schemes go through the server (`openInEditor` → `/api/open`); an opacity/transform *transition* on canvas nodes rasterises them blurry under the zoom (`:root[data-webkit]` turns those transitions off); mouse back/forward buttons don't navigate.
+- **The production build has no `window.__rae`**: desktop-only paths (`serverIsDesktop`) can only be tested through the UI.
+
+**Verify in both** before calling a UI change done:
+1. Chromium against the Vite test server on 5199 (see "Test headlessly").
+2. WebKit against the real sidecar and the production build, the closest thing to the app that can be scripted (macOS Accessibility is off, so the real app's window can't be driven):
+```bash
+S=<scratch dir>; (cd packages/viewer && node_modules/.bin/vite build --outDir $S/vdist --emptyOutDir)
+mkdir -p $S/store/snapshots && cp <snapshots>/* $S/store/snapshots/
+bun packages/server/src/server.ts --port 0 --snapshots $S/store/snapshots --static $S/vdist   # prints RAE_SERVER_URL
+# Playwright: import { webkit } from "playwright-core"; webkit.launch() → goto that URL
+# (once: `playwright-core install webkit`). Add nodes through the UI: Add → click the item → Done.
+```
+Restart the server (a new port) with a fresh browser context to check that state survives a relaunch. Then, after `bun run desktop:build`, open the real app (`open -n …/React App Explorer.app`) and probe its sidecar with curl for anything server-side.
 
 ## Run
 - The packaged desktop app serves this viewer from a Bun sidecar with the same `/api/*` endpoints as the Vite plugin; keep both in sync (see the `desktop` skill).

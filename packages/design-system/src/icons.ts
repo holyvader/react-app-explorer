@@ -2,6 +2,8 @@
 export {
   ArrowDown as IconArrowDown,
   ArrowUp as IconArrowUp,
+  ArrowLeft as IconBack,
+  ArrowRight as IconForward,
   ChevronDown as IconChevronDown,
   ChevronRight as IconChevronRight,
   ChevronsDown as IconChevronsDown,

@@ -24,6 +24,7 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   permissions** (`capabilities/default.json` is empty) — it only speaks HTTP to the sidecar.
 
 ## Gotchas (each cost a debugging round)
+- The web view is **WebKit with no browser UI and a new origin each launch**: the viewer must behave the same as in Chrome on `bun run dev`. See the `frontend` skill, "Same behaviour in the web app and the desktop app", for the rules and the WebKit + sidecar test recipe.
 - oxc's napi loaders pick their `.node` file at runtime, so `bun build --compile` doesn't embed them.
   `build.ts`'s plugin rewrites `require('@oxc-*/binding-<platform>')` **and** the
   `require('…/package.json').version` checks (otherwise the binding is rejected with
