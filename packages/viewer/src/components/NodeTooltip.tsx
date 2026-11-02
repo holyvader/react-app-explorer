@@ -68,10 +68,14 @@ function ParamRows({ params }: { params: ParamDef[] }) {
   );
 }
 
-/** Just the hook names, each once (×N when called several times). Details live in the sidebar. */
-const hookNames = (n: GraphNode) => {
+/** The project's own hooks it calls (not React's or libraries'), by name, each once (×N). Details live on the hook. */
+const hookNames = (n: GraphNode, s: Snapshot) => {
   const counts = new Map<string, number>();
-  for (const h of n.hooksUsed ?? []) counts.set(h.hook, (counts.get(h.hook) ?? 0) + 1);
+  for (const h of n.hooksUsed ?? []) {
+    const target = h.targetId ? s.nodes[h.targetId] : undefined;
+    if (target?.kind !== "hook" || target.id === n.id) continue;
+    counts.set(target.name, (counts.get(target.name) ?? 0) + 1);
+  }
   return [...counts].map(([name, c]) => (c > 1 ? `${name} ×${c}` : name));
 };
 
@@ -158,9 +162,9 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
               <div className="rae-tip__empty">none</div>
             )}
           </Section>
-          {(n.hooksUsed?.length ?? 0) > 0 && (
-            <Section label="Hooks">
-              <Chips items={hookNames(n).map((h) => ({ text: h, color: "kind.hook.solid" }))} />
+          {hookNames(n, s).length > 0 && (
+            <Section label="Custom hooks">
+              <Chips items={hookNames(n, s).map((h) => ({ text: h, color: "kind.hook.solid" }))} />
             </Section>
           )}
           <Section label="Renders">
@@ -186,9 +190,9 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
               <Tok k="type">{n.signature?.returnType ?? "unknown"}</Tok>
             </div>
           </Section>
-          {n.kind === "hook" && (n.hooksUsed?.length ?? 0) > 0 && (
-            <Section label="Uses hooks">
-              <Chips items={hookNames(n).map((h) => ({ text: h, color: "kind.hook.solid" }))} />
+          {hookNames(n, s).length > 0 && (
+            <Section label="Custom hooks">
+              <Chips items={hookNames(n, s).map((h) => ({ text: h, color: "kind.hook.solid" }))} />
             </Section>
           )}
         </>

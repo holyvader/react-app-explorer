@@ -75,6 +75,12 @@ export function DetailsPanel() {
 
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
+  // the project's own hooks it calls (React's and libraries' left out), each once with a count
+  const customHooks = [
+    ...(node.hooksUsed ?? [])
+      .filter((h) => h.targetId && snapshot?.nodes[h.targetId]?.kind === "hook" && h.targetId !== node.id)
+      .reduce((m, h) => m.set(h.targetId!, (m.get(h.targetId!) ?? 0) + 1), new Map<string, number>()),
+  ].map(([id, count]) => ({ id, count }));
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
   const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
@@ -211,36 +217,14 @@ export function DetailsPanel() {
         </PanelSection>
       )}
 
-      {node.hooksUsed && node.hooksUsed.length > 0 && (
-        <PanelSection title="Hooks" count={node.hooksUsed.length}>
-          <Stack gap="2.5">
-            {node.hooksUsed.map((h, i) => {
-              const local = h.targetId && snapshot.nodes[h.targetId]?.kind === "hook" ? h.targetId : undefined;
-              return (
-                <Box key={i}>
-                  <Flex align="center" gap="2" minW="0">
-                    <TagChip color="kind.hook.solid" mono onClick={local ? () => addNodes([local], { select: local, focus: local, anchor: node.id }) : undefined}>
-                      {h.hook}
-                    </TagChip>
-                    <Text fontFamily="mono" fontSize="xs" color="fg.muted" truncate title={h.args.join(", ")}>
-                      ({h.args.join(", ")})
-                    </Text>
-                  </Flex>
-                  {(h.assignedTo || h.returnType) && (
-                    <CodeRow indent>
-                      {h.assignedTo && <CodeToken kind="name">{h.assignedTo}</CodeToken>}
-                      {h.returnType && (
-                        <>
-                          <CodeToken kind="punct">{h.assignedTo ? ": " : "→ "}</CodeToken>
-                          <TypeText text={h.returnType} owner={node} />
-                        </>
-                      )}
-                    </CodeRow>
-                  )}
-                </Box>
-              );
-            })}
-          </Stack>
+      {customHooks.length > 0 && (
+        <PanelSection title="Custom hooks" count={customHooks.length}>
+          {/* just names: the details (arguments, types) are on the hook itself — click to go there */}
+          <Wrap gap="1.5">
+            {customHooks.map(({ id, count }) => (
+              <NodeChip key={id} id={id} anchor={node.id} suffix={count > 1 ? `×${count}` : undefined} />
+            ))}
+          </Wrap>
         </PanelSection>
       )}
 

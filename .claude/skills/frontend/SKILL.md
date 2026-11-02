@@ -49,6 +49,9 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 ## Details sidebar & filters
 - The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
   Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.
+- Hooks in details and tooltips: only **custom hooks** (`hooksUsed` resolving to a project `hook` node)
+  by name, as chips that open the hook (×N when called more than once). React's and libraries' hooks
+  and their argument and return types are left out; a hook's own details lead with its Inputs & output.
 - Generics: a `Generics` block (type parameters `T extends X = D`, and interface `Extends`) is its own
   section for types and sits at the top of Inputs & output for functions; the canvas tooltip shows it too.
 - Inputs & output (`Signature`): Inputs (one parameter per row) and Output, without the element's
