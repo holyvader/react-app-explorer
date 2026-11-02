@@ -12,7 +12,11 @@ type Row = { status: "waiting" | "active" | "done" | "off"; value: number | null
 /** The files step: real counts — parsed vs. found so far (more turn up as imports are followed). */
 function filesRow(scan: ScanState): Row {
   const p = scan.parse;
-  if (scan.phase !== "structure") return { status: p || scan.file ? "done" : "off", value: 100, text: p ? `${p.total} files scanned` : "Scanned" };
+  if (scan.phase !== "structure") {
+    // stopped or failed before the structure was written: say so, with how far it got
+    if (!scan.file) return { status: "off", value: 0, text: `${scan.phase === "cancelled" ? "Stopped" : "Failed"}${p ? ` at ${p.done} / ${p.total}` : ""}` };
+    return { status: "done", value: 100, text: p ? `${p.total} files scanned` : "Scanned" };
+  }
   if (scan.stage === "graph") return { status: "active", value: 100, text: `${p?.total ?? 0} files scanned · building the diagram` };
   if (!p) return { status: "active", value: null, text: "Finding files…" };
   return { status: "active", value: pct(p.done, p.total), text: `${p.done} / ${p.total} scanned · ${p.total - p.done} left` };
@@ -128,7 +132,7 @@ export function ScanProgress() {
           <StepRow label="Types" row={typesRow(scan, now)} />
         </Flex>
         {problem && scan.message && (
-          <Text mt="2.5" fontSize="xs" color="fg.muted" lineClamp={3} title={scan.message}>
+          <Text mt="2.5" fontSize="xs" color="fg.muted" lineClamp={4} whiteSpace="pre-wrap" wordBreak="break-word" title={scan.message} userSelect="text">
             {scan.message}
           </Text>
         )}

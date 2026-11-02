@@ -102,11 +102,17 @@ const embedNative: Bun.BunPlugin = {
   },
 };
 
-// 4. compile the server (+ the scanner's worker, a second entry point inside the same executable)
+// 4. compile the server (+ the scanner's worker, a second entry point inside the same executable).
+//    Entry points are laid out relative to their common folder (packages/), so the worker lands at
+//    /$bunfs/root/scanner/src/workers/extract.worker.js — not next to the server, where the scanner
+//    would look for it. Tell it.
 const serverOut = join(outDir, `rae-server-${triple}${exe}`);
+const workerEntry = join(scanner, "src/workers/extract.worker.ts");
+const workerPath = `/$bunfs/root/${relative(join(repo, "packages"), workerEntry).replaceAll("\\", "/").replace(/\.ts$/, ".js")}`;
 const out = await Bun.build({
-  entrypoints: [join(here, "src/server.ts"), join(scanner, "src/workers/extract.worker.ts")],
+  entrypoints: [join(here, "src/server.ts"), workerEntry],
   compile: { target: target as Bun.Build.CompileTarget, outfile: serverOut },
+  define: { "process.env.RAE_EXTRACT_WORKER": JSON.stringify(workerPath) },
   minify: true,
   plugins: [embedNative],
 });
@@ -122,6 +128,7 @@ if (!out.success) {
   for (const name of [`parser.${platform}`, `resolver.${platform}`]) {
     if (!embedded.some((e) => e.includes(name))) throw new Error(`${name}.node isn't embedded in the server (found: ${embedded.join(", ") || "none"})`);
   }
+  if (!bin.includes(workerPath)) throw new Error(`The parser worker isn't at ${workerPath} in the executable`);
   for (const leak of [parserNode, resolverNode, repo]) {
     if (bin.includes(leak)) throw new Error(`The server executable references a build-machine path: ${leak}`);
   }

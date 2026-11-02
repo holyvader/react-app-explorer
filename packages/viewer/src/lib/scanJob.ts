@@ -1,11 +1,17 @@
 import type { Snapshot } from "@rae/schema";
-import { fetchSnapshot, runScan } from "./api.ts";
+import { fetchSnapshot, runScan, serverLogFile } from "./api.ts";
 import { type ScanState, useExplorer } from "../store.ts";
 
 /** How long the "Types added" note stays before the progress panel goes away. */
 const DONE_LINGER_MS = 2500;
 let clearTimer: ReturnType<typeof setTimeout> | undefined;
 let running: AbortController | undefined;
+
+/** A failure always says why — and, in the desktop app, where the details are. */
+const failed = (why: string | undefined): Partial<ScanState> => ({
+  phase: "failed",
+  message: `${why?.trim() || "The scan failed for an unknown reason."}${serverLogFile ? `\nDetails: ${serverLogFile}` : ""}`,
+});
 
 const patch = (p: Partial<ScanState>) => {
   const cur = useExplorer.getState().scan;
@@ -51,7 +57,7 @@ export async function startScan(path: string, types: boolean, onStructure: (file
             finish(e.typed ? DONE_LINGER_MS : 8000);
             break;
           case "error":
-            patch({ phase: "failed", message: e.message });
+            patch(failed(e.message));
             break;
           case "cancelled":
             patch({ phase: "cancelled" });
@@ -65,12 +71,12 @@ export async function startScan(path: string, types: boolean, onStructure: (file
     );
     // the stream ended without an outcome (server stopped mid-scan)
     const s = useExplorer.getState().scan;
-    if (s && (s.phase === "structure" || s.phase === "types")) patch({ phase: "failed", message: "The scan stopped before it finished" });
+    if (s && (s.phase === "structure" || s.phase === "types")) patch(failed("The connection to the scanner closed before the scan finished."));
   } catch (e) {
     if (controller.signal.aborted) {
       patch({ phase: "cancelled" });
       finish(DONE_LINGER_MS);
-    } else patch({ phase: "failed", message: (e as Error).message });
+    } else patch(failed((e as Error).message));
   } finally {
     if (running === controller) running = undefined;
   }

@@ -78,11 +78,19 @@ export async function collectFiles(initial: string[], opts: CollectOptions = {})
   let inflight = 0;
   let wake: (() => void) | undefined;
 
+  // A worker that fails (couldn't load, crashed) must fail the scan — not leave it waiting forever.
+  let failure: Error | undefined;
   const spawn = () => {
-    const w = new Worker(new URL("./workers/extract.worker.ts", import.meta.url).href);
+    // Compiled executables (the desktop app's server) pack the worker elsewhere: the build passes its path.
+    const w = new Worker(process.env.RAE_EXTRACT_WORKER || new URL("./workers/extract.worker.ts", import.meta.url).href);
     w.onmessage = (ev: MessageEvent<WorkerResponse>) => {
       pending.get(ev.data.id)?.(ev.data);
       pending.delete(ev.data.id);
+    };
+    w.onerror = (ev: ErrorEvent) => {
+      ev.preventDefault?.();
+      failure ??= new Error(`A parser worker failed: ${ev.message || "it couldn't start"}`);
+      wake?.();
     };
     workers.push(w);
     idle.push(w);
@@ -112,6 +120,10 @@ export async function collectFiles(initial: string[], opts: CollectOptions = {})
     if (opts.signal?.aborted) {
       stop();
       opts.signal.throwIfAborted();
+    }
+    if (failure) {
+      stop();
+      throw failure;
     }
     // Small amount of work and nothing running: do it inline, avoids worker startup cost.
     if (!inflight && workers.length === 0 && queue.length <= INLINE_THRESHOLD) {

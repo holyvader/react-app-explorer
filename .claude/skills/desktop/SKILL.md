@@ -64,6 +64,14 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   in-process; the Vite plugin pipes `rae-scan --events`. Change one, check both.
   Cancelling: the page aborts the request. The server's `req.signal` / stream `cancel()` aborts the
   job; the plugin SIGTERMs the CLI, which aborts its job. Either way the type checker is killed.
+- **The parser worker's path inside the executable** isn't next to the server: entry points are laid
+  out relative to their common folder, so it's `/$bunfs/root/scanner/src/workers/extract.worker.js`.
+  `build.ts` passes it as `process.env.RAE_EXTRACT_WORKER` (define), and the guard checks the path is in
+  the binary. When it was missing, every project over 48 files (the inline threshold) hung in the
+  file step, while small test projects passed. **Always test the packaged server on a big project.**
+- A worker `error` now fails the scan with its message (it used to wait forever).
+- `Bun.serve({ idleTimeout: 0 })`: the default 10s idle limit cut scan streams during quiet
+  stretches (TypeScript loading a big project), which looked like a failure with no reason.
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the

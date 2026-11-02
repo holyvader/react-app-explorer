@@ -2,13 +2,20 @@ import type { ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
 
 export interface SnapshotList {
   dir: string;
+  /** The desktop app's server log (where scan failures are detailed); absent in dev. */
+  logFile?: string;
   snapshots: (Pick<SnapshotIndexEntry, "file" | "createdAt"> & Partial<SnapshotIndexEntry>)[];
 }
+
+/** The server's log file, once known (the desktop app reports it with the snapshot list). */
+export let serverLogFile: string | undefined;
 
 export async function fetchSnapshotList(): Promise<SnapshotList> {
   const res = await fetch("/api/snapshots/");
   if (!res.ok) throw new Error(`Failed to list snapshots (${res.status})`);
-  return res.json();
+  const list = (await res.json()) as SnapshotList;
+  serverLogFile = list.logFile;
+  return list;
 }
 
 /** Upgrades older snapshots in place: schema v1 named invokes edges `calls` / `callsAction`. */

@@ -164,7 +164,7 @@ async function api(req: Request, url: URL): Promise<Response> {
     log(`deleted ${removed.length} snapshot(s): ${removed.join(", ")}`);
     return json({ removed });
   }
-  if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex() });
+  if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex(), logFile });
   if (path.startsWith("/api/snapshots/")) {
     const file = basename(decodeURIComponent(path.slice("/api/snapshots/".length)));
     const full = join(snapshotsDir, file);
@@ -245,6 +245,8 @@ async function api(req: Request, url: URL): Promise<Response> {
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
+  // Scans stream progress, with long quiet stretches (TypeScript loading a big project): no 10s idle cut-off.
+  idleTimeout: 0,
   port: Number(values.port),
   async fetch(req) {
     const url = new URL(req.url);
