@@ -29,7 +29,7 @@ import {
   IconOpen,
   IconRouteChain,
 } from "@rae/design-system/icons";
-import { type ReactNode, useMemo } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { editorUrl, openInEditor } from "../lib/editor.ts";
@@ -282,11 +282,11 @@ export function DetailsPanel() {
         </PanelSection>
       )}
 
-      <PanelSection title="Used by" count={relations.parents.length} defaultOpen={relations.parents.length <= 30}>
-        <RelationList edges={relations.parents} side="from" />
-      </PanelSection>
       <PanelSection title="Uses" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
         <RelationList edges={relations.children} side="to" />
+      </PanelSection>
+      <PanelSection title="Used by" count={relations.parents.length}>
+        <RelationList key={node.id} edges={relations.parents} side="from" limit={USED_BY_LIMIT} />
       </PanelSection>
 
       <PanelSection title="Details" defaultOpen={false}>
@@ -655,9 +655,14 @@ const GROUP_ORDER: { kinds: string[]; label: string }[] = [
   { kinds: ["external"], label: "Libraries" },
 ];
 
-function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
+/** "Used by" shows this many entries until expanded. */
+const USED_BY_LIMIT = 5;
+
+/** `limit`: only the first entries (in group order) until "Show more". */
+function RelationList({ edges, side, limit }: { edges: Edge[]; side: "from" | "to"; limit?: number }) {
   const snapshot = useExplorer((s) => s.snapshot);
   const selectedId = useExplorer((s) => s.selectedId);
+  const [expanded, setExpanded] = useState(false);
   if (!edges.length)
     return (
       <Text fontSize="sm" color="fg.muted">
@@ -671,9 +676,18 @@ function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
       .filter((e) => g.kinds.includes(snapshot?.nodes[e[side]]?.kind ?? ""))
       .sort((a, b) => (snapshot?.nodes[a[side]]?.name ?? "").localeCompare(snapshot?.nodes[b[side]]?.name ?? "")),
   })).filter((g) => g.edges.length);
+  // collapsed: the first `limit` entries across the groups, most important groups first
+  const hidden = limit !== undefined && !expanded ? Math.max(0, edges.length - limit) : 0;
+  const cap = hidden ? limit! : Infinity;
+  const shown = groups
+    .map((g, i) => {
+      const before = groups.slice(0, i).reduce((n, x) => n + x.edges.length, 0);
+      return { ...g, shownEdges: g.edges.slice(0, Math.max(0, cap - before)) };
+    })
+    .filter((g) => g.shownEdges.length);
   return (
     <Stack gap="3">
-      {groups.map((g) => (
+      {shown.map((g) => (
         <Box key={g.label}>
           {groups.length > 1 && (
             <Flex align="center" gap="1.5" mb="1">
@@ -684,12 +698,17 @@ function RelationList({ edges, side }: { edges: Edge[]; side: "from" | "to" }) {
             </Flex>
           )}
           <Stack gap="1">
-            {g.edges.map((e, i) => (
+            {g.shownEdges.map((e, i) => (
               <RelationRow key={`${e[side]}-${e.kind}-${i}`} e={e} side={side} selectedId={selectedId} />
             ))}
           </Stack>
         </Box>
       ))}
+      {limit !== undefined && edges.length > limit && (
+        <Button size="xs" variant="ghost" alignSelf="flex-start" mx="-2" onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : `Show ${hidden} more`}
+        </Button>
+      )}
     </Stack>
   );
 }
@@ -727,8 +746,14 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
             </Text>
           )}
         </Flex>
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
-          {e.specifiers?.length ? e.specifiers.join(", ") : other.kind === "external" ? "library" : other.filePath}
+        {e.specifiers?.length ? (
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
+            {e.specifiers.join(", ")}
+          </Text>
+        ) : null}
+        {/* where it lives, dimmed: the file (the package for libraries) */}
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" truncate title={other.kind === "external" ? other.name : other.filePath}>
+          {other.kind === "external" ? "library" : other.filePath}
         </Text>
         {e.conditions && (
           <Text fontSize="xs" color="syntax.literal" fontFamily="mono" truncate title={e.conditions.map(formatCondition).join(" ∧ ")}>

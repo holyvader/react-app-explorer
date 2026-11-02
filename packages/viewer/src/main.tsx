@@ -3,6 +3,7 @@ import "@xyflow/react/dist/style.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
+import { syncStorage } from "./lib/storage.ts";
 import { useExplorer } from "./store.ts";
 
 // Dev-only handle for debugging and headless tests.
@@ -12,6 +13,9 @@ if (import.meta.env.DEV) (window as unknown as { __rae: typeof useExplorer }).__
 // which make it rasterise a card as a layer at 1× — blurry under the diagram's zoom until it ends.
 const ua = navigator.userAgent;
 if (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) document.documentElement.dataset.webkit = "";
+
+// the desktop app's stored settings and diagrams first (they live on its server)
+await syncStorage();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -48,6 +48,9 @@ process.on("unhandledRejection", (e) => log(`unhandled rejection: ${(e as Error)
 
 const snapshotsDir = resolve(values.snapshots ?? join(homedir(), ".react-app-explorer", "snapshots"));
 mkdirSync(snapshotsDir, { recursive: true });
+/** The viewer's stored settings and diagrams, next to the snapshots folder (the app's data folder). */
+const storageFile = join(dirname(snapshotsDir), "viewer-storage.json");
+const STORAGE_MAX = 32 * 1024 * 1024;
 
 {
   const tsgo = process.env.RAE_TSGO_PATH;
@@ -167,6 +170,33 @@ async function api(req: Request, url: URL): Promise<Response> {
     return json({ removed });
   }
   if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex(), logFile, desktop: true });
+
+  // The viewer's settings and diagrams (its localStorage). The app's server listens on a new port each
+  // launch, a new origin for the web view, so its own localStorage would start empty every time.
+  if (path === "/api/storage") {
+    if (req.method === "GET") {
+      try {
+        return json({ entries: JSON.parse(readFileSync(storageFile, "utf8")) as Record<string, string> });
+      } catch {
+        return json({ entries: {} });
+      }
+    }
+    if (req.method !== "PUT") return json({ error: "GET or PUT only" }, 405);
+    if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
+    let entries: Record<string, unknown>;
+    try {
+      entries = ((await req.json()) as { entries?: Record<string, unknown> }).entries ?? {};
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
+    // the viewer's own keys, string values only
+    const kept = Object.fromEntries(Object.entries(entries).filter(([k, v]) => k.startsWith("rae.") && typeof v === "string"));
+    const text = JSON.stringify(kept);
+    if (text.length > STORAGE_MAX) return json({ error: "Too large" }, 413);
+    writeFileSync(`${storageFile}.tmp`, text);
+    renameSync(`${storageFile}.tmp`, storageFile);
+    return json({ ok: true });
+  }
 
   // Open a file in an editor: the app's web view won't follow other apps' URL schemes, so the OS does.
   if (path === "/api/open") {

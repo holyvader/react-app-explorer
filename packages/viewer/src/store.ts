@@ -509,10 +509,17 @@ function loadDiagram(rootDir: string): DiagramState | undefined {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingSave: (() => void) | undefined;
+// closing the window right after a change: store it now, not after the delay
+if (typeof addEventListener === "function") addEventListener("pagehide", () => {
+  clearTimeout(saveTimer);
+  pendingSave?.();
+});
 useExplorer.subscribe((s, prev) => {
   if (!s.snapshot || (s.visible === prev.visible && s.placed === prev.placed && s.selectedId === prev.selectedId)) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
+  pendingSave = () => {
+    pendingSave = undefined;
     const key = diagramKey(s.snapshot!.rootDir);
     try {
       if (!s.visible.length) localStorage.removeItem(key);
@@ -520,5 +527,6 @@ useExplorer.subscribe((s, prev) => {
     } catch {
       // Storage full: the diagram just isn't kept.
     }
-  }, 300);
+  };
+  saveTimer = setTimeout(pendingSave, 300);
 });

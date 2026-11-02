@@ -552,7 +552,7 @@ export function Canvas() {
         onlyRenderVisibleElements
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={cssVar("canvas.dot")} />
-        <Controls position="bottom-left" />
+        <Controls position="bottom-left" showInteractive={false} />
         <MiniMap
           pannable
           zoomable

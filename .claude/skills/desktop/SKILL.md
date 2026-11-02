@@ -89,3 +89,4 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   sidecar needs that platform's `@oxc-parser/binding-*`, `@oxc-resolver/binding-*` and
   `@typescript/typescript-*` installed. `build.ts --target bun-linux-x64|bun-windows-x64|…` picks them.
 - Unsigned builds: macOS Gatekeeper / Windows SmartScreen warn. Signing + notarization are not set up.
+- `/api/storage` (GET / PUT `{entries}`): the viewer's `rae.*` localStorage, kept in `<appData>/viewer-storage.json` next to the snapshots folder. The sidecar listens on `--port 0`, a new origin each launch, so the web view's localStorage would otherwise start empty.

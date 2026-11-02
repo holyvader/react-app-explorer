@@ -41,6 +41,8 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - 3rd-party filter: `excluded` packages (default `react`, `react-dom`) and `hideAllLibraries` live in the store and persist in localStorage. Anything listing nodes or relations must respect it: use `relationFilterOf(state)` or `isFiltered(node, …)`.
 - Types come from `@rae/schema`. The snapshot is read-only in the UI.
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
+- Persistence: everything goes in localStorage under `rae.*` keys (settings, `rae.lastSnapshot`, each project's diagram `rae.diagram:<rootDir>`, saved 300ms after a change and on `pagehide`). In the desktop app, `syncStorage()` (`src/lib/storage.ts`, awaited in main.tsx before rendering) restores them from the server's `/api/storage` and mirrors every `rae.*` write back. The app's server gets a new port each launch, so the web view's own localStorage starts empty. Always use `rae.*` keys, or it won't survive a restart.
+- Details panel relations: "Uses" comes before "Used by"; "Used by" shows the first `USED_BY_LIMIT` (5) entries in group order, then "Show N more". Each row shows the other end's file path, dimmed.
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
 ## Toolbar
