@@ -16,7 +16,7 @@ const FILE_CONCURRENCY = 48;
 /** No progress for this long (no file answered, or the checker never got ready) → give up on types. */
 const STALL_MS = Number(process.env.RAE_TYPES_STALL_MS) || 60_000;
 
-type Progress = { onProgress?: (m: string) => void; kick: () => void; tick: () => void };
+type Progress = { onProgress?: (m: string) => void; kick: () => void; tick: () => void; ready?: () => void };
 
 type Checker = Awaited<ReturnType<typeof openChecker>>["checker"];
 type TType = Type;
@@ -87,8 +87,11 @@ export async function applyTypes(
     keyOf: (f: FileExtract) => string;
     onWarn?: (m: string) => void;
     onProgress?: (m: string) => void;
-    /** Files typed so far (answered or failed), out of those needing types. */
-    onCount?: (done: number, total: number) => void;
+    /** Files typed so far (answered or failed), out of those needing types; `loading` while the
+     *  checker loads the project (no per-file progress then). */
+    onCount?: (done: number, total: number, loading?: boolean) => void;
+    /** Stops the type pass: the checker is killed and applyTypes rejects with an AbortError. */
+    signal?: AbortSignal;
   },
 ): Promise<TypesResult> {
   const todo = files.filter((f) => f.decls.length && f.typesKey !== opts.keyOf(f));
@@ -111,16 +114,28 @@ export async function applyTypes(
   kick();
   let done = 0;
   const tick = () => opts.onCount?.(Math.min(++done, todo.length), todo.length);
-  opts.onCount?.(0, todo.length);
+  opts.onCount?.(0, todo.length, true);
+  const ready = () => opts.onCount?.(0, todo.length, false);
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(opts.signal!.reason ?? new DOMException("Aborted", "AbortError"));
+    if (opts.signal?.aborted) onAbort();
+    else opts.signal?.addEventListener("abort", onAbort, { once: true });
+  });
+  aborted.catch(() => {});
   try {
-    return await Promise.race([runTypes(api, todo, res, { ...opts, kick, tick }), watch.died, stalled]);
+    return await Promise.race([runTypes(api, todo, res, { ...opts, kick, tick, ready }), watch.died, stalled, aborted]);
   } finally {
+    if (onAbort) opts.signal?.removeEventListener("abort", onAbort);
     clearTimeout(stallTimer);
     watch.stop();
     // after a crash the client can't close cleanly: don't wait for it
     void api.close().catch(() => {});
     const child = (api as unknown as { client?: { process?: import("node:child_process").ChildProcess } }).client?.process;
-    if (child && child.exitCode === null) setTimeout(() => child.exitCode === null && child.kill(), 2000).unref?.();
+    if (child && child.exitCode === null) {
+      if (opts.signal?.aborted) child.kill(); // cancelled: stop it now
+      else setTimeout(() => child.exitCode === null && child.kill(), 2000).unref?.();
+    }
   }
 }
 
@@ -136,6 +151,7 @@ async function runTypes(
     opts.tsconfig,
   );
   opts.kick();
+  opts.ready?.();
   opts.onProgress?.("types: checker ready");
   const retry: FileExtract[] = [];
   await runAll(todo, makeProcessor(mainChecker, opts.keyOf), res, opts, retry);

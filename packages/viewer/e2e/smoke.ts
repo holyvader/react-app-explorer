@@ -196,9 +196,9 @@ await page.getByRole("button", { name: "Scan a project…" }).click();
 await page.getByPlaceholder(/path\/to\/app/).fill(reactApp);
 if (outDir) await page.screenshot({ path: `${outDir}/scan-modal.png` });
 await page.getByRole("button", { name: "Scan", exact: true }).click();
-// The dialog closes once the structure is in; types finish in the background (a status pill).
+// The dialog closes right away; a progress panel over the canvas follows files, then types.
 await page.getByRole("dialog").waitFor({ state: "hidden", timeout: 30000 });
-await page.getByText("Types added").waitFor({ timeout: 30000 });
+await page.getByText("Scan finished").waitFor({ timeout: 30000 });
 if (outDir) await page.screenshot({ path: `${outDir}/scan-done.png` });
 const typed = await page.evaluate(() => (window as any).__rae.getState().snapshot.stats.types);
 if (!typed) fail("the typed snapshot should replace the structure-only one after the type pass");

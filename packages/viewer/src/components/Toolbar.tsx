@@ -1,5 +1,5 @@
 import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, Text, ToolGroup, Tooltip } from "@rae/design-system";
-import { IconBrand, IconClear, IconFolderTree, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
+import { IconBrand, IconClear, IconFolderTree, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
 import { useRef } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
@@ -21,10 +21,11 @@ export interface ToolbarProps {
   onPickSnapshot: (file: string) => void;
   onLoadFile: (file: File) => void;
   onScan: () => void;
+  onManageSnapshots: () => void;
   onLibraries: () => void;
 }
 
-export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onLibraries }: ToolbarProps) {
+export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onManageSnapshots, onLibraries }: ToolbarProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
   const enabled = useExplorer((s) => s.enabled);
@@ -91,6 +92,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onL
         />
         <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} size="xs" onClick={() => fileRef.current?.click()} />
         <ActionIconButton label="Scan a project…" icon={<IconScan />} size="xs" onClick={onScan} />
+        <ActionIconButton label="Manage snapshots…" icon={<IconHistory />} size="xs" onClick={onManageSnapshots} disabled={!list?.snapshots.length} />
       </ToolGroup>
       {snapshot && (
         <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap" display="none" css={{ "@media (min-width: 1880px)": { display: "block" } }}>

@@ -8,6 +8,7 @@ import { DetailsPanel } from "./components/DetailsPanel.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
 import { ScanProgress } from "./components/ScanProgress.tsx";
+import { SnapshotsModal } from "./components/SnapshotsModal.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { useExplorer } from "./store.ts";
@@ -24,6 +25,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [scanOpen, setScanOpen] = useState(false);
   const [librariesOpen, setLibrariesOpen] = useState(false);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
 
   const load = useCallback(
     async (file: string) => {
@@ -59,6 +61,26 @@ export function App() {
     void refreshList();
   }, [refreshList]);
 
+  // After deleting snapshots: if the loaded one went, load the newest left (or show nothing loaded).
+  const afterDelete = useCallback(
+    async (removed: string[]) => {
+      try {
+        const l = await fetchSnapshotList();
+        setList(l);
+        const name = useExplorer.getState().snapshotName;
+        if (name && removed.includes(name)) {
+          if (localStorage.getItem(LAST_SNAPSHOT_KEY) === name) localStorage.removeItem(LAST_SNAPSHOT_KEY);
+          const next = l.snapshots[0]?.file;
+          if (next) void load(next);
+          else useExplorer.getState().unloadSnapshot();
+        }
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    },
+    [load],
+  );
+
   // ⌘K opens search anywhere (diagram shortcuts live in the Canvas).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -83,7 +105,7 @@ export function App() {
   return (
     <ReactFlowProvider>
       <Flex direction="column" h="100vh" bg="canvas.bg">
-        <Toolbar list={list} current={snapshotName} onPickSnapshot={load} onLoadFile={onLoadFile} onScan={() => setScanOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
+        <Toolbar list={list} current={snapshotName} onPickSnapshot={load} onLoadFile={onLoadFile} onScan={() => setScanOpen(true)} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
         {error && (
           <Box px="4" py="2" bg="red.subtle" color="red.fg" fontSize="sm">
             {error}
@@ -137,6 +159,7 @@ export function App() {
       </Flex>
       <LibrariesModal open={librariesOpen} onOpenChange={setLibrariesOpen} />
       <ScanModal open={scanOpen} onOpenChange={setScanOpen} onScanned={(file) => void refreshList(file)} />
+      <SnapshotsModal open={snapshotsOpen} onOpenChange={setSnapshotsOpen} list={list} current={snapshotName} onDeleted={(removed) => void afterDelete(removed)} />
       <ConfirmExpansion />
     </ReactFlowProvider>
   );

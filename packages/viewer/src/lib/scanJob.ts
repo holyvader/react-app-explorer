@@ -2,54 +2,89 @@ import type { Snapshot } from "@rae/schema";
 import { fetchSnapshot, runScan } from "./api.ts";
 import { type ScanState, useExplorer } from "../store.ts";
 
-/** How long the "Types added" note stays before the progress pill goes away. */
+/** How long the "Types added" note stays before the progress panel goes away. */
 const DONE_LINGER_MS = 2500;
 let clearTimer: ReturnType<typeof setTimeout> | undefined;
+let running: AbortController | undefined;
+
+const patch = (p: Partial<ScanState>) => {
+  const cur = useExplorer.getState().scan;
+  if (cur) useExplorer.getState().setScan({ ...cur, ...p });
+};
 
 /**
- * Runs a scan from the UI. The structure arrives first (`onStructure` loads it, the dialog closes);
- * the type pass continues in the background — its progress lives in the store (`scan`), and the
- * typed snapshot replaces the loaded one in place when it lands. Lives outside components so it
- * survives the dialog closing.
+ * Runs a scan from the UI. Its progress lives in the store (`scan`) — the panel over the canvas
+ * shows it from start to end. The structure snapshot is loaded as soon as it's written
+ * (`onStructure`); the type pass continues and its typed snapshot replaces the loaded one in place.
+ * Lives outside components so it survives dialogs closing; `cancelScan` stops it.
  */
 export async function startScan(path: string, types: boolean, onStructure: (file: string) => void): Promise<void> {
-  const { setScan } = useExplorer.getState();
   clearTimeout(clearTimer);
-  setScan({ path, phase: "structure", stage: "discover" });
-  const patch = (p: Partial<ScanState>) => {
-    const cur = useExplorer.getState().scan;
-    if (cur) setScan({ ...cur, ...p });
-  };
+  running?.abort();
+  const controller = new AbortController();
+  running = controller;
+  useExplorer.getState().setScan({ path, phase: "structure", stage: "discover", withTypes: types, startedAt: Date.now() });
   try {
-    await runScan(path, types, (e) => {
-      switch (e.type) {
-        case "progress":
-          patch({ stage: e.stage, done: e.done, total: e.total, ...(e.stage === "types" ? { phase: "types" } : {}) });
-          break;
-        case "result":
-          patch({ file: e.file, phase: e.typesPending ? "types" : "typed", stage: e.typesPending ? "types" : undefined, done: undefined, total: undefined });
-          onStructure(e.file);
-          if (!e.typesPending) finish();
-          break;
-        case "types":
-          patch({ phase: "typed", typed: e.typed, message: e.typed ? undefined : (e.warnings.at(-1) ?? "The type pass failed") });
-          void fetchSnapshot(e.file).then((snap) => applyTyped(e.file, snap));
-          finish(e.typed ? DONE_LINGER_MS : 8000);
-          break;
-        case "error":
-          patch({ phase: "failed", message: e.message });
-          break;
-        case "done":
-          break;
-      }
-    });
+    await runScan(
+      path,
+      types,
+      (e) => {
+        switch (e.type) {
+          case "progress":
+            if (e.stage === "parse" && e.total) patch({ stage: "parse", parse: { done: e.done ?? 0, total: e.total } });
+            else if (e.stage === "types" && e.total !== undefined) {
+              const prev = useExplorer.getState().scan?.types;
+              const loading = e.loading ?? prev?.loading ?? false;
+              patch({ phase: "types", stage: "types", types: { done: e.done ?? 0, total: e.total, loading, since: prev?.since ?? Date.now() } });
+            } else patch({ stage: e.stage });
+            break;
+          case "result": {
+            const parse = useExplorer.getState().scan?.parse;
+            patch({ file: e.file, stage: e.typesPending ? "types" : undefined, phase: e.typesPending ? "types" : "typed", parse: parse && { done: parse.total, total: parse.total } });
+            onStructure(e.file);
+            if (!e.typesPending) finish();
+            break;
+          }
+          case "types":
+            patch({ phase: "typed", typed: e.typed, message: e.typed ? undefined : (e.warnings.at(-1) ?? "The type pass failed") });
+            void fetchSnapshot(e.file).then((snap) => applyTyped(e.file, snap));
+            finish(e.typed ? DONE_LINGER_MS : 8000);
+            break;
+          case "error":
+            patch({ phase: "failed", message: e.message });
+            break;
+          case "cancelled":
+            patch({ phase: "cancelled" });
+            finish(DONE_LINGER_MS);
+            break;
+          case "done":
+            break;
+        }
+      },
+      controller.signal,
+    );
     // the stream ended without an outcome (server stopped mid-scan)
     const s = useExplorer.getState().scan;
     if (s && (s.phase === "structure" || s.phase === "types")) patch({ phase: "failed", message: "The scan stopped before it finished" });
   } catch (e) {
-    patch({ phase: "failed", message: (e as Error).message });
+    if (controller.signal.aborted) {
+      patch({ phase: "cancelled" });
+      finish(DONE_LINGER_MS);
+    } else patch({ phase: "failed", message: (e as Error).message });
+  } finally {
+    if (running === controller) running = undefined;
   }
 }
+
+/**
+ * Stops the running scan: the request is aborted, and the server stops parsing or kills the type
+ * checker. A structure snapshot already loaded stays (without types).
+ */
+export function cancelScan() {
+  running?.abort();
+}
+
+export const isScanning = (s: ScanState | undefined) => s?.phase === "structure" || s?.phase === "types";
 
 let unsubscribe: (() => void) | undefined;
 
@@ -74,16 +109,17 @@ function applyTyped(file: string, typed: Snapshot) {
   }, 30_000);
 }
 
+/** Clears the panel after a moment — finished, cancelled, or typed without types; errors stay until dismissed. */
 function finish(after = DONE_LINGER_MS) {
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
     const s = useExplorer.getState().scan;
-    if (s?.phase === "typed") useExplorer.getState().setScan(undefined);
+    if (s && !isScanning(s) && s.phase !== "failed") useExplorer.getState().setScan(undefined);
   }, after);
 }
 
-/** Dismisses a finished or failed scan's note. */
+/** Dismisses a finished, failed or cancelled scan's panel. */
 export function dismissScan() {
   clearTimeout(clearTimer);
-  useExplorer.getState().setScan(undefined);
+  if (!isScanning(useExplorer.getState().scan)) useExplorer.getState().setScan(undefined);
 }

@@ -13,6 +13,8 @@ export type { ScanEvent };
  */
 export interface ScanJobOptions extends Omit<ScanOptions, "onCount"> {
   outDir: string;
+  /** Cancels the job: it emits `cancelled` and resolves. */
+  signal?: AbortSignal;
 }
 
 export function summary(snapshot: Snapshot): string {
@@ -28,11 +30,12 @@ export async function runScanJob(input: string, opts: ScanJobOptions, emit: (e: 
   let warnings: string[] = [];
   // progress events at most every ~50ms per stage (plus the last one), not one per file
   const last = new Map<string, number>();
-  const onCount = (stage: "parse" | "types", done: number, total: number) => {
+  const onCount = (stage: "parse" | "types", done: number, total: number, loading?: boolean) => {
     const now = performance.now();
-    if (done < total && now - (last.get(stage) ?? 0) < 50) return;
+    // always send the first, the last and loading changes; in between, at most every ~50ms
+    if (loading === undefined && done > 0 && done < total && now - (last.get(stage) ?? 0) < 50) return;
     last.set(stage, now);
-    emit({ type: "progress", stage, done, total });
+    emit({ type: "progress", stage, done, total, ...(loading !== undefined ? { loading } : {}) });
   };
   const scanOpts: ScanOptions = {
     ...opts,
@@ -57,6 +60,7 @@ export async function runScanJob(input: string, opts: ScanJobOptions, emit: (e: 
     }
     emit({ type: "done" });
   } catch (e) {
-    emit({ type: "error", message: (e as Error).message ?? String(e) });
+    if (opts.signal?.aborted) emit({ type: "cancelled" });
+    else emit({ type: "error", message: (e as Error).message ?? String(e) });
   }
 }

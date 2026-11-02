@@ -33,10 +33,15 @@ const HISTORY_LIMIT = 100;
 /** A scan started from the UI: structure first (the dialog), then types in the background. */
 export interface ScanState {
   path: string;
-  phase: "structure" | "types" | "typed" | "failed";
+  phase: "structure" | "types" | "typed" | "failed" | "cancelled";
   stage?: "discover" | "parse" | "graph" | "types";
-  done?: number;
-  total?: number;
+  /** Files parsed / found so far (more can be found while imports are followed). */
+  parse?: { done: number; total: number };
+  /** Files typed / needing types; `loading` while TypeScript loads the project (since `since`). */
+  types?: { done: number; total: number; loading: boolean; since: number };
+  /** Whether a type pass was asked for. */
+  withTypes: boolean;
+  startedAt: number;
   /** The snapshot the scan writes (known once the structure is done). */
   file?: string;
   /** Errors (phase "failed") or the reason types are missing (phase "typed" with typed: false). */
@@ -86,6 +91,8 @@ interface ExplorerState {
   /** Same snapshot, new data (types arrived): keeps the diagram, selection and history. */
   updateSnapshot: (snapshot: Snapshot, name: string) => void;
   setScan: (scan: ScanState | undefined) => void;
+  /** No snapshot loaded (e.g. the last one was deleted). */
+  unloadSnapshot: () => void;
   addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor }) => void;
   hideNode: (id: string, opts?: { keepContents?: boolean }) => void;
   /** Removes several elements in one undoable step. */
@@ -225,6 +232,21 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     setScan: (scan) => set({ scan }),
+
+    unloadSnapshot: () =>
+      set({
+        snapshot: undefined,
+        snapshotName: undefined,
+        index: undefined,
+        visible: [],
+        selectedId: undefined,
+        selection: [],
+        pending: undefined,
+        graph: EMPTY,
+        placed: [],
+        past: [],
+        future: [],
+      }),
 
     addNodes: (ids, opts) => {
       const s = get();

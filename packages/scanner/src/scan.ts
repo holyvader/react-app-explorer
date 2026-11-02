@@ -18,8 +18,11 @@ export interface ScanOptions {
   onWarn?: (msg: string) => void;
   /** Step-by-step progress (for logs): each phase as it starts and ends. */
   onProgress?: (msg: string) => void;
-  /** Counts for a progress bar: files parsed out of those found so far, then files typed out of the total. */
-  onCount?: (stage: "parse" | "types", done: number, total: number) => void;
+  /** Counts for a progress bar: files parsed out of those found so far, then files typed out of the
+   *  total (`loading` while TypeScript loads the project, before any file is typed). */
+  onCount?: (stage: "parse" | "types", done: number, total: number, loading?: boolean) => void;
+  /** Cancels the scan: parsing stops, the type checker is killed, the promise rejects (AbortError). */
+  signal?: AbortSignal;
 }
 
 /** A scanned project before (or after) the type pass: what `addTypes` needs to continue. */
@@ -74,6 +77,7 @@ export async function scanStructure(input: string, opts: ScanOptions = {}): Prom
 
   const info = await discoverProject(input, opts);
   phase("discover");
+  opts.signal?.throwIfAborted();
 
   const cache = opts.cache === false ? undefined : loadCache(info.rootDir);
   phase("cacheLoad");
@@ -84,6 +88,7 @@ export async function scanStructure(input: string, opts: ScanOptions = {}): Prom
     maxWorkers: opts.maxWorkers,
     onWarn: opts.onWarn,
     onCount: opts.onCount && ((done, total) => opts.onCount!("parse", done, total)),
+    signal: opts.signal,
   });
   phase("parse");
 
@@ -122,9 +127,11 @@ export async function addTypes(scan: StructureScan, opts: ScanOptions = {}): Pro
       keyOf,
       onWarn: opts.onWarn,
       onProgress: opts.onProgress,
-      onCount: opts.onCount && ((done, total) => opts.onCount!("types", done, total)),
+      onCount: opts.onCount && ((done, total, loading) => opts.onCount!("types", done, total, loading)),
+      signal: opts.signal,
     });
   } catch (e) {
+    if (opts.signal?.aborted) throw e; // cancelled, not failed
     typed = false;
     opts.onWarn?.(`type pass skipped: ${(e as Error).message}`);
   }

@@ -55,8 +55,9 @@ export async function listDir(path?: string): Promise<FsListing> {
  * Starts a scan and reports its events as they stream in (NDJSON): progress, the structure snapshot,
  * then the typed snapshot. Resolves when the stream ends; rejects if the scan can't start.
  */
-export async function runScan(path: string, types: boolean, onEvent: (e: ScanEvent) => void): Promise<void> {
+export async function runScan(path: string, types: boolean, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/api/scan", {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, types }),
@@ -78,4 +79,16 @@ export async function runScan(path: string, types: boolean, onEvent: (e: ScanEve
     }
     if (done) break;
   }
+}
+
+/** Deletes snapshot files (and their index entries). Returns the files removed. */
+export async function deleteSnapshots(files: string[]): Promise<string[]> {
+  const res = await fetch("/api/snapshots/", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ files }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `Delete failed (${res.status})`);
+  return data.removed ?? [];
 }

@@ -62,6 +62,8 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   `result` once the structure snapshot is written, then `types` when the typed snapshot has
   replaced the same file. Shared producer: `runScanJob` in `@rae/scanner/job`. The server runs it
   in-process; the Vite plugin pipes `rae-scan --events`. Change one, check both.
+  Cancelling: the page aborts the request. The server's `req.signal` / stream `cancel()` aborts the
+  job; the plugin SIGTERMs the CLI, which aborts its job. Either way the type checker is killed.
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the

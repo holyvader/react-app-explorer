@@ -42,11 +42,19 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 
 ## Scanning from the UI
 - `lib/scanJob.ts` `startScan` reads the NDJSON stream into the store's `scan` state, so it outlives
-  the dialog. `ScanModal` shows the structure phase (progress bar), then closes and loads the
-  snapshot. `ScanProgress` (a pill over the canvas) shows the type pass and then "Types added".
-  When the typed snapshot lands, `updateSnapshot` swaps it in place and keeps the diagram. It's
-  applied even if it arrives before the structure snapshot has finished loading.
+  the dialog. `cancelScan` aborts the request, and the server then stops parsing or kills the type
+  checker. `ScanModal` only starts the scan and closes at once: nothing blocks while it runs.
+- `ScanProgress` (a panel over the canvas) covers the whole scan with real counts. Files: scanned /
+  found and left; the total grows while imports are followed. Types: a timer while TypeScript loads
+  the project (`loading`, no per-file count), then typed / total and left. It has a Cancel button.
+- When the structure snapshot is written it loads; when the typed snapshot lands, `updateSnapshot`
+  swaps it in place and keeps the diagram. It's applied even if it arrives before the structure
+  snapshot finished loading. A cancelled scan keeps its structure snapshot (untyped).
+- `SnapshotsModal` (toolbar ⟲ "Manage snapshots…") deletes snapshots via `DELETE /api/snapshots/`
+  `{files}` (both servers; the running scan's file is refused with 409). Deleting the loaded one loads
+  the newest left, or `unloadSnapshot()`.
 - Scanner side: `scanStructure` + `addTypes` (scan.ts); `scan()` still does both for the CLI/tests.
+  `signal` cancels; `onCount(stage, done, total, loading?)` feeds the progress.
 
 ## Run
 - The packaged desktop app serves this viewer from a Bun sidecar with the same `/api/*` endpoints as the Vite plugin; keep both in sync (see the `desktop` skill).

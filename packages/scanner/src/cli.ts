@@ -44,6 +44,9 @@ const input = resolve(positionals[0]!);
 if (values.events) {
   // Structure first, then types in the background — one JSON event per line (see job.ts).
   const outDir = values.out ? resolve(values.out) : join((await discoverProject(input)).rootDir, ".explorer", "snapshots");
+  // The dev plugin cancels a scan by terminating this process: stop the job (and its type checker) cleanly.
+  const controller = new AbortController();
+  for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => controller.abort());
   await runScanJob(
     input,
     {
@@ -54,6 +57,7 @@ if (values.events) {
       types: !values["no-types"],
       cache: !values["no-cache"],
       maxWorkers: values.workers ? Number(values.workers) : undefined,
+      signal: controller.signal,
     },
     (e) => process.stdout.write(JSON.stringify(e) + "\n"),
   );

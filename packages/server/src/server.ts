@@ -7,7 +7,7 @@
  *   rae-server [--port 0] [--snapshots <dir>] [--static <viewer dist dir>] [--log <file>]
  * Prints `RAE_SERVER_URL=http://127.0.0.1:<port>` once listening.
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -120,12 +120,50 @@ function listDir(path: string) {
   return { path, parent: dirname(path) === path ? null : dirname(path), entries, markers };
 }
 
-let scanning = false;
+/** The running scan: its snapshot file (once written) and how to stop it. */
+type ScanJob = { file?: string; abort: AbortController };
+let scanning: ScanJob | undefined;
+
+/** Deletes snapshot files and their index entries. Returns the files actually removed. */
+function deleteSnapshots(files: string[]): string[] {
+  const removed: string[] = [];
+  for (const f of files) {
+    const file = basename(f);
+    const full = join(snapshotsDir, file);
+    if (!file.endsWith(".json") || file === "index.json" || !existsSync(full)) continue;
+    rmSync(full);
+    removed.push(file);
+  }
+  const indexPath = join(snapshotsDir, "index.json");
+  if (removed.length && existsSync(indexPath)) {
+    try {
+      const index = JSON.parse(readFileSync(indexPath, "utf8")) as { file: string }[];
+      writeFileSync(indexPath, JSON.stringify(index.filter((e) => !removed.includes(e.file)), null, 2));
+    } catch {
+      /* a broken index is rebuilt from the folder listing */
+    }
+  }
+  return removed;
+}
 
 async function api(req: Request, url: URL): Promise<Response> {
   if (!isTrusted(req)) return json({ error: "Forbidden: the API only serves the local app" }, 403);
   const path = url.pathname;
 
+  if ((path === "/api/snapshots" || path === "/api/snapshots/") && req.method === "DELETE") {
+    if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
+    let body: { files?: string[] };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
+    const files = (body.files ?? []).filter((f) => typeof f === "string");
+    if (scanning?.file && files.map((f) => basename(f)).includes(scanning.file)) return json({ error: "That snapshot is still being scanned: cancel the scan first" }, 409);
+    const removed = deleteSnapshots(files);
+    log(`deleted ${removed.length} snapshot(s): ${removed.join(", ")}`);
+    return json({ removed });
+  }
   if (path === "/api/snapshots" || path === "/api/snapshots/") return json({ dir: snapshotsDir, snapshots: listIndex() });
   if (path.startsWith("/api/snapshots/")) {
     const file = basename(decodeURIComponent(path.slice("/api/snapshots/".length)));
@@ -148,7 +186,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   if (path === "/api/scan") {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
-    if (scanning) return json({ error: "A scan is still running (it may be adding types in the background)" }, 409);
+    if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
     let body: { path?: string; types?: boolean };
     try {
       body = await req.json();
@@ -157,12 +195,15 @@ async function api(req: Request, url: URL): Promise<Response> {
     }
     const target = body.path ? resolve(body.path) : "";
     if (!target || !existsSync(target)) return json({ error: `Path not found: ${target || "(empty)"}` }, 400);
-    scanning = true;
+    const job: ScanJob = { abort: new AbortController() };
+    scanning = job;
     // NDJSON stream of ScanEvents: progress, the structure result, then types in the background.
-    // The job keeps going if the page goes away (the typed snapshot still lands on disk).
+    // Cancelling the request (the page's Cancel button, or the page going away) stops the scan.
+    req.signal.addEventListener("abort", () => job.abort.abort());
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const enc = new TextEncoder();
     const send = (e: ScanEvent) => {
+      if (e.type === "result") job.file = e.file;
       if (e.type !== "progress") log(`scan: ${JSON.stringify(e).slice(0, 300)}`);
       try {
         controller?.enqueue(enc.encode(JSON.stringify(e) + "\n"));
@@ -175,10 +216,16 @@ async function api(req: Request, url: URL): Promise<Response> {
         controller = c;
         void runScanJob(
           target,
-          { outDir: snapshotsDir, types: body.types !== false, onWarn: (m) => log(`warn: ${m}`), onProgress: (m) => log(`scan: ${m}`) },
+          {
+            outDir: snapshotsDir,
+            types: body.types !== false,
+            signal: job.abort.signal,
+            onWarn: (m) => log(`warn: ${m}`),
+            onProgress: (m) => log(`scan: ${m}`),
+          },
           send,
         ).finally(() => {
-          scanning = false;
+          scanning = undefined;
           try {
             controller?.close();
           } catch {
@@ -188,6 +235,7 @@ async function api(req: Request, url: URL): Promise<Response> {
       },
       cancel() {
         controller = undefined;
+        job.abort.abort();
       },
     });
     return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" } });

@@ -187,11 +187,16 @@ export interface SnapshotIndexEntry {
  * soon as it's written, then the typed snapshot replacing the same file.
  */
 export type ScanEvent =
-  /** Progress. `parse`: files parsed out of those found so far; `types`: files typed out of the total. */
-  | { type: "progress"; stage: "discover" | "parse" | "graph" | "types"; done?: number; total?: number }
+  /**
+   * Progress. `parse`: files parsed out of those found so far (more may be found as imports are
+   * followed); `types`: files typed out of the total, `loading` while TypeScript loads the project.
+   */
+  | { type: "progress"; stage: "discover" | "parse" | "graph" | "types"; done?: number; total?: number; loading?: boolean }
   /** The structure snapshot is written; `typesPending` → a `types` event follows. */
   | { type: "result"; file: string; stdout: string; ms: number; warnings: string[]; typesPending: boolean }
   /** The typed snapshot replaced `file`. `typed: false` → the type pass failed (see warnings). */
   | { type: "types"; file: string; ms: number; typed: boolean; warnings: string[] }
   | { type: "error"; message: string }
+  /** Stopped on request. A structure snapshot already written stays (untyped). */
+  | { type: "cancelled" }
   | { type: "done" };

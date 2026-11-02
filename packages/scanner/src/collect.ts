@@ -12,6 +12,8 @@ export interface CollectOptions {
   onWarn?: (msg: string) => void;
   /** Files parsed so far, out of those found so far (the total grows as imports are followed). */
   onCount?: (done: number, total: number) => void;
+  /** Stops parsing: workers are terminated and collectFiles rejects with an AbortError. */
+  signal?: AbortSignal;
 }
 
 export interface CollectResult {
@@ -99,12 +101,24 @@ export async function collectFiles(initial: string[], opts: CollectOptions = {})
     w.postMessage({ id, files: batch, tsconfig: opts.tsconfig } satisfies WorkerRequest);
   };
 
+  const onAbort = () => wake?.();
+  opts.signal?.addEventListener("abort", onAbort);
+  const stop = () => {
+    for (const w of workers) w.terminate();
+    opts.signal?.removeEventListener("abort", onAbort);
+  };
+
   while (queue.length || inflight) {
+    if (opts.signal?.aborted) {
+      stop();
+      opts.signal.throwIfAborted();
+    }
     // Small amount of work and nothing running: do it inline, avoids worker startup cost.
     if (!inflight && workers.length === 0 && queue.length <= INLINE_THRESHOLD) {
       inlineResolver ??= createResolver(opts.tsconfig);
       const batch = queue.splice(0, queue.length);
       for (const f of batch) {
+        if (opts.signal?.aborted) break;
         try {
           accept(extractFile(f.path, readFileSync(f.path, "utf8"), f.stamp, inlineResolver));
         } catch (e) {
@@ -121,6 +135,7 @@ export async function collectFiles(initial: string[], opts: CollectOptions = {})
     if (inflight) await new Promise<void>((r) => (wake = r));
   }
 
-  for (const w of workers) w.terminate();
+  stop();
+  opts.signal?.throwIfAborted();
   return { files, cacheHits, workers: workers.length };
 }

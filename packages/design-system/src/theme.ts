@@ -49,6 +49,16 @@ const config = defineConfig({
     },
     semanticTokens: {
       colors: {
+        // The semantic shades every Chakra palette has, so `colorPalette="component"` works (progress bars, buttons…).
+        component: {
+          solid: { value: "{colors.component.500}" },
+          contrast: { value: "white" },
+          fg: { value: { _light: "{colors.component.700}", _dark: "{colors.component.300}" } },
+          muted: { value: { _light: "{colors.component.100}", _dark: "{colors.component.900}" } },
+          subtle: { value: { _light: "{colors.component.50}", _dark: "{colors.component.950}" } },
+          emphasized: { value: { _light: "{colors.component.200}", _dark: "{colors.component.800}" } },
+          focusRing: { value: "{colors.component.500}" },
+        },
         kind: {
           module: kind("gray"),
           // Blue is reserved for selection; nothing else uses it.

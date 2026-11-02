@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "vite";
@@ -74,6 +74,29 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
   const cli = join(repoRoot, "packages/scanner/src/cli.ts");
   const bun = process.env.RAE_BUN ?? "bun";
   let running = false;
+  /** The running scan's snapshot file, once written (it can't be deleted until the scan ends). */
+  let runningFile: string | undefined;
+
+  const deleteSnapshots = (files: string[]) => {
+    const removed: string[] = [];
+    for (const f of files) {
+      const file = basename(f);
+      const full = join(dir, file);
+      if (!file.endsWith(".json") || file === "index.json" || !existsSync(full)) continue;
+      rmSync(full);
+      removed.push(file);
+    }
+    const indexPath = join(dir, "index.json");
+    if (removed.length && existsSync(indexPath)) {
+      try {
+        const index = JSON.parse(readFileSync(indexPath, "utf8")) as { file: string }[];
+        writeFileSync(indexPath, JSON.stringify(index.filter((e) => !removed.includes(e.file)), null, 2));
+      } catch {
+        /* a broken index falls back to the folder listing */
+      }
+    }
+    return removed;
+  };
 
   const listDir = (path: string) => {
     const entries = readdirSync(path, { withFileTypes: true })
@@ -112,7 +135,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         if (req.method !== "POST") return json(res, 405, { error: "POST only" });
         // JSON only: a cross-site form/text POST can't send this without a CORS preflight.
         if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return json(res, 415, { error: "Content-Type must be application/json" });
-        if (running) return json(res, 409, { error: "A scan is already running" });
+        if (running) return json(res, 409, { error: "A scan is already running: cancel it first" });
         let body: { path?: string; types?: boolean };
         try {
           body = JSON.parse(await readBody(req));
@@ -142,13 +165,19 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
             const line = buf.slice(0, nl);
             buf = buf.slice(nl + 1);
             if (!line.trim()) continue;
-            if (line.includes('"type":"done"') || line.includes('"type":"error"')) finished = true;
+            if (line.includes('"type":"done"') || line.includes('"type":"error"') || line.includes('"type":"cancelled"')) finished = true;
+            if (line.includes('"type":"result"')) runningFile = (JSON.parse(line) as { file: string }).file;
             send(line);
           }
         });
         child.stderr.on("data", (d) => (stderr += d));
+        // The page cancelled (or went away): stop the scanner — it cleans up its type checker.
+        res.on("close", () => {
+          if (child.exitCode === null && !child.killed) child.kill("SIGTERM");
+        });
         const end = (error?: string) => {
           running = false;
+          runningFile = undefined;
           if (!finished) send(JSON.stringify({ type: "error", message: error ?? (stderr.trim() || "scanner exited without finishing") }));
           if (!res.writableEnded) res.end();
         };
@@ -156,8 +185,20 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         child.on("close", () => end());
       });
 
-      server.middlewares.use("/api/snapshots", (req, res) => {
+      server.middlewares.use("/api/snapshots", async (req, res) => {
         const url = (req.url ?? "/").split("?")[0]!;
+        if (req.method === "DELETE" && (url === "/" || url === "")) {
+          if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return json(res, 415, { error: "Content-Type must be application/json" });
+          let body: { files?: string[] };
+          try {
+            body = JSON.parse(await readBody(req));
+          } catch {
+            return json(res, 400, { error: "Invalid JSON body" });
+          }
+          const files = (body.files ?? []).filter((f) => typeof f === "string");
+          if (runningFile && files.map((f) => basename(f)).includes(runningFile)) return json(res, 409, { error: "That snapshot is still being scanned: cancel the scan first" });
+          return json(res, 200, { removed: deleteSnapshots(files) });
+        }
         res.setHeader("Content-Type", "application/json");
         if (url === "/" || url === "") {
           res.end(JSON.stringify({ dir, snapshots: listIndex() }));
