@@ -752,7 +752,7 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
           </Text>
         ) : null}
         {/* where it lives, dimmed: the file (the package for libraries) */}
-        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" truncate title={other.kind === "external" ? other.name : other.filePath}>
+        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate title={other.kind === "external" ? other.name : other.filePath}>
           {other.kind === "external" ? "library" : other.filePath}
         </Text>
         {e.conditions && (
