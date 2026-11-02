@@ -180,7 +180,16 @@ async function api(req: Request, url: URL): Promise<Response> {
     }
     // editors only: never hand arbitrary URLs (file:, http:, other apps) to the OS
     if (!EDITOR_SCHEMES.has(url.protocol)) return json({ error: `Not an editor link: ${url.protocol}` }, 400);
-    const cmd = process.platform === "darwin" ? ["open", url.href] : process.platform === "win32" ? ["cmd", "/c", "start", "", url.href] : ["xdg-open", url.href];
+    // no control characters or quotes in what goes to the OS (the URL is otherwise percent-encoded)
+    // oxlint-disable-next-line no-control-regex -- deliberately matching control characters
+    if (/[\u0000-\u001f\u007f"]/.test(url.href)) return json({ error: "Invalid characters in the editor link" }, 400);
+    // never through a shell: on Windows `cmd /c start` would treat `&`, `|`… in the URL as commands
+    const cmd =
+      process.platform === "darwin"
+        ? ["open", url.href]
+        : process.platform === "win32"
+          ? ["rundll32", "url.dll,FileProtocolHandler", url.href]
+          : ["xdg-open", url.href];
     const p = Bun.spawnSync(cmd, { stdout: "ignore", stderr: "pipe" });
     if (p.exitCode !== 0) {
       const err = p.stderr.toString().trim() || `exit ${p.exitCode}`;
