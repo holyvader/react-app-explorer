@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { scan, writeSnapshot } from "@rae/scanner";
+import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
   options: {
@@ -148,7 +148,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   if (path === "/api/scan") {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
-    if (scanning) return json({ error: "A scan is already running" }, 409);
+    if (scanning) return json({ error: "A scan is still running (it may be adding types in the background)" }, 409);
     let body: { path?: string; types?: boolean };
     try {
       body = await req.json();
@@ -158,29 +158,39 @@ async function api(req: Request, url: URL): Promise<Response> {
     const target = body.path ? resolve(body.path) : "";
     if (!target || !existsSync(target)) return json({ error: `Path not found: ${target || "(empty)"}` }, 400);
     scanning = true;
-    const t0 = Date.now();
-    const warnings: string[] = [];
-    try {
-      const snapshot = await scan(target, {
-        types: body.types !== false,
-        onWarn: (m) => {
-          warnings.push(m);
-          log(`warn: ${m}`);
-        },
-        onProgress: (m) => log(`scan: ${m}`),
-      });
-      const file = basename(writeSnapshot(snapshot, snapshotsDir));
-      const nodes = Object.values(snapshot.nodes);
-      const count = (k: string) => nodes.filter((n) => n.kind === k).length;
-      const stdout = `✔ ${snapshot.stats.files} files → ${nodes.length} nodes (${count("component")} components, ${count("hook")} hooks, ${count("serverAction")} actions, ${count("external")} external), ${snapshot.edges.length} edges in ${snapshot.stats.durationMs}ms`;
-      log(`scan: ${stdout} → ${file}`);
-      return json({ file, stdout, stderr: warnings.slice(0, 20).join("\n"), ms: Date.now() - t0 });
-    } catch (e) {
-      log(`scan failed: ${(e as Error).stack ?? e}`);
-      return json({ error: `${(e as Error).message}${logFile ? ` (details in ${logFile})` : ""}` }, 500);
-    } finally {
-      scanning = false;
-    }
+    // NDJSON stream of ScanEvents: progress, the structure result, then types in the background.
+    // The job keeps going if the page goes away (the typed snapshot still lands on disk).
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const enc = new TextEncoder();
+    const send = (e: ScanEvent) => {
+      if (e.type !== "progress") log(`scan: ${JSON.stringify(e).slice(0, 300)}`);
+      try {
+        controller?.enqueue(enc.encode(JSON.stringify(e) + "\n"));
+      } catch {
+        controller = undefined; // the client went away
+      }
+    };
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+        void runScanJob(
+          target,
+          { outDir: snapshotsDir, types: body.types !== false, onWarn: (m) => log(`warn: ${m}`), onProgress: (m) => log(`scan: ${m}`) },
+          send,
+        ).finally(() => {
+          scanning = false;
+          try {
+            controller?.close();
+          } catch {
+            /* already closed */
+          }
+        });
+      },
+      cancel() {
+        controller = undefined;
+      },
+    });
+    return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" } });
   }
   return json({ error: "not found" }, 404);
 }

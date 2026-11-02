@@ -2,6 +2,7 @@
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { discoverProject } from "./project.ts";
+import { runScanJob } from "./job.ts";
 import { scan, writeSnapshot } from "./scan.ts";
 
 const { values, positionals } = parseArgs({
@@ -16,6 +17,7 @@ const { values, positionals } = parseArgs({
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
     stdout: { type: "boolean", default: false },
+    events: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
 });
@@ -32,11 +34,32 @@ Options:
   --no-cache          ignore and don't write the incremental cache
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
-  --stdout            print the snapshot JSON to stdout instead of writing a file`);
+  --stdout            print the snapshot JSON to stdout instead of writing a file
+  --events            write the snapshot and print progress events as NDJSON (for UIs)`);
   process.exit(positionals.length ? 0 : 1);
 }
 
 const input = resolve(positionals[0]!);
+
+if (values.events) {
+  // Structure first, then types in the background — one JSON event per line (see job.ts).
+  const outDir = values.out ? resolve(values.out) : join((await discoverProject(input)).rootDir, ".explorer", "snapshots");
+  await runScanJob(
+    input,
+    {
+      outDir,
+      tsconfig: values.tsconfig,
+      include: values.include,
+      exclude: values.exclude,
+      types: !values["no-types"],
+      cache: !values["no-cache"],
+      maxWorkers: values.workers ? Number(values.workers) : undefined,
+    },
+    (e) => process.stdout.write(JSON.stringify(e) + "\n"),
+  );
+  process.exit(0);
+}
+
 const warnings: string[] = [];
 const snapshot = await scan(input, {
   tsconfig: values.tsconfig,

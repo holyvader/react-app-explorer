@@ -7,6 +7,7 @@ import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
+import { ScanProgress } from "./components/ScanProgress.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { useExplorer } from "./store.ts";
@@ -90,6 +91,7 @@ export function App() {
         )}
         <Flex flex="1" minH="0">
           <Box flex="1" position="relative">
+            <ScanProgress />
             {loading ? (
               <Flex h="full" align="center" justify="center">
                 <Spinner />

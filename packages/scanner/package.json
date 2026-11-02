@@ -13,6 +13,7 @@
   },
   "exports": {
     ".": "./src/scan.ts",
-    "./scan": "./src/scan.ts"
+    "./scan": "./src/scan.ts",
+    "./job": "./src/job.ts"
   }
 }

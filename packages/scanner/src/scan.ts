@@ -18,18 +18,58 @@ export interface ScanOptions {
   onWarn?: (msg: string) => void;
   /** Step-by-step progress (for logs): each phase as it starts and ends. */
   onProgress?: (msg: string) => void;
+  /** Counts for a progress bar: files parsed out of those found so far, then files typed out of the total. */
+  onCount?: (stage: "parse" | "types", done: number, total: number) => void;
 }
 
-export async function scan(input: string, opts: ScanOptions = {}): Promise<Snapshot> {
-  const t0 = performance.now();
-  const phases: Record<string, number> = {};
-  let mark = t0;
-  const phase = (name: string) => {
+/** A scanned project before (or after) the type pass: what `addTypes` needs to continue. */
+export interface StructureScan {
+  snapshot: Snapshot;
+  files: Map<string, FileExtract>;
+  info: Awaited<ReturnType<typeof discoverProject>>;
+  phases: Record<string, number>;
+  cacheHits: number;
+  t0: number;
+}
+
+function phaseTimer(phases: Record<string, number>, onProgress?: (m: string) => void) {
+  let mark = performance.now();
+  return (name: string) => {
     const now = performance.now();
     phases[name] = Math.round((now - mark) * 10) / 10;
     mark = now;
-    opts.onProgress?.(`${name} done in ${phases[name]}ms`);
+    onProgress?.(`${name} done in ${phases[name]}ms`);
   };
+}
+
+function toSnapshot(scan: Omit<StructureScan, "snapshot">, createdAt: string, types: boolean): Snapshot {
+  const { nodes, edges } = buildGraph(scan.files, scan.info);
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    createdAt,
+    rootDir: scan.info.rootDir,
+    entry: scan.info.entry,
+    framework: scan.info.framework,
+    stats: {
+      files: scan.files.size,
+      durationMs: Math.round(performance.now() - scan.t0),
+      phases: { ...scan.phases },
+      cacheHits: scan.cacheHits,
+      types,
+    },
+    nodes,
+    edges,
+  };
+}
+
+/**
+ * Everything but the TypeScript type pass: discovery, parsing, the graph. Fast — the diagram can be
+ * shown from it while `addTypes` runs. Files unchanged since a typed scan keep their cached types.
+ */
+export async function scanStructure(input: string, opts: ScanOptions = {}): Promise<StructureScan> {
+  const t0 = performance.now();
+  const phases: Record<string, number> = {};
+  const phase = phaseTimer(phases, opts.onProgress);
   opts.onProgress?.(`scan ${input} (types ${opts.types !== false ? "on" : "off"})`);
 
   const info = await discoverProject(input, opts);
@@ -43,54 +83,69 @@ export async function scan(input: string, opts: ScanOptions = {}): Promise<Snaps
     cache,
     maxWorkers: opts.maxWorkers,
     onWarn: opts.onWarn,
+    onCount: opts.onCount && ((done, total) => opts.onCount!("parse", done, total)),
   });
   phase("parse");
-
-  if (opts.types !== false) {
-    // Types depend on the file itself and what it imports.
-    const keyOf = (f: FileExtract) => {
-      const deps = f.imports
-        .map((i) => (i.resolved?.kind === "local" ? files.get(i.resolved.path)?.stamp : undefined))
-        .filter(Boolean)
-        .sort();
-      return `${f.stamp}|${deps.join(",")}`;
-    };
-    try {
-      opts.onProgress?.(`types: ${files.size} files, tsconfig ${info.tsconfig ?? "(none)"}`);
-      await applyTypes([...files.values()], { rootDir: info.rootDir, tsconfig: info.tsconfig, keyOf, onWarn: opts.onWarn, onProgress: opts.onProgress });
-    } catch (e) {
-      opts.onWarn?.(`type pass skipped: ${(e as Error).message}`);
-    }
-    phase("types");
-  }
 
   if (opts.cache !== false) {
     saveCache(info.rootDir, files.values());
     phase("cacheSave");
   }
 
-  const { nodes, edges } = buildGraph(files, info);
+  const partial = { files, info, phases, cacheHits, t0 };
+  const snapshot = toSnapshot(partial, new Date().toISOString(), false);
   phase("graph");
-
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    createdAt: new Date().toISOString(),
-    rootDir: info.rootDir,
-    entry: info.entry,
-    framework: info.framework,
-    stats: {
-      files: files.size,
-      durationMs: Math.round(performance.now() - t0),
-      phases,
-      cacheHits,
-      types: opts.types !== false,
-    },
-    nodes,
-    edges,
-  };
+  return { ...partial, snapshot };
 }
 
-/** Writes `<out>/<timestamp>.json` and updates `<out>/index.json`. Returns the snapshot path. */
+/**
+ * The TypeScript type pass on a structure scan. Returns the typed snapshot — same `createdAt`, so it
+ * replaces the structure snapshot's file. Never throws: if types fail, the scan stays untyped (warned).
+ */
+export async function addTypes(scan: StructureScan, opts: ScanOptions = {}): Promise<Snapshot> {
+  const phase = phaseTimer(scan.phases, opts.onProgress);
+  const { files, info } = scan;
+  // Types depend on the file itself and what it imports.
+  const keyOf = (f: FileExtract) => {
+    const deps = f.imports
+      .map((i) => (i.resolved?.kind === "local" ? files.get(i.resolved.path)?.stamp : undefined))
+      .filter(Boolean)
+      .sort();
+    return `${f.stamp}|${deps.join(",")}`;
+  };
+  let typed = true;
+  try {
+    opts.onProgress?.(`types: ${files.size} files, tsconfig ${info.tsconfig ?? "(none)"}`);
+    await applyTypes([...files.values()], {
+      rootDir: info.rootDir,
+      tsconfig: info.tsconfig,
+      keyOf,
+      onWarn: opts.onWarn,
+      onProgress: opts.onProgress,
+      onCount: opts.onCount && ((done, total) => opts.onCount!("types", done, total)),
+    });
+  } catch (e) {
+    typed = false;
+    opts.onWarn?.(`type pass skipped: ${(e as Error).message}`);
+  }
+  phase("types");
+
+  if (opts.cache !== false) {
+    saveCache(info.rootDir, files.values());
+    phase("cacheSave");
+  }
+  const snapshot = toSnapshot(scan, scan.snapshot.createdAt, typed);
+  phase("graph");
+  return snapshot;
+}
+
+/** Structure + types in one go (the CLI, tests). */
+export async function scan(input: string, opts: ScanOptions = {}): Promise<Snapshot> {
+  const structure = await scanStructure(input, opts);
+  return opts.types === false ? structure.snapshot : addTypes(structure, opts);
+}
+
+/** Writes `<out>/<timestamp>.json` and updates `<out>/index.json` (same file → replaced). Returns the snapshot path. */
 export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
   mkdirSync(outDir, { recursive: true });
   const file = `${snapshot.createdAt.replace(/[:.]/g, "-")}.json`;
@@ -105,6 +160,7 @@ export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
       index = [];
     }
   }
+  index = index.filter((e) => e.file !== file); // a typed snapshot replaces its structure-only version
   index.unshift({
     file,
     createdAt: snapshot.createdAt,

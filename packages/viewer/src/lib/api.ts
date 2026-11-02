@@ -1,4 +1,4 @@
-import type { Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import type { ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
 
 export interface SnapshotList {
   dir: string;
@@ -51,20 +51,31 @@ export async function listDir(path?: string): Promise<FsListing> {
   return data;
 }
 
-export interface ScanResult {
-  file?: string;
-  stdout: string;
-  stderr: string;
-  ms: number;
-}
-
-export async function runScan(path: string, types: boolean): Promise<ScanResult> {
+/**
+ * Starts a scan and reports its events as they stream in (NDJSON): progress, the structure snapshot,
+ * then the typed snapshot. Resolves when the stream ends; rejects if the scan can't start.
+ */
+export async function runScan(path: string, types: boolean, onEvent: (e: ScanEvent) => void): Promise<void> {
   const res = await fetch("/api/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, types }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Scan failed (${res.status})`);
-  return data;
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `Scan failed (${res.status})`);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buf += value;
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) onEvent(JSON.parse(line) as ScanEvent);
+    }
+    if (done) break;
+  }
 }

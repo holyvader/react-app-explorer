@@ -39,5 +39,7 @@ export {
   Redo2 as IconRedo,
   Ungroup as IconUngroup,
   FolderTree as IconFolderTree,
+  CircleCheck as IconDone,
+  TriangleAlert as IconWarning,
 } from "lucide-react";
 export type { LucideIcon as Icon } from "lucide-react";

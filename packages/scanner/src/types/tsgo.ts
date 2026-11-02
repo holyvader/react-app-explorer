@@ -16,7 +16,7 @@ const FILE_CONCURRENCY = 48;
 /** No progress for this long (no file answered, or the checker never got ready) → give up on types. */
 const STALL_MS = Number(process.env.RAE_TYPES_STALL_MS) || 60_000;
 
-type Progress = { onProgress?: (m: string) => void; kick: () => void };
+type Progress = { onProgress?: (m: string) => void; kick: () => void; tick: () => void };
 
 type Checker = Awaited<ReturnType<typeof openChecker>>["checker"];
 type TType = Type;
@@ -81,7 +81,15 @@ export interface TypesResult {
 
 export async function applyTypes(
   files: FileExtract[],
-  opts: { rootDir: string; tsconfig?: string; keyOf: (f: FileExtract) => string; onWarn?: (m: string) => void; onProgress?: (m: string) => void },
+  opts: {
+    rootDir: string;
+    tsconfig?: string;
+    keyOf: (f: FileExtract) => string;
+    onWarn?: (m: string) => void;
+    onProgress?: (m: string) => void;
+    /** Files typed so far (answered or failed), out of those needing types. */
+    onCount?: (done: number, total: number) => void;
+  },
 ): Promise<TypesResult> {
   const todo = files.filter((f) => f.decls.length && f.typesKey !== opts.keyOf(f));
   const res: TypesResult = { queried: 0, skipped: files.length - todo.length, failed: 0 };
@@ -101,8 +109,11 @@ export async function applyTypes(
     stallTimer = setTimeout(() => rejectStall(new Error(`TypeScript checker stopped responding (no progress for ${STALL_MS / 1000}s)`)), STALL_MS);
   };
   kick();
+  let done = 0;
+  const tick = () => opts.onCount?.(Math.min(++done, todo.length), todo.length);
+  opts.onCount?.(0, todo.length);
   try {
-    return await Promise.race([runTypes(api, todo, res, { ...opts, kick }), watch.died, stalled]);
+    return await Promise.race([runTypes(api, todo, res, { ...opts, kick, tick }), watch.died, stalled]);
   } finally {
     clearTimeout(stallTimer);
     watch.stop();
@@ -172,6 +183,7 @@ async function runAll(
         await processFile(f);
         res.queried++;
         opts.kick();
+        opts.tick();
       } catch (e) {
         const msg = (e as Error).message ?? String(e);
         if (retry && msg.includes("source file not found")) {
@@ -180,6 +192,7 @@ async function runAll(
         }
         res.failed++;
         opts.kick();
+        opts.tick();
         if (res.failed <= 5) opts.onWarn?.(`types: ${f.absPath}: ${msg}`);
       }
     }

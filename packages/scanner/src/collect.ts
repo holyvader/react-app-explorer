@@ -10,6 +10,8 @@ export interface CollectOptions {
   cache?: Map<string, FileExtract>;
   maxWorkers?: number;
   onWarn?: (msg: string) => void;
+  /** Files parsed so far, out of those found so far (the total grows as imports are followed). */
+  onCount?: (done: number, total: number) => void;
 }
 
 export interface CollectResult {
@@ -50,6 +52,7 @@ export async function collectFiles(initial: string[], opts: CollectOptions = {})
         enqueue(imp.resolved.path);
       }
     }
+    opts.onCount?.(files.size, seen.size);
   };
 
   const enqueue = (path: string) => {

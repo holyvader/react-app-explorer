@@ -1,15 +1,24 @@
-import { Alert, Badge, Box, Button, Code, Flex, HStack, Input, Modal, Spinner, Stack, Switch, Text } from "@rae/design-system";
+import { Alert, Badge, Box, Button, Code, Flex, HStack, Input, Modal, ProgressBar, Spinner, Stack, Switch, Text } from "@rae/design-system";
 import { IconFile, IconFolder, IconParentDir, IconScan } from "@rae/design-system/icons";
 import { useEffect, useState } from "react";
-import { type FsListing, listDir, runScan, type ScanResult } from "../lib/api.ts";
+import { type FsListing, listDir } from "../lib/api.ts";
+import { dismissScan, startScan } from "../lib/scanJob.ts";
+import { type ScanState, useExplorer } from "../store.ts";
+
+/** The structure phase as a label and a bar value (null = indeterminate). */
+function structureProgress(scan: ScanState): { label: string; value: number | null } {
+  if (scan.stage === "parse" && scan.total) return { label: `Parsing ${scan.done ?? 0} / ${scan.total} files`, value: Math.round(((scan.done ?? 0) / scan.total) * 95) };
+  if (scan.stage === "graph") return { label: "Building the diagram…", value: 97 };
+  return { label: "Finding files…", value: null };
+}
 
 const LAST_PATH_KEY = "rae.scanPath";
 
 export interface ScanModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Called with the new snapshot file name after a successful scan. */
-  onScanned: (file: string | undefined) => void;
+  /** Called with the new snapshot file once its structure is scanned (types follow in the background). */
+  onScanned: (file: string) => void;
 }
 
 /** Pick a folder or entry file on the dev server's machine and run the scanner on it. */
@@ -18,8 +27,11 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   const [types, setTypes] = useState(true);
   const [listing, setListing] = useState<FsListing>();
   const [browseError, setBrowseError] = useState<string>();
-  const [scanning, setScanning] = useState(false);
-  const [result, setResult] = useState<{ ok: true; r: ScanResult } | { ok: false; error: string }>();
+  const scanState = useExplorer((s) => s.scan);
+  // this dialog owns the structure phase; the type pass shows on the canvas
+  const scanning = scanState?.phase === "structure";
+  const failed = scanState?.phase === "failed" ? scanState.message : undefined;
+  const typing = scanState?.phase === "types";
 
   const browse = (dir?: string) => {
     setBrowseError(undefined);
@@ -31,6 +43,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   // Load the initial listing when the dialog opens (an external system → effect is appropriate).
   useEffect(() => {
     if (!open) return;
+    if (useExplorer.getState().scan?.phase === "failed") dismissScan(); // a fresh start, not the last error
     const start = localStorage.getItem(LAST_PATH_KEY) ?? undefined;
     let cancelled = false;
     listDir(start)
@@ -42,19 +55,13 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
     };
   }, [open]);
 
-  const scan = async () => {
-    setScanning(true);
-    setResult(undefined);
-    try {
-      const r = await runScan(path.trim(), types);
-      localStorage.setItem(LAST_PATH_KEY, path.trim());
-      setResult({ ok: true, r });
-      onScanned(r.file);
-    } catch (e) {
-      setResult({ ok: false, error: (e as Error).message });
-    } finally {
-      setScanning(false);
-    }
+  const scan = () => {
+    const target = path.trim();
+    localStorage.setItem(LAST_PATH_KEY, target);
+    void startScan(target, types, (file) => {
+      onScanned(file);
+      onOpenChange(false); // the diagram is ready; types finish in the background
+    });
   };
 
   return (
@@ -72,8 +79,8 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={scanning}>
             Close
           </Button>
-          <Button onClick={scan} disabled={!path.trim() || scanning}>
-            {scanning ? <Spinner size="xs" /> : <IconScan size={16} />} Scan
+          <Button onClick={scan} disabled={!path.trim() || scanning || typing} title={typing ? "Wait until the last scan's types are added" : undefined}>
+            {scanning || typing ? <Spinner size="xs" /> : <IconScan size={16} />} {typing ? "Adding types…" : "Scan"}
           </Button>
         </HStack>
       }
@@ -147,22 +154,21 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
           </Box>
         </Box>
 
-        {scanning && (
-          <HStack fontSize="sm" color="fg.muted">
-            <Spinner size="sm" /> <Text>Scanning {path}…</Text>
-          </HStack>
+        {scanning && scanState && (
+          <Stack gap="1.5">
+            <HStack fontSize="sm" color="fg.muted" justify="space-between">
+              <Text truncate>{structureProgress(scanState).label}</Text>
+              <Text fontFamily="mono" fontSize="xs" truncate maxW="50%" title={scanState.path}>
+                {scanState.path}
+              </Text>
+            </HStack>
+            <ProgressBar value={structureProgress(scanState).value} size="sm" label="Scan progress" />
+          </Stack>
         )}
-        {result?.ok === true && (
-          <Alert status="success" title={`Scanned in ${result.r.ms < 1000 ? `${result.r.ms}ms` : `${(result.r.ms / 1000).toFixed(1)}s`}, snapshot loaded`}>
-            <Code display="block" whiteSpace="pre-wrap" fontSize="2xs" mt="1" bg="transparent">
-              {result.r.stdout.split("\n")[0]}
-            </Code>
-          </Alert>
-        )}
-        {result?.ok === false && (
+        {failed && (
           <Alert status="error" title="Scan failed">
             <Code display="block" whiteSpace="pre-wrap" fontSize="2xs" mt="1" maxH="160px" overflowY="auto" bg="transparent">
-              {result.error}
+              {failed}
             </Code>
           </Alert>
         )}

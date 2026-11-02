@@ -58,6 +58,10 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   TypeScript binary and its lib files) and every scan step. Ask for this file first.
 - The type pass also has a **stall watchdog** (`RAE_TYPES_STALL_MS`, default 60s with no file
   answered): a checker that stops responding without exiting would otherwise hang the scan.
+- **Scans stream** (`POST /api/scan` → NDJSON `ScanEvent`s, the type is in @rae/schema): progress, a
+  `result` once the structure snapshot is written, then `types` when the typed snapshot has
+  replaced the same file. Shared producer: `runScanJob` in `@rae/scanner/job`. The server runs it
+  in-process; the Vite plugin pipes `rae-scan --events`. Change one, check both.
 - The scanner's worker must be a second entry point of the compile (`new Worker(new URL(...))`
   resolves inside the executable).
 - Production viewer builds don't expose `window.__rae`, so `e2e/smoke.ts` can't run against the

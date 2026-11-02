@@ -87,19 +87,6 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
     return { path, parent: dirname(path) === path ? null : dirname(path), entries, markers };
   };
 
-  const runScan = (target: string, types: boolean) =>
-    new Promise<{ code: number; stdout: string; stderr: string; ms: number }>((ok) => {
-      const t0 = Date.now();
-      const args = [cli, target, "--out", dir, "--stats", ...(types ? [] : ["--no-types"])];
-      const child = spawn(bun, args, { cwd: repoRoot });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (d) => (stdout += d));
-      child.stderr.on("data", (d) => (stderr += d));
-      child.on("error", (e) => ok({ code: -1, stdout, stderr: `${stderr}\n${e.message} (is bun on PATH? set RAE_BUN)`, ms: Date.now() - t0 }));
-      child.on("close", (code) => ok({ code: code ?? -1, stdout, stderr, ms: Date.now() - t0 }));
-    });
-
   return {
     name: "rae-snapshots",
     configureServer(server) {
@@ -135,14 +122,38 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         const target = body.path ? resolve(body.path) : "";
         if (!target || !existsSync(target)) return json(res, 400, { error: `Path not found: ${target || "(empty)"}` });
         running = true;
-        try {
-          const r = await runScan(target, body.types !== false);
-          if (r.code !== 0) return json(res, 500, { error: r.stderr.trim() || `scanner exited with ${r.code}`, stdout: r.stdout });
-          const newest = listIndex()[0];
-          json(res, 200, { file: newest?.file, stdout: r.stdout.trim(), stderr: r.stderr.trim(), ms: r.ms });
-        } finally {
+        // The CLI's --events mode: NDJSON ScanEvents (progress, structure result, then types),
+        // streamed to the viewer line by line. The scan finishes even if the page goes away.
+        const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"])];
+        const child = spawn(bun, args, { cwd: repoRoot });
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/x-ndjson");
+        res.setHeader("Cache-Control", "no-store");
+        let stderr = "";
+        let finished = false;
+        const send = (line: string) => {
+          if (!res.writableEnded) res.write(line.endsWith("\n") ? line : line + "\n");
+        };
+        let buf = "";
+        child.stdout.on("data", (d: Buffer) => {
+          buf += d.toString();
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, nl);
+            buf = buf.slice(nl + 1);
+            if (!line.trim()) continue;
+            if (line.includes('"type":"done"') || line.includes('"type":"error"')) finished = true;
+            send(line);
+          }
+        });
+        child.stderr.on("data", (d) => (stderr += d));
+        const end = (error?: string) => {
           running = false;
-        }
+          if (!finished) send(JSON.stringify({ type: "error", message: error ?? (stderr.trim() || "scanner exited without finishing") }));
+          if (!res.writableEnded) res.end();
+        };
+        child.on("error", (e) => end(`${e.message} (is bun on PATH? set RAE_BUN)`));
+        child.on("close", () => end());
       });
 
       server.middlewares.use("/api/snapshots", (req, res) => {

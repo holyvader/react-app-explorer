@@ -40,6 +40,14 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
+## Scanning from the UI
+- `lib/scanJob.ts` `startScan` reads the NDJSON stream into the store's `scan` state, so it outlives
+  the dialog. `ScanModal` shows the structure phase (progress bar), then closes and loads the
+  snapshot. `ScanProgress` (a pill over the canvas) shows the type pass and then "Types added".
+  When the typed snapshot lands, `updateSnapshot` swaps it in place and keeps the diagram. It's
+  applied even if it arrives before the structure snapshot has finished loading.
+- Scanner side: `scanStructure` + `addTypes` (scan.ts); `scan()` still does both for the CLI/tests.
+
 ## Run
 - The packaged desktop app serves this viewer from a Bun sidecar with the same `/api/*` endpoints as the Vite plugin; keep both in sync (see the `desktop` skill).
 ```bash

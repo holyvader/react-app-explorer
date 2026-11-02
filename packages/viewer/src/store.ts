@@ -30,9 +30,24 @@ export interface DiagramState {
 
 const HISTORY_LIMIT = 100;
 
+/** A scan started from the UI: structure first (the dialog), then types in the background. */
+export interface ScanState {
+  path: string;
+  phase: "structure" | "types" | "typed" | "failed";
+  stage?: "discover" | "parse" | "graph" | "types";
+  done?: number;
+  total?: number;
+  /** The snapshot the scan writes (known once the structure is done). */
+  file?: string;
+  /** Errors (phase "failed") or the reason types are missing (phase "typed" with typed: false). */
+  message?: string;
+  typed?: boolean;
+}
+
 interface ExplorerState {
   snapshot?: Snapshot;
   snapshotName?: string;
+  scan?: ScanState;
   index?: GraphIndex;
   /** Node ids the user put on the canvas (containers are derived from them). */
   visible: string[];
@@ -68,6 +83,9 @@ interface ExplorerState {
   future: DiagramState[];
 
   setSnapshot: (snapshot: Snapshot, name: string) => void;
+  /** Same snapshot, new data (types arrived): keeps the diagram, selection and history. */
+  updateSnapshot: (snapshot: Snapshot, name: string) => void;
+  setScan: (scan: ScanState | undefined) => void;
   addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor }) => void;
   hideNode: (id: string, opts?: { keepContents?: boolean }) => void;
   /** Removes several elements in one undoable step. */
@@ -200,6 +218,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       const saved = loadDiagram(snapshot.rootDir);
       if (saved) restore(saved);
     },
+
+    updateSnapshot: (snapshot, name) => {
+      if (get().snapshotName !== name) return; // the user moved on to another snapshot
+      set({ snapshot, index: buildIndex(snapshot) });
+    },
+
+    setScan: (scan) => set({ scan }),
 
     addNodes: (ids, opts) => {
       const s = get();

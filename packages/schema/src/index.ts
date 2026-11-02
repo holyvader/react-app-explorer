@@ -181,3 +181,17 @@ export interface SnapshotIndexEntry {
   edgeCount: number;
   durationMs: number;
 }
+
+/**
+ * A scan as seen by a UI (NDJSON lines from POST /api/scan): progress, the structure snapshot as
+ * soon as it's written, then the typed snapshot replacing the same file.
+ */
+export type ScanEvent =
+  /** Progress. `parse`: files parsed out of those found so far; `types`: files typed out of the total. */
+  | { type: "progress"; stage: "discover" | "parse" | "graph" | "types"; done?: number; total?: number }
+  /** The structure snapshot is written; `typesPending` → a `types` event follows. */
+  | { type: "result"; file: string; stdout: string; ms: number; warnings: string[]; typesPending: boolean }
+  /** The typed snapshot replaced `file`. `typed: false` → the type pass failed (see warnings). */
+  | { type: "types"; file: string; ms: number; typed: boolean; warnings: string[] }
+  | { type: "error"; message: string }
+  | { type: "done" };

@@ -20,3 +20,4 @@ export { Popover, type PopoverProps } from "./components/Popover.tsx";
 export { CodeToken, type CodeTokenKind, Eyebrow, KindTile, TagChip } from "./components/Kind.tsx";
 export { tokenVar } from "./tokens.ts";
 export { SegmentedToggles, type ToggleItem, ToolGroup } from "./components/Toggles.tsx";
+export { ProgressBar, type ProgressBarProps } from "./components/ProgressBar.tsx";
