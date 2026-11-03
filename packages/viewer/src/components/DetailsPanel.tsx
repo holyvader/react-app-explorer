@@ -25,6 +25,7 @@ import {
   IconChevronsUp,
   IconClose,
   IconCopy,
+  IconDetailsClose,
   IconFocus,
   IconOpen,
   IconPlus,
@@ -38,6 +39,7 @@ import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
+import { DetailsStrip } from "./DetailsStrip.tsx";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
 import { RenderTree } from "./RenderTree.tsx";
@@ -49,6 +51,7 @@ import { TypeText } from "./TypeText.tsx";
  */
 export function DetailsPanel() {
   const sidebarWidth = useExplorer((s) => s.sidebarWidth);
+  const detailsOpen = useExplorer((s) => s.detailsOpen);
   const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const index = useExplorer((s) => s.index);
@@ -92,7 +95,22 @@ export function DetailsPanel() {
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
   return (
-    <Panel resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}>
+    <Panel
+      resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}
+      collapse={{
+        collapsed: !detailsOpen,
+        strip: (
+          <DetailsStrip
+            name={node.name}
+            tile={
+              <KindTile kind={node.kind} size={28}>
+                <Icon size={14} strokeWidth={2.2} />
+              </KindTile>
+            }
+          />
+        ),
+      }}
+    >
       <PanelHeader>
         <Flex gap="3" align="start">
           <KindTile kind={node.kind} size={44}>
@@ -106,7 +124,10 @@ export function DetailsPanel() {
               {caption}
             </Text>
           </Box>
-          <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={closeDetails} />
+          <HStack gap="0.5">
+            <ActionIconButton label="Minimize the details" icon={<IconDetailsClose />} size="sm" onClick={() => useExplorer.getState().setDetailsOpen(false)} />
+            <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={closeDetails} />
+          </HStack>
         </Flex>
 
         <Flex mt="3" align="center" gap="1.5" bg="syntax.bg" rounded="l2" px="2.5" py="1.5" minW="0">

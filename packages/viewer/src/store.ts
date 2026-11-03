@@ -87,6 +87,8 @@ interface ExplorerState {
   /** The file tree on the left: open (else a thin strip), and its width. */
   treeOpen: boolean;
   treeWidth: number;
+  /** The details panel: open, or minimized to a thin strip. */
+  detailsOpen: boolean;
   /** Draw folders as frames around file modules. */
   folders: boolean;
   editor: EditorKind;
@@ -144,6 +146,7 @@ interface ExplorerState {
   setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
   setTreeOpen: (open: boolean) => void;
+  setDetailsOpen: (open: boolean) => void;
   inspect: (id: string | undefined) => void;
   setTreeWidth: (width: number) => void;
   notify: (message: string | undefined) => void;
@@ -161,7 +164,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -245,6 +248,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
     treeOpen: readJson(KEYS.treeOpen, true),
     treeWidth: readJson(KEYS.treeWidth, TREE_WIDTH),
+    detailsOpen: readJson(KEYS.detailsOpen, true),
     folders: false,
     editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
     searchOpen: false,
@@ -451,6 +455,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setTreeOpen: (open) => {
       localStorage.setItem(KEYS.treeOpen, JSON.stringify(open));
       set({ treeOpen: open });
+    },
+
+    setDetailsOpen: (open) => {
+      localStorage.setItem(KEYS.detailsOpen, JSON.stringify(open));
+      set({ detailsOpen: open });
     },
 
     setTreeWidth: (width) => {

@@ -16,11 +16,25 @@ export interface PanelResize {
   side?: "left" | "right";
 }
 
+export interface PanelCollapse {
+  /** Collapsed to a thin strip (`strip`), the width animating there and back. */
+  collapsed: boolean;
+  /** What the strip shows: e.g. a button to open the panel again. */
+  strip: ReactNode;
+}
+
+/** A collapsed panel's width. */
+export const PANEL_STRIP = 44;
+const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
 /**
- * Side panel container (e.g. details sidebar). With `resize`, its left edge is a drag handle
- * (plain pointer events: no re-render storm, the width is reported as it changes).
+ * Side panel container (e.g. details sidebar), a floating surface on the app shell. With
+ * `resize`, its inner edge is a drag handle (plain pointer events: no re-render storm, the width is
+ * reported as it changes). With `collapse`, it folds to a thin strip and back, smoothly: the width
+ * animates while the content (kept at its full width, so nothing reflows) fades out.
  */
-export function Panel({ children, resize, ...rest }: BoxProps & { resize?: PanelResize }) {
+export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resize?: PanelResize; collapse?: PanelCollapse }) {
+  const [dragging, setDragging] = useState(false);
   if (!resize) {
     return (
       <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflowY="auto" {...rest}>
@@ -29,52 +43,86 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
     );
   }
   const { width, onWidthChange, min = 320, max = 900, defaultWidth, side = "right" } = resize;
+  const collapsed = !!collapse?.collapsed;
   // dragging towards the window's middle widens the panel
   const dir = side === "right" ? -1 : 1;
   const clamp = (w: number) => Math.round(Math.min(Math.max(w, min), Math.min(max, window.innerWidth - 360)));
   return (
-    <Box position="relative" h="full" flexShrink={0} style={{ width }}>
-      <Box
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={`Resize the ${side === "right" ? "sidebar" : "left panel"} (double-click to reset)`}
-        aria-valuenow={width}
-        tabIndex={0}
-        position="absolute"
-        {...(side === "right" ? { left: "-7px" } : { right: "-7px" })}
-        top="0"
-        bottom="0"
-        w="6px"
-        rounded="full"
-        zIndex="2"
-        cursor="col-resize"
-        css={{ "&:hover, &[data-dragging]": { background: "color-mix(in srgb, var(--chakra-colors-component-500) 45%, transparent)" }, transition: "background 0.15s" }}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          const el = e.currentTarget;
-          el.setPointerCapture(e.pointerId);
-          el.dataset.dragging = "";
-          const startX = e.clientX;
-          const startW = width;
-          const move = (ev: PointerEvent) => onWidthChange(clamp(startW + dir * (ev.clientX - startX)));
-          const up = () => {
-            delete el.dataset.dragging;
-            el.removeEventListener("pointermove", move);
-            el.removeEventListener("pointerup", up);
-            el.removeEventListener("pointercancel", up);
-          };
-          el.addEventListener("pointermove", move);
-          el.addEventListener("pointerup", up);
-          el.addEventListener("pointercancel", up);
-        }}
-        onDoubleClick={() => defaultWidth && onWidthChange(clamp(defaultWidth))}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") onWidthChange(clamp(width - dir * 24));
-          else if (e.key === "ArrowRight") onWidthChange(clamp(width + dir * 24));
-        }}
-      />
-      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflowY="auto" {...rest}>
-        {children}
+    <Box
+      position="relative"
+      h="full"
+      flexShrink={0}
+      style={{ width: collapsed ? PANEL_STRIP : width, transition: dragging ? "none" : `width 320ms ${EASE}` }}
+      data-collapsed={collapsed || undefined}
+    >
+      {!collapsed && (
+        <Box
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize the ${side === "right" ? "sidebar" : "left panel"} (double-click to reset)`}
+          aria-valuenow={width}
+          tabIndex={0}
+          position="absolute"
+          {...(side === "right" ? { left: "-7px" } : { right: "-7px" })}
+          top="0"
+          bottom="0"
+          w="6px"
+          rounded="full"
+          zIndex="2"
+          cursor="col-resize"
+          css={{ "&:hover, &[data-dragging]": { background: "color-mix(in srgb, var(--chakra-colors-component-500) 45%, transparent)" }, transition: "background 0.15s" }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            const el = e.currentTarget;
+            el.setPointerCapture(e.pointerId);
+            el.dataset.dragging = "";
+            setDragging(true);
+            const startX = e.clientX;
+            const startW = width;
+            const move = (ev: PointerEvent) => onWidthChange(clamp(startW + dir * (ev.clientX - startX)));
+            const up = () => {
+              delete el.dataset.dragging;
+              setDragging(false);
+              el.removeEventListener("pointermove", move);
+              el.removeEventListener("pointerup", up);
+              el.removeEventListener("pointercancel", up);
+            };
+            el.addEventListener("pointermove", move);
+            el.addEventListener("pointerup", up);
+            el.addEventListener("pointercancel", up);
+          }}
+          onDoubleClick={() => defaultWidth && onWidthChange(clamp(defaultWidth))}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") onWidthChange(clamp(width - dir * 24));
+            else if (e.key === "ArrowRight") onWidthChange(clamp(width + dir * 24));
+          }}
+        />
+      )}
+      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflow="hidden" position="relative">
+        {/* the content keeps its full width while the panel folds, so nothing reflows mid-animation */}
+        <Box
+          h="full"
+          overflowY="auto"
+          {...rest}
+          style={{ width, opacity: collapsed ? 0 : 1, transition: `opacity ${collapsed ? 140 : 260}ms ease ${collapsed ? "0ms" : "90ms"}` }}
+          pointerEvents={collapsed ? "none" : undefined}
+          aria-hidden={collapsed || undefined}
+          inert={collapsed || undefined}
+        >
+          {children}
+        </Box>
+        {collapse && (
+          <Box
+            position="absolute"
+            inset="0"
+            style={{ opacity: collapsed ? 1 : 0, transition: `opacity ${collapsed ? 260 : 120}ms ease ${collapsed ? "120ms" : "0ms"}` }}
+            pointerEvents={collapsed ? undefined : "none"}
+            aria-hidden={!collapsed || undefined}
+            inert={!collapsed || undefined}
+          >
+            {collapse.strip}
+          </Box>
+        )}
       </Box>
     </Box>
   );

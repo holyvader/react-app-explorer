@@ -54,6 +54,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
   anything (scrollWidth vs clientWidth at 1280 / 1600 / 1920).
 
 ## Details sidebar & filters
+- The details panel minimizes (header button "Minimize the details") to a strip (`DetailsStrip`: open button, the element's tile, its name written down the strip; a click anywhere opens it). `detailsOpen` in the store, kept as `rae.detailsOpen`. The file tree folds the same way (`Panel` collapse).
 - Components: one "Props" section (`ComponentProps`): each prop when known one by one, else the parameter's type (`props: ButtonProps`, linked), generics first. No "Output": a component returns an element. Other functions keep "Inputs & output".
 
 ## File tree (left)

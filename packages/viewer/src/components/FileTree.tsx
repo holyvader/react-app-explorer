@@ -44,15 +44,29 @@ export function FileTree() {
   );
 
   if (!snapshot) return null;
-  if (!open) {
-    return (
-      <Flex direction="column" align="center" py="2" w="10" flexShrink={0} bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel">
-        <ActionIconButton label="Show the file tree" icon={<IconPanelOpen />} size="xs" onClick={() => setTreeOpen(true)} />
-      </Flex>
-    );
-  }
   return (
-    <Panel resize={{ width, onWidthChange: setTreeWidth, min: 200, max: 560, defaultWidth: TREE_WIDTH, side: "left" }} display="flex" flexDirection="column" overflowY="hidden">
+    <Panel
+      resize={{ width, onWidthChange: setTreeWidth, min: 200, max: 560, defaultWidth: TREE_WIDTH, side: "left" }}
+      collapse={{
+        collapsed: !open,
+        strip: (
+          <Flex direction="column" align="center" py="2" h="full" cursor="pointer" onClick={() => setTreeOpen(true)} _hover={{ bg: "bg.subtle" }} transition="background 160ms ease">
+            <ActionIconButton
+              label="Show the file tree"
+              icon={<IconPanelOpen />}
+              size="xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                setTreeOpen(true);
+              }}
+            />
+          </Flex>
+        ),
+      }}
+      display="flex"
+      flexDirection="column"
+      overflowY="hidden"
+    >
       <Flex align="center" gap="2" pl="4" pr="2" h="11" flexShrink={0}>
         <Box color="fg.muted" display="inline-flex">
           <IconFolderTree size={14} />

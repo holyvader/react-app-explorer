@@ -14,11 +14,12 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconPlus, IconRemoveWithContents } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconLayout, IconPlus, IconRemoveWithContents } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
 import { KIND_META } from "../lib/kinds.tsx";
+import { DetailsStrip } from "./DetailsStrip.tsx";
 import { useExplorer, SIDEBAR_WIDTH } from "../store.ts";
 
 /** Rows listed before "+N more" (the rest stays reachable via "Show the files inside"). */
@@ -28,6 +29,7 @@ const KIND_ORDER: NodeKind[] = ["module", "component", "hook", "function", "serv
 /** Details of a selected folder: what it contains, in the same visual language as other nodes. */
 export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?: boolean }) {
   const sidebarWidth = useExplorer((s) => s.sidebarWidth);
+  const detailsOpen = useExplorer((s) => s.detailsOpen);
   const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const graph = useExplorer((s) => s.graph);
@@ -47,7 +49,22 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
   const missingSubs = c.subfolders.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`));
 
   return (
-    <Panel resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}>
+    <Panel
+      resize={{ width: sidebarWidth, onWidthChange: setSidebarWidth, defaultWidth: SIDEBAR_WIDTH }}
+      collapse={{
+        collapsed: !detailsOpen,
+        strip: (
+          <DetailsStrip
+            name={name}
+            tile={
+              <KindTile kind="module" size={28} style={{ background: "var(--chakra-colors-bg-muted)", boxShadow: "inset 0 0 0 1px var(--chakra-colors-border)" }} color="fg.muted">
+                <IconFolder size={14} strokeWidth={2.2} />
+              </KindTile>
+            }
+          />
+        ),
+      }}
+    >
       <PanelHeader>
         <Flex gap="3" align="start">
           <KindTile kind="module" size={44} style={{ background: "var(--chakra-colors-bg-muted)", boxShadow: "inset 0 0 0 1px var(--chakra-colors-border)" }} color="fg.muted">
@@ -61,6 +78,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
               Folder · {c.files.length} {c.files.length === 1 ? "file" : "files"} · {total} scanned {total === 1 ? "element" : "elements"}
             </Text>
           </Box>
+          <ActionIconButton label="Minimize the details" icon={<IconDetailsClose />} size="sm" onClick={() => useExplorer.getState().setDetailsOpen(false)} />
           <ActionIconButton
             label="Close"
             icon={<IconClose />}
