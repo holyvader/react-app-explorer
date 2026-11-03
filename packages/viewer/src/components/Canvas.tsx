@@ -582,7 +582,8 @@ export function Canvas() {
           nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
         />
       </ReactFlow>
-      {!dragging && !menu && <NodeTooltip tip={tip} snapshot={snapshot} index={index} />}
+      {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
+      {!dragging && !menu && <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} />}
       <ExplorationPicker />
       <QuickAdd />
       <div className="rae-legend">

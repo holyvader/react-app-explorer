@@ -1,6 +1,6 @@
 import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, type SelectOption, Text, ToolGroup, Tooltip } from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
-import { IconAsset, IconRoute, IconBrand, IconClear, IconFolderTree, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
+import { IconAsset, IconBrand, IconClear, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
 import { useRef } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
@@ -43,15 +43,12 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
   const visible = useExplorer((s) => s.visible);
   const enabled = useExplorer((s) => s.enabled);
   const editor = useExplorer((s) => s.editor);
-  const folders = useExplorer((s) => s.folders);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
-  const routes = useExplorer((s) => s.routes);
-  const hasRoutes = snapshot?.framework === "next-app" && Object.values(snapshot.nodes).some((n) => n.kind === "route");
   const canUndo = useExplorer((s) => s.past.length > 0);
   const canRedo = useExplorer((s) => s.future.length > 0);
-  const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setFolders, setShowAssets, setRoutes, undo, redo } = useExplorer.getState();
+  const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setShowAssets, undo, redo } = useExplorer.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
   // grouped by the scanned folder (newest first, as the list comes), each entry its date and size
@@ -146,18 +143,6 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
 
       {/* view options */}
       <ToolGroup>
-        <Tooltip content="Draw folders as frames around files">
-          <Button size="xs" variant={folders ? "surface" : "ghost"} onClick={() => setFolders(!folders)} aria-pressed={folders} aria-label="Folders" rounded="l2">
-            <IconFolderTree size={14} /> <Label>Folders</Label>
-          </Button>
-        </Tooltip>
-        {hasRoutes && (
-          <Tooltip content="Draw Next.js routes as frames around their pages, layouts and API handlers">
-            <Button size="xs" variant={routes ? "surface" : "ghost"} onClick={() => setRoutes(!routes)} aria-pressed={routes} aria-label="Routes" rounded="l2">
-              <IconRoute size={14} /> <Label>Routes</Label>
-            </Button>
-          </Tooltip>
-        )}
         <Tooltip content={showAssets ? "Asset files (CSS, images, JSON) are shown" : "Show asset files (CSS, images, JSON)"}>
           <Button size="xs" variant={showAssets ? "surface" : "ghost"} onClick={() => setShowAssets(!showAssets)} aria-pressed={showAssets} aria-label="Assets" rounded="l2">
             <IconAsset size={14} /> <Label>Assets</Label>

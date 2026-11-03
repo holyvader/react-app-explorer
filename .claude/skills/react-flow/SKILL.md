@@ -6,6 +6,7 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 # React Flow in the viewer
 
 ## Model
+- **Folders and routes are nodes of their own** (added from the file tree / picker / menus), never automatic frames around files: the store keeps `folders: false` and `routes: false` (no toolbar toggles). An added folder or route is a card. The frame code paths (`foldersFor`, `routesFor` in drawn.ts) stay for the tests and could come back behind an option. Files are still frames around their declarations.
 - The **snapshot graph is the source of truth**. The store (`src/store.ts`) holds `visible: string[]` (ids the user put on the canvas), the derived `graph` (what is drawn) and `placed` (where).
 - `graph/drawn.ts` → `drawnGraph()` derives the **containment tree** plus edges:
   - folder frame (`dir:<path>`, optional, toggled by "Folders") → file **module** frame → declarations (component/hook/function/action).

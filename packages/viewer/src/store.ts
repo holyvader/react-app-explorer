@@ -239,11 +239,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),
-    routes: readJson(KEYS.routes, true),
+    // Folders and routes are nodes of their own (added from the tree / picker), not automatic
+    // frames around files: both frame modes stay off (the toolbar toggles are gone).
+    routes: false,
     sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
     treeOpen: readJson(KEYS.treeOpen, true),
     treeWidth: readJson(KEYS.treeWidth, TREE_WIDTH),
-    folders: readJson(KEYS.folders, true),
+    folders: false,
     editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
     searchOpen: false,
     graph: EMPTY,

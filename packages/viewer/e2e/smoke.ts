@@ -54,14 +54,15 @@ if ((await page.locator('.react-flow__node[data-id="ext:react"]').count()) !== 0
 // Read-only diagram: no handle can start a connection.
 if ((await page.locator(".react-flow__handle.connectable").count()) !== 0) fail("handles must not be connectable");
 
-// Nesting: adding TodoItem's file (sidebar "Module" link) draws it as a frame around TodoItem, inside its folder.
+// Nesting: adding TodoItem's file (sidebar "Module" link) draws it as a frame around TodoItem.
+// Folders are nodes of their own now: never drawn automatically around files.
 await page.locator(".react-flow__controls-fitview").click();
 await page.waitForTimeout(400);
 await page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]').click();
 // the sidebar header shows the file a component is declared in, as a chip
 await page.getByRole("button", { name: "TodoItem.tsx", exact: true }).first().click();
 await page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"]').waitFor();
-if ((await page.locator('.react-flow__node-frame[data-id^="dir:"]').count()) === 0) fail("expected a folder frame around the file");
+if ((await page.locator('.react-flow__node[data-id^="dir:"]').count()) !== 0) fail("no folder should be drawn around the file");
 
 const frame = page.locator('.react-flow__node[data-id="components/TodoItem.tsx"]');
 const card = page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]');
@@ -84,27 +85,10 @@ await page.waitForTimeout(500);
   await page.waitForTimeout(500);
 }
 
-// Dragging a frame (by its header) inside its folder grows the folder (top-left corner fixed).
-const folder = page.locator('.react-flow__node[data-id="dir:components"]');
-const before = await folder.boundingBox();
-const hb = await frame.locator(".rae-frame__header").boundingBox();
-if (before && hb) {
-  await page.mouse.move(hb.x + 20, hb.y + 10);
-  await page.mouse.down();
-  await page.mouse.move(hb.x + 260, hb.y + 200, { steps: 12 });
-  await page.mouse.up();
-  await page.waitForTimeout(500);
-  const after = await folder.boundingBox();
-  if (!after || after.width * after.height <= before.width * before.height || Math.abs(after.x - before.x) > 1)
-    fail(`folder did not grow around the dragged file: ${JSON.stringify({ before, after })}`);
-}
-
-// Folders are selectable from their header (like dragging); details show what they contain.
-await page.locator('.react-flow__node[data-id="dir:components"] .rae-frame__header').click({ position: { x: 120, y: 20 } });
-await page.getByText(/^Folder · \d+ files?/).waitFor();
 // …and a frame's content area acts as empty canvas: a click there clears the selection.
 {
-  // (the sidebar is open on the right now: click near the room's bottom-left, clear of it)
+  // (select something first, so there's a selection to clear)
+  await card.click();
   await page.locator(".react-flow__controls-fitview").click();
   await page.waitForTimeout(400);
   const room = (await page.locator('.react-flow__node[data-id="components/TodoItem.tsx"] .rae-frame__room').boundingBox())!;
@@ -127,8 +111,8 @@ await page.getByRole("menuitem", { name: /^Show all|^All shown/ }).first().waitF
 await page.keyboard.press("Escape");
 await page.keyboard.press("Escape");
 
-// Dragging inside a folder frame's empty room pans the diagram.
-const room = page.locator('.react-flow__node-frame[data-id^="dir:"] .rae-frame__room').first();
+// Dragging inside a frame's empty room pans the diagram.
+const room = page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"] .rae-frame__room').first();
 const rb = await room.boundingBox();
 const viewport = () => page.evaluate(() => document.querySelector(".react-flow__viewport")!.getAttribute("style"));
 if (rb) {
