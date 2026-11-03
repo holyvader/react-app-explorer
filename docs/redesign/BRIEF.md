@@ -15,6 +15,8 @@ Everything listed here is in this folder:
 
 To re-capture the screenshots after changes, run `packages/viewer/e2e/capture-states.ts`. How to run it is at the top of that file.
 
+**One file for Claude Design:** `react-app-explorer-redesign.pdf` has all of this in one document: the brief, the 25 screens full width, and appendices with the tokens, the diagram CSS, the logo and sample data. To rebuild it, run `packages/viewer/e2e/brief-pdf.ts`.
+
 ---
 
 ## 1. The product
