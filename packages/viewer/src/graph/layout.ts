@@ -73,7 +73,7 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
       ...LAYERED,
     },
     children: (kids.get(null) ?? []).map(nodeOf),
-    edges: graph.relations.map(({ id, source, target }) => ({ id, sources: [source], targets: [target] })),
+    edges: [...graph.relations.map(({ id, source, target }) => ({ id, sources: [source], targets: [target] })), ...gridEdges(graph)],
   });
 
   const byId = new Map(graph.elements.map((e) => [e.id, e]));
@@ -119,4 +119,40 @@ export async function layoutWithin(graph: DrawnGraph, id: string): Promise<Place
   const left = Math.min(...top.map((p) => p.x));
   const up = Math.min(...top.map((p) => p.y));
   return elements.map((p) => (p.element.parent === null ? { ...p, x: p.x - left, y: p.y - up } : p));
+}
+
+/** Fans of more cards than this (one node's children or parents in one container) wrap into a grid. */
+const GRID_FROM = 6;
+
+/**
+ * Hidden edges that wrap a big fan into rows: ELK's layered layout puts all of a node's children
+ * (or parents) in one layer — one long row. Chaining card i to card i + columns pushes each next
+ * batch one layer further, so 20 children make about 5 × 4 instead of a row of 20.
+ * Only cards (no frames), in the same container, are wrapped.
+ */
+export function gridEdges(graph: DrawnGraph): { id: string; sources: string[]; targets: string[] }[] {
+  const parentOf = new Map(graph.elements.map((e) => [e.id, e.parent]));
+  const nameOf = new Map(graph.elements.map((e) => [e.id, e.name]));
+  const frames = new Set(graph.elements.filter((e) => e.parent !== null).map((e) => e.parent!));
+  const fans = new Map<string, Set<string>>();
+  const add = (key: string, id: string) => {
+    if (frames.has(id)) return;
+    let fan = fans.get(key);
+    if (!fan) fans.set(key, (fan = new Set()));
+    fan.add(id);
+  };
+  for (const { source, target } of graph.relations) {
+    add(`down\n${source}\n${parentOf.get(target) ?? ""}`, target);
+    add(`up\n${target}\n${parentOf.get(source) ?? ""}`, source);
+  }
+  const out: { id: string; sources: string[]; targets: string[] }[] = [];
+  const taken = new Set<string>();
+  for (const [key, fan] of fans) {
+    const ids = [...fan].filter((id) => !taken.has(id)).sort((a, b) => (nameOf.get(a) ?? a).localeCompare(nameOf.get(b) ?? b));
+    if (ids.length <= GRID_FROM) continue;
+    for (const id of ids) taken.add(id);
+    const cols = Math.max(1, Math.ceil(Math.sqrt(ids.length)));
+    for (let i = 0; i + cols < ids.length; i++) out.push({ id: `grid:${key}:${i}`, sources: [ids[i]!], targets: [ids[i + cols]!] });
+  }
+  return out;
 }

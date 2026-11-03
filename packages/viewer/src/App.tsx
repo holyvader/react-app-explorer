@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Canvas } from "./components/Canvas.tsx";
 import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
+import { FileTree } from "./components/FileTree.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
 import { Notice } from "./components/Notice.tsx";
@@ -113,7 +114,8 @@ export function App() {
           </Box>
         )}
         <Flex flex="1" minH="0">
-          <Box flex="1" position="relative">
+          <FileTree />
+          <Box flex="1" position="relative" minW="0">
             <ScanProgress />
             <Notice />
             {loading ? (

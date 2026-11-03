@@ -76,6 +76,9 @@ function edgeLook(e: GraphEdge): { className: string; color: string } {
   }
 }
 
+/** Room (px) between relations drawn side by side between the same two nodes. */
+const EDGE_LANE = 10;
+
 const SHORTCUTS: Shortcut[] = [
   { keys: ["Space"], does: "Add to the diagram" },
   { keys: ["⌘ K", "Ctrl K"], does: "Search and add" },
@@ -400,8 +403,16 @@ export function Canvas() {
 
   const baseEdges = useMemo<ConditionFlowEdge[]>(() => {
     const drawn = new Set(placed.map((p) => p.element.id));
-    return graph.relations
-      .filter((r) => drawn.has(r.source) && drawn.has(r.target))
+    const shown = graph.relations.filter((r) => drawn.has(r.source) && drawn.has(r.target));
+    // several relations between the same two nodes (either way) run side by side, in lanes
+    const pairs = new Map<string, string[]>();
+    for (const r of shown) {
+      const key = r.source < r.target ? `${r.source}\n${r.target}` : `${r.target}\n${r.source}`;
+      pairs.set(key, [...(pairs.get(key) ?? []), r.id]);
+    }
+    const laneOf = new Map<string, { lane: number; step: number }>();
+    for (const ids of pairs.values()) ids.forEach((id, i) => laneOf.set(id, { lane: (i - (ids.length - 1) / 2) * EDGE_LANE, step: i - (ids.length - 1) / 2 }));
+    return shown
       .map(({ id, source, target, edge: e }) => {
         const look = edgeLook(e);
         return {
@@ -410,7 +421,7 @@ export function Canvas() {
           target,
           type: "condition",
           className: look.className,
-          data: { edge: e },
+          data: { edge: e, ...laneOf.get(id) },
           zIndex: 1,
           markerEnd: { type: MarkerType.ArrowClosed, color: look.color, width: 16, height: 16 },
         };

@@ -8,24 +8,38 @@ import { type InternalNode, Position } from "@xyflow/react";
 
 const sizeOf = (n: InternalNode) => ({ w: n.measured.width ?? n.width ?? 0, h: n.measured.height ?? n.height ?? 0 });
 
-/** Where the line from `node`'s centre towards `other`'s centre crosses `node`'s border. */
-function intersection(node: InternalNode, other: InternalNode) {
+/**
+ * Where the line from `node`'s centre (moved by `shift`) towards `other`'s centre (moved the same)
+ * crosses `node`'s border.
+ */
+function intersection(node: InternalNode, other: InternalNode, shift = { x: 0, y: 0 }) {
   const { w, h } = sizeOf(node);
   const p = node.internals.positionAbsolute;
   const o = other.internals.positionAbsolute;
   const os = sizeOf(other);
   const w2 = w / 2;
   const h2 = h / 2;
-  const x2 = p.x + w2;
-  const y2 = p.y + h2;
-  const x1 = o.x + os.w / 2;
-  const y1 = o.y + os.h / 2;
-  const xx1 = (x1 - x2) / (2 * w2) - (y1 - y2) / (2 * h2);
-  const yy1 = (x1 - x2) / (2 * w2) + (y1 - y2) / (2 * h2);
-  const a = 1 / (Math.abs(xx1) + Math.abs(yy1) || 1);
-  const xx3 = a * xx1;
-  const yy3 = a * yy1;
-  return { x: w2 * (xx3 + yy3) + x2, y: h2 * (-xx3 + yy3) + y2 };
+  // the shifted centre stays inside the node (a lane can't leave a small card)
+  const sx = Math.max(-w2 * 0.8, Math.min(w2 * 0.8, shift.x));
+  const sy = Math.max(-h2 * 0.8, Math.min(h2 * 0.8, shift.y));
+  const x2 = p.x + w2 + sx;
+  const y2 = p.y + h2 + sy;
+  const x1 = o.x + os.w / 2 + sx;
+  const y1 = o.y + os.h / 2 + sy;
+  // from the shifted centre towards the other node: the first border crossing
+  const dx = x1 - x2;
+  const dy = y1 - y2;
+  if (!dx && !dy) return { x: x2, y: y2 };
+  const left = p.x;
+  const right = p.x + w;
+  const top = p.y;
+  const bottom = p.y + h;
+  const ts = [
+    dx > 0 ? (right - x2) / dx : dx < 0 ? (left - x2) / dx : Infinity,
+    dy > 0 ? (bottom - y2) / dy : dy < 0 ? (top - y2) / dy : Infinity,
+  ];
+  const t = Math.min(...ts);
+  return { x: x2 + dx * t, y: y2 + dy * t };
 }
 
 /** Which side of the node a border point is on (for the bezier's curvature). */
@@ -41,8 +55,25 @@ function sideOf(node: InternalNode, point: { x: number; y: number }): Position {
   return Position.Top;
 }
 
-export function floatingEdgeParams(source: InternalNode, target: InternalNode) {
-  const s = intersection(source, target);
-  const t = intersection(target, source);
+/**
+ * `lane`: for several relations between the same two nodes, how far (px) this one runs beside the
+ * line between their centres, so they don't draw on top of each other. Positive is to the left of
+ * the direction from the lower id to the higher one, so both directions share one set of lanes.
+ */
+export function floatingEdgeParams(source: InternalNode, target: InternalNode, lane = 0) {
+  let shift = { x: 0, y: 0 };
+  if (lane) {
+    const a = centreOf(source.id < target.id ? source : target);
+    const b = centreOf(source.id < target.id ? target : source);
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    shift = { x: (-(b.y - a.y) / len) * lane, y: ((b.x - a.x) / len) * lane };
+  }
+  const s = intersection(source, target, shift);
+  const t = intersection(target, source, shift);
   return { sx: s.x, sy: s.y, tx: t.x, ty: t.y, sourcePos: sideOf(source, s), targetPos: sideOf(target, t) };
 }
+
+const centreOf = (n: InternalNode) => {
+  const { w, h } = sizeOf(n);
+  return { x: n.internals.positionAbsolute.x + w / 2, y: n.internals.positionAbsolute.y + h / 2 };
+};

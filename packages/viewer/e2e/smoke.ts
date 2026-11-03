@@ -24,7 +24,8 @@ await page.goto(url);
 await page.getByText("Empty diagram").waitFor({ timeout: 15000 });
 // Earlier runs' UI scans add react-app snapshots to the same folder: pick the newest next-app one.
 const select = page.locator("select").first();
-const nextApp = await select.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => o.text.startsWith("next-app"))?.value);
+// options are grouped by scanned folder: "<project> — <path>"
+const nextApp = await select.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => (o.parentElement as HTMLOptGroupElement | null)?.label?.startsWith("next-app"))?.value);
 if (!nextApp) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app` first");
 await select.selectOption(nextApp);
 // (the status text only shows on wide screens; it's always in the DOM)

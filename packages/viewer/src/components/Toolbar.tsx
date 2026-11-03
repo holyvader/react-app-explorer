@@ -1,4 +1,5 @@
-import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, Text, ToolGroup, Tooltip } from "@rae/design-system";
+import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, type SelectOption, Text, ToolGroup, Tooltip } from "@rae/design-system";
+import { projectName, shortPath } from "../lib/paths.ts";
 import { IconAsset, IconRoute, IconBrand, IconClear, IconFolderTree, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
 import { useRef } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
@@ -53,9 +54,11 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
   const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setFolders, setShowAssets, setRoutes, undo, redo } = useExplorer.getState();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const options = (list?.snapshots ?? []).map((s) => ({
+  // grouped by the scanned folder (newest first, as the list comes), each entry its date and size
+  const options: SelectOption[] = (list?.snapshots ?? []).map((s) => ({
     value: s.file,
-    label: `${s.rootDir ? `${s.rootDir.split("/").pop()} · ` : ""}${new Date(s.createdAt).toLocaleString()}${s.nodeCount ? ` · ${s.nodeCount} nodes` : ""}`,
+    label: `${new Date(s.createdAt).toLocaleString()}${s.nodeCount ? ` · ${s.nodeCount} nodes` : ""}`,
+    group: s.rootDir ? `${projectName(s.rootDir)} — ${shortPath(s.rootDir)}` : "Other",
   }));
   if (current && !options.some((o) => o.value === current)) options.unshift({ value: current, label: current });
 
@@ -79,6 +82,20 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           App Explorer
         </Text>
       </Flex>
+
+      {/* where we are: the scanned project */}
+      {snapshot && (
+        <Tooltip content={`Scanned folder: ${snapshot.rootDir}`}>
+          <Box minW="0" maxW="220px" flexShrink={0} lineHeight="1.2">
+            <Text fontSize="sm" fontWeight="semibold" truncate>
+              {projectName(snapshot.rootDir)}
+            </Text>
+            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate>
+              {shortPath(snapshot.rootDir)}
+            </Text>
+          </Box>
+        </Tooltip>
+      )}
 
       {/* snapshot */}
       <ToolGroup>

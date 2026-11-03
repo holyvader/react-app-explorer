@@ -41,18 +41,25 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - 3rd-party filter: `excluded` packages (default `react`, `react-dom`) and `hideAllLibraries` live in the store and persist in localStorage. Anything listing nodes or relations must respect it: use `relationFilterOf(state)` or `isFiltered(node, …)`.
 - Types come from `@rae/schema`. The snapshot is read-only in the UI.
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
-- Persistence: everything goes in localStorage under `rae.*` keys (settings, `rae.lastSnapshot`, each project's diagram `rae.diagram:<rootDir>`, saved 300ms after a change and on `pagehide`). In the desktop app, `syncStorage()` (`src/lib/storage.ts`, awaited in main.tsx before rendering) restores them from the server's `/api/storage` and mirrors every `rae.*` write back. The app's server gets a new port each launch, so the web view's own localStorage starts empty. Always use `rae.*` keys, or it won't survive a restart.
+- Persistence: everything goes in localStorage under `rae.*` keys (settings, `rae.lastSnapshot`, each project's diagram `rae.diagram:<rootDir>`, saved 300ms after a change and on `pagehide`). In the desktop app, `syncStorage()` (`src/lib/storage.ts`, awaited in main.tsx **before App, the store and selectionHistory are imported**: main.tsx loads them with dynamic `import()`, because the store reads its settings from localStorage as it loads) restores them from the server's `/api/storage` and mirrors every `rae.*` write back. The app's server gets a new port each launch, so the web view's own localStorage starts empty. Always use `rae.*` keys, or it won't survive a restart.
 - Selection history (`src/lib/selectionHistory.ts`, imported in main.tsx): each newly selected node is a `history` entry `{rae: id, i}` (`i` = step index; the first selection replaces the page's entry; a snapshot switch resets to 0). Back/Forward select it again with `addNodes([id], {select, focus})`, so removed nodes come back. Ways in, the same in both apps: the ← → `ControlButton`s in the canvas `Controls` (`useSelectionHistory()` for their disabled state), ⌘[ / ⌘] (handled by the viewer itself, never left to the browser), and the browser's own Back/Forward. The mouse's back/forward buttons are handled only in the desktop app (`serverIsDesktop`): a browser already does it, so handling it there too would step twice.
 - Details panel relations: "Uses" comes before "Used by"; "Used by" shows the first `USED_BY_LIMIT` (5) entries in group order, then "Show N more". Each row shows the other end's file path, dimmed and smaller (`2xs`). In "Used by", imported names equal to the viewed node's own name are dropped (a hook's users import the hook).
 - "Open in editor" goes through `editorUrl` (`src/lib/editor.ts`): IntelliJ/WebStorm `idea://`/`webstorm://`, VS Code/Cursor `vscode://file`. The choice persists in localStorage.
 
 ## Toolbar
+- Left: the scanned project (`projectName(rootDir)` + `shortPath(rootDir)`, `lib/paths.ts`), then the snapshot select. Its options are grouped by scanned folder (`SelectOption.group` → `<optgroup>`), each option its date and node count. The Snapshots modal groups the same way (a header per folder with select-all).
 - It must fit from 1280px up. The view buttons (Folders, Routes, Assets, Libraries) show text only
   from 2080px (`Label`; `aria-label` keeps their names). The brand text shows from 2240px and the
   stats from 2400px. The relation toggles may shrink and scroll sideways. Re-measure after adding
   anything (scrollWidth vs clientWidth at 1280 / 1600 / 1920).
 
 ## Details sidebar & filters
+- Components: one "Props" section (`ComponentProps`): each prop when known one by one, else the parameter's type (`props: ButtonProps`, linked), generics first. No "Output": a component returns an element. Other functions keep "Inputs & output".
+
+## File tree (left)
+- `components/FileTree.tsx`: the scanned model (`buildTree`) in `ElementTree` mode "browse", in a `Panel` with `resize.side = "left"`. Collapsible to a thin strip; open state and width in the store (`treeOpen` / `treeWidth`, `rae.treeOpen` / `rae.treeWidth`).
+- A row click opens / closes it, and goes to the element (select + focus) if it's on the diagram. The + next to the name (`aria-label "Add <name> to the diagram"`) adds it. Rows on the diagram are bold, the selected one is tinted and revealed (its folders opened, scrolled into view).
+- Its filter box is "Filter files" and the tree "Files", so they don't clash with the picker's "Filter elements".
 - The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
   Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.
 - Hooks in details and tooltips: only **custom hooks** (`hooksUsed` resolving to a project `hook` node)

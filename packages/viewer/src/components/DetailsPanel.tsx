@@ -197,7 +197,13 @@ export function DetailsPanel() {
         </PanelSection>
       )}
 
-      {node.props && node.props.length > 0 && (
+      {/* components: their props (no output: a component always returns an element) */}
+      {node.kind === "component" ? (
+        <PanelSection title="Props" count={node.props?.length || undefined}>
+          <ComponentProps node={node} />
+        </PanelSection>
+      ) : null}
+      {node.kind !== "component" && node.props && node.props.length > 0 && (
         <PanelSection title="Props" count={node.props.length}>
           <Stack gap="0.5">
             {node.props.map((p) => (
@@ -217,8 +223,8 @@ export function DetailsPanel() {
         </PanelSection>
       )}
 
-      {node.signature && node.kind !== "module" && node.kind !== "external" && (
-        <PanelSection title={node.kind === "component" ? "Signature" : "Inputs & output"}>
+      {node.signature && node.kind !== "module" && node.kind !== "external" && node.kind !== "component" && (
+        <PanelSection title="Inputs & output">
           <Signature node={node} />
         </PanelSection>
       )}
@@ -574,6 +580,67 @@ function Generics({ node }: { node: GraphNode }) {
   );
 }
 
+/**
+ * A component's props: each prop when they're known one by one, else its parameter's type (e.g.
+ * `props: ButtonProps`, a link to that type); type parameters first if it's generic.
+ */
+function ComponentProps({ node }: { node: GraphNode }) {
+  const params = node.signature?.params ?? [];
+  return (
+    <Stack gap="3">
+      {node.typeParams?.length ? <Generics node={node} /> : null}
+      {node.props?.length ? (
+        <Stack gap="0.5">
+          {node.props.map((p) => (
+            <CodeRow key={p.name}>
+              <CodeToken kind="name">{p.name}</CodeToken>
+              <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
+              <TypeText text={p.type ?? "unknown"} owner={node} />
+              {p.default && (
+                <>
+                  <CodeToken kind="punct"> = </CodeToken>
+                  <CodeToken kind="value">{p.default}</CodeToken>
+                </>
+              )}
+            </CodeRow>
+          ))}
+        </Stack>
+      ) : params.length ? (
+        <ParamRows node={node} params={params} />
+      ) : (
+        <Text fontSize="sm" color="fg.muted">
+          None
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+/** One parameter per row; object types over several lines. */
+function ParamRows({ node, params, mt }: { node: GraphNode; params: ParamDef[]; mt?: string }) {
+  return (
+    <Stack gap="1.5" mt={mt}>
+      {params.map((p, i) => (
+        <Box key={i} {...CODE_BOX} wordBreak="break-word">
+          <CodeToken kind="name">{p.name}</CodeToken>
+          {p.type && (
+            <>
+              <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
+              <TypeText text={p.type} owner={node} pretty />
+            </>
+          )}
+          {p.default && (
+            <>
+              <CodeToken kind="punct"> = </CodeToken>
+              <CodeToken kind="value">{p.default}</CodeToken>
+            </>
+          )}
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
 /** Type parameters (if generic), inputs (one parameter per row) and output; object types over several lines. */
 function Signature({ node }: { node: GraphNode }) {
   const sig = node.signature!;
@@ -584,25 +651,7 @@ function Signature({ node }: { node: GraphNode }) {
       <Box>
         <Eyebrow>Inputs</Eyebrow>
         {sig.params.length ? (
-          <Stack gap="1.5" mt="1.5">
-            {sig.params.map((p, i) => (
-              <Box key={i} {...box} wordBreak="break-word">
-                <CodeToken kind="name">{p.name}</CodeToken>
-                {p.type && (
-                  <>
-                    <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-                    <TypeText text={p.type} owner={node} pretty />
-                  </>
-                )}
-                {p.default && (
-                  <>
-                    <CodeToken kind="punct"> = </CodeToken>
-                    <CodeToken kind="value">{p.default}</CodeToken>
-                  </>
-                )}
-              </Box>
-            ))}
-          </Stack>
+          <ParamRows node={node} params={sig.params} mt="1.5" />
         ) : (
           <Text fontSize="sm" color="fg.muted" mt="1">
             None

@@ -4,7 +4,7 @@ import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder,
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
-import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, placeLocally } from "./graph/placement.ts";
+import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
@@ -12,6 +12,8 @@ import type { EditorKind } from "./lib/editor.ts";
 export const LARGE_EXPANSION = 300;
 /** Most new elements (incl. derived frames) placed locally; above this, everything is laid out anew. */
 const LOCAL_LIMIT = 12;
+/** Direct parents / children: placed beside the diagram up to this many new elements (frames included). */
+const EXPANSION_LIMIT = 80;
 
 export interface PendingExpansion {
   ids: string[];
@@ -32,6 +34,8 @@ const HISTORY_LIMIT = 100;
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 /** The details sidebar's default width (px). */
 export const SIDEBAR_WIDTH = 440;
+/** The file tree panel on the left. */
+export const TREE_WIDTH = 280;
 
 /** A scan started from the UI: structure first (the dialog), then types in the background. */
 export interface ScanState {
@@ -75,6 +79,9 @@ interface ExplorerState {
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
   sidebarWidth: number;
+  /** The file tree on the left: open (else a thin strip), and its width. */
+  treeOpen: boolean;
+  treeWidth: number;
   /** Draw folders as frames around file modules. */
   folders: boolean;
   editor: EditorKind;
@@ -104,7 +111,11 @@ interface ExplorerState {
   setScan: (scan: ScanState | undefined) => void;
   /** No snapshot loaded (e.g. the last one was deleted). */
   unloadSnapshot: () => void;
-  addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor }) => void;
+  /**
+   * `direction`: new elements go below (children) / above (parents) the anchor, fitted in beside
+   * the diagram (up to EXPANSION_LIMIT of them) instead of a full re-layout.
+   */
+  addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor; direction?: "up" | "down" }) => void;
   hideNode: (id: string, opts?: { keepContents?: boolean }) => void;
   /** Removes several elements in one undoable step. */
   hideNodes: (ids: string[], opts?: { keepContents?: boolean }) => void;
@@ -127,6 +138,8 @@ interface ExplorerState {
   setShowAssets: (on: boolean) => void;
   setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
+  setTreeOpen: (open: boolean) => void;
+  setTreeWidth: (width: number) => void;
   notify: (message: string | undefined) => void;
   setFolders: (on: boolean) => void;
   relayout: () => void;
@@ -142,7 +155,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -172,7 +185,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
    * Applies a state change that may alter what is drawn: derives the new drawn graph
    * and places it locally beside `anchor`; falls back to a full layout when it can't.
    */
-  const redraw = (patch: Partial<ExplorerState>, anchor: Anchor, full = false) => {
+  const redraw = (patch: Partial<ExplorerState>, anchor: Anchor, full = false, place: PlaceOptions & { limit?: number } = {}) => {
     const next = { ...get(), ...patch };
     if (!next.snapshot) return set(patch);
     const f = relationFilterOf(next);
@@ -181,7 +194,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     // Small changes are placed beside their anchor; big ones (e.g. "children down to the leaves") get a full layout.
     const placedIds = new Set(next.placed.map((p) => p.element.id));
     const added = graph.elements.filter((e) => !placedIds.has(e.id)).length;
-    const local = !full && next.placed.length && added <= LOCAL_LIMIT ? placeLocally(next.placed, graph, anchor) : null;
+    const local = !full && next.placed.length && added <= (place.limit ?? LOCAL_LIMIT) ? placeLocally(next.placed, graph, anchor, place) : null;
     if (local) set({ ...patch, graph, placed: autoPlaceSoleChildren(local) });
     else set({ ...patch, graph, layoutToken: next.layoutToken + 1 });
   };
@@ -222,6 +235,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     showAssets: readJson(KEYS.assets, false),
     routes: readJson(KEYS.routes, true),
     sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
+    treeOpen: readJson(KEYS.treeOpen, true),
+    treeWidth: readJson(KEYS.treeWidth, TREE_WIDTH),
     folders: readJson(KEYS.folders, true),
     editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
     searchOpen: false,
@@ -283,7 +298,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       };
       if (!added.length) return set(patch);
       record();
-      redraw({ ...patch, visible: [...s.visible, ...added] }, opts?.anchor ?? opts?.focus ?? null);
+      redraw({ ...patch, visible: [...s.visible, ...added] }, opts?.anchor ?? opts?.focus ?? null, false, opts?.direction ? { direction: opts.direction, limit: EXPANSION_LIMIT } : {});
     },
 
     hideNode: (id, opts) => get().hideNodes([id], opts),
@@ -377,7 +392,9 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         set({ pending: { ids: [id, ...ids], label: `${deep ? "All" : "Direct"} ${dir} of ${name}`, anchor: id } });
         return;
       }
-      get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id });
+      // direct parents / children are fitted in beside the diagram (a grid when there are several);
+      // everything up to the root / down to the leaves gets a full layout
+      get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id, direction: deep ? undefined : dir === "parents" ? "up" : "down" });
     },
 
     showRouteChain: (id) => {
@@ -419,6 +436,16 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setSidebarWidth: (width) => {
       localStorage.setItem(KEYS.sidebar, JSON.stringify(width));
       set({ sidebarWidth: width });
+    },
+
+    setTreeOpen: (open) => {
+      localStorage.setItem(KEYS.treeOpen, JSON.stringify(open));
+      set({ treeOpen: open });
+    },
+
+    setTreeWidth: (width) => {
+      localStorage.setItem(KEYS.treeWidth, JSON.stringify(width));
+      set({ treeWidth: width });
     },
 
     setRoutes: (on) => {

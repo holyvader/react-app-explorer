@@ -55,6 +55,21 @@
 }
 .rae-tree__tick[data-state="on"], .rae-tree__tick[data-state="all"] { background: var(--chakra-colors-blue-500); border-color: var(--chakra-colors-blue-500); }
 .rae-tree__tick[data-state="file"], .rae-tree__tick[data-state="partial"] { background: color-mix(in srgb, var(--chakra-colors-blue-500) 45%, transparent); border-color: var(--chakra-colors-blue-500); }
+/* file tree panel (browse mode): elements on the diagram, the selected one, and the + to add */
+.rae-tree__row[data-drawn] .rae-tree__name { font-weight: 600; }
+.rae-tree__row[data-selected] { background: color-mix(in srgb, var(--chakra-colors-blue-500) 14%, transparent); }
+.rae-tree__add {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--chakra-colors-fg-muted);
+  opacity: 0.45;
+}
+.rae-tree__row:hover .rae-tree__add, .rae-tree__row:focus-visible .rae-tree__add { opacity: 1; }
+.rae-tree__add:hover { background: var(--chakra-colors-bg-emphasized); color: var(--chakra-colors-fg); }
+.rae-tree__add + .rae-tree__note { margin-left: 0; }
 .rae-tree__more { padding: 6px 12px; font-size: 12px; color: var(--chakra-colors-fg-muted); }
 .rae-tree__empty { padding: 16px 12px; font-size: 13px; color: var(--chakra-colors-fg-muted); text-align: center; }
 .rae-picker-foot {

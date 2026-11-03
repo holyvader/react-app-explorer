@@ -1,6 +1,7 @@
 import { Alert, Badge, Box, Button, Checkbox, Flex, HStack, Modal, Stack, Text } from "@rae/design-system";
 import { useState } from "react";
 import { deleteSnapshots, type SnapshotList } from "../lib/api.ts";
+import { projectName, shortPath } from "../lib/paths.ts";
 
 export interface SnapshotsModalProps {
   open: boolean;
@@ -14,7 +15,12 @@ export interface SnapshotsModalProps {
 
 type Entry = SnapshotList["snapshots"][number];
 
-const projectOf = (s: Entry) => s.rootDir?.split(/[\\/]/).filter(Boolean).pop() ?? "unknown project";
+/** Snapshots by scanned folder, in the list's order (newest first). */
+function groupsOf(list: Entry[]): [string | undefined, Entry[]][] {
+  const groups = new Map<string | undefined, Entry[]>();
+  for (const s of list) groups.set(s.rootDir, [...(groups.get(s.rootDir) ?? []), s]);
+  return [...groups];
+}
 
 /** Lists the snapshots in the snapshots folder; select some and delete them (after a confirmation). */
 export function SnapshotsModal({ open, onOpenChange, list, current, onDeleted }: SnapshotsModalProps) {
@@ -118,38 +124,61 @@ export function SnapshotsModal({ open, onOpenChange, list, current, onDeleted }:
                 Select all but the newest per project
               </Button>
             </Flex>
-            <Box borderWidth="1px" borderColor="border" rounded="l2" maxH="380px" overflowY="auto">
-              {snapshots.map((s, i) => (
-                <Flex
-                  key={s.file}
-                  align="center"
-                  gap="3"
-                  px="3"
-                  py="2"
-                  borderTopWidth={i ? "1px" : 0}
-                  borderColor="border.muted"
-                  bg={selected.has(s.file) ? "bg.muted" : undefined}
-                >
-                  <Checkbox checked={selected.has(s.file)} onCheckedChange={(on) => toggle(s.file, on)} />
-                  <Box flex="1" minW="0">
-                    <HStack gap="2">
-                      <Text fontSize="sm" fontWeight="medium" truncate title={s.rootDir}>
-                        {projectOf(s)}
+            <Box borderWidth="1px" borderColor="border" rounded="l2" maxH="420px" overflowY="auto">
+              {/* grouped by the scanned folder, groups in order of their newest snapshot */}
+              {groupsOf(snapshots).map(([dir, items], g) => {
+                const all = items.every((s) => selected.has(s.file));
+                return (
+                  <Box key={dir ?? "?"} borderTopWidth={g ? "1px" : 0} borderColor="border">
+                    <Flex align="center" gap="3" px="3" py="2" bg="bg.subtle" position="sticky" top="0" zIndex="1">
+                      <Checkbox checked={all} onCheckedChange={(on) => items.forEach((s) => toggle(s.file, on))} aria-label={`Select all of ${dir ?? "unknown project"}`} />
+                      <Box flex="1" minW="0">
+                        <Text fontSize="sm" fontWeight="semibold" truncate title={dir}>
+                          {dir ? projectName(dir) : "Unknown project"}
+                        </Text>
+                        {dir && (
+                          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate title={dir}>
+                            {shortPath(dir)}
+                          </Text>
+                        )}
+                      </Box>
+                      <Text fontSize="xs" color="fg.muted">
+                        {items.length}
                       </Text>
-                      {s.file === current && (
-                        <Badge size="xs" colorPalette="blue" variant="subtle">
-                          Loaded
-                        </Badge>
-                      )}
-                    </HStack>
-                    <Text fontSize="xs" color="fg.muted" truncate>
-                      {new Date(s.createdAt).toLocaleString()}
-                      {s.nodeCount !== undefined ? ` · ${s.nodeCount} nodes` : ""}
-                      {s.framework ? ` · ${s.framework}` : ""}
-                    </Text>
+                    </Flex>
+                    {items.map((s) => (
+                      <Flex
+                        key={s.file}
+                        align="center"
+                        gap="3"
+                        px="3"
+                        pl="8"
+                        py="2"
+                        borderTopWidth="1px"
+                        borderColor="border.muted"
+                        bg={selected.has(s.file) ? "bg.muted" : undefined}
+                      >
+                        <Checkbox checked={selected.has(s.file)} onCheckedChange={(on) => toggle(s.file, on)} />
+                        <Box flex="1" minW="0">
+                          <HStack gap="2">
+                            <Text fontSize="sm" truncate>
+                              {new Date(s.createdAt).toLocaleString()}
+                            </Text>
+                            {s.file === current && (
+                              <Badge size="xs" colorPalette="blue" variant="subtle">
+                                Loaded
+                              </Badge>
+                            )}
+                          </HStack>
+                          <Text fontSize="xs" color="fg.muted" truncate>
+                            {[s.nodeCount !== undefined ? `${s.nodeCount} nodes` : "", s.framework ?? ""].filter(Boolean).join(" · ")}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    ))}
                   </Box>
-                </Flex>
-              ))}
+                );
+              })}
             </Box>
           </>
         )}

@@ -9,6 +9,11 @@ export interface PanelResize {
   max?: number;
   /** Double-clicking the handle goes back to this width. */
   defaultWidth?: number;
+  /**
+   * The panel's side of the window: "right" (default) has the handle on its left edge, "left"
+   * (e.g. a file tree) on its right edge.
+   */
+  side?: "left" | "right";
 }
 
 /**
@@ -23,18 +28,21 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
       </Box>
     );
   }
-  const { width, onWidthChange, min = 320, max = 900, defaultWidth } = resize;
+  const { width, onWidthChange, min = 320, max = 900, defaultWidth, side = "right" } = resize;
+  // dragging towards the window's middle widens the panel
+  const dir = side === "right" ? -1 : 1;
+  const border = side === "right" ? { borderLeftWidth: "1px" } : { borderRightWidth: "1px" };
   const clamp = (w: number) => Math.round(Math.min(Math.max(w, min), Math.min(max, window.innerWidth - 360)));
   return (
     <Box position="relative" h="full" flexShrink={0} style={{ width }}>
       <Box
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize the sidebar (double-click to reset)"
+        aria-label={`Resize the ${side === "right" ? "sidebar" : "left panel"} (double-click to reset)`}
         aria-valuenow={width}
         tabIndex={0}
         position="absolute"
-        left="-3px"
+        {...(side === "right" ? { left: "-3px" } : { right: "-3px" })}
         top="0"
         bottom="0"
         w="6px"
@@ -48,7 +56,7 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
           el.dataset.dragging = "";
           const startX = e.clientX;
           const startW = width;
-          const move = (ev: PointerEvent) => onWidthChange(clamp(startW + (startX - ev.clientX)));
+          const move = (ev: PointerEvent) => onWidthChange(clamp(startW + dir * (ev.clientX - startX)));
           const up = () => {
             delete el.dataset.dragging;
             el.removeEventListener("pointermove", move);
@@ -61,11 +69,11 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
         }}
         onDoubleClick={() => defaultWidth && onWidthChange(clamp(defaultWidth))}
         onKeyDown={(e) => {
-          if (e.key === "ArrowLeft") onWidthChange(clamp(width + 24));
-          else if (e.key === "ArrowRight") onWidthChange(clamp(width - 24));
+          if (e.key === "ArrowLeft") onWidthChange(clamp(width - dir * 24));
+          else if (e.key === "ArrowRight") onWidthChange(clamp(width + dir * 24));
         }}
       />
-      <Box bg="bg.panel" borderLeftWidth="1px" borderColor="border.muted" h="full" overflowY="auto" {...rest}>
+      <Box bg="bg.panel" {...border} borderColor="border.muted" h="full" overflowY="auto" {...rest}>
         {children}
       </Box>
     </Box>

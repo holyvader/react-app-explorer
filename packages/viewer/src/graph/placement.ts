@@ -218,11 +218,24 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
 
 type Workspace = ReturnType<typeof workspaceOf>;
 
+export interface PlaceOptions {
+  /**
+   * Which side of the anchor new elements go: "down" (its children, below it), "up" (its parents,
+   * above it). Unset: wherever is nearest.
+   */
+  direction?: "up" | "down";
+}
+
+/** Columns for a grid of `n` cards: about square in count, so 20 cards make 5 × 4, not one long row. */
+export const gridColumns = (n: number) => Math.max(1, Math.ceil(Math.sqrt(n)));
+
 /**
  * Places the changed graph without moving the rest. `anchor`: the node the change
  * came from, a canvas point (e.g. viewport centre), or null (near everything).
+ * Several new cards going into the same container (or onto the canvas) are set out together as a
+ * grid, in a free spot beside the anchor.
  */
-export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGraph, anchor: string | CanvasPoint | null): PlacedElement[] | null {
+export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGraph, anchor: string | CanvasPoint | null, opts: PlaceOptions = {}): PlacedElement[] | null {
   const ws = workspaceOf(previous, graph);
   const { rects, placedKids, descendantsOf, ancestorsOf, fit, settle, placed } = ws;
   if (!settle()) return null;
@@ -250,13 +263,19 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
         at(r.x, r.y + r.height + SPACING),
         at(r.x - SPACING - width, r.y),
         at(r.x, r.y - SPACING - height),
+        // centred under / over it (a grid of children under their parent)
+        at(r.x + r.width / 2 - width / 2, r.y + r.height + SPACING),
+        at(r.x + r.width / 2 - width / 2, r.y - SPACING - height),
       ]),
     ];
     const free = candidates.filter((s) => (!room || (s.x >= room.x && s.y >= room.y)) && standing.every((r) => !overlaps(s, r)));
     const outsideRoom = (s: Rect) =>
       !room || (s.x >= room.x && s.y >= room.y && s.x + s.width <= room.x + room.width && s.y + s.height <= room.y + room.height) ? 0 : 1;
+    // parents above the anchor, children below it, when there's room there
+    const wrongSide = (s: Rect) =>
+      opts.direction === "down" ? (s.y < toward.y + toward.height ? 1 : 0) : opts.direction === "up" ? (s.y + s.height > toward.y ? 1 : 0) : 0;
     return (
-      free.sort((a, b) => outsideRoom(a) - outsideRoom(b) || near(a) - near(b))[0] ??
+      free.sort((a, b) => outsideRoom(a) - outsideRoom(b) || wrongSide(a) - wrongSide(b) || near(a) - near(b))[0] ??
       at(Math.max(...standing.map((r) => r.x + r.width), 0) + SPACING, room?.y ?? anchorRect.y)
     );
   };
@@ -304,13 +323,55 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
     return true;
   };
 
-  // Each new element once its container stands, so it has a room to go in.
+  /** New cards with the same container, set out as one grid block in the spot a card would get. */
+  const placeGrid = (group: DrawnElement[]): boolean => {
+    const parent = group[0]!.parent;
+    const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
+    const cols = gridColumns(sorted.length);
+    const rows = Math.ceil(sorted.length / cols);
+    const cell = Math.max(...sorted.map((e) => widthOf(e.name)));
+    const width = cols * cell + (cols - 1) * SPACING;
+    const height = rows * CARD_HEIGHT + (rows - 1) * SPACING;
+    let spot: Rect;
+    if (parent !== null) {
+      const container = rects.get(parent);
+      if (!container) return false;
+      const siblings = placedKids(parent).map((k) => rects.get(k.id)!);
+      const room = { x: container.x + PADDING.left, y: container.y + PADDING.top, width: container.width - PADDING.left - PADDING.right, height: container.height - PADDING.top - PADDING.bottom };
+      spot = spotFor(width, height, siblings, siblings, siblings.length ? null : { x: room.x, y: room.y }, room);
+    } else {
+      const roots = placedKids(null).map((k) => rects.get(k.id)!);
+      if (point) spot = spotFor(width, height, roots, roots, { x: point.x - width / 2, y: point.y - height / 2 }, null);
+      else {
+        const top = card === null ? null : (ancestorsOf(card).at(-1) ?? card);
+        const from = (top ? rects.get(top) : undefined) ?? anchorRect;
+        spot = spotFor(width, height, [from, ...roots], roots, null, null);
+      }
+    }
+    sorted.forEach((e, i) => {
+      const c = i % cols;
+      const r = Math.floor(i / cols);
+      rects.set(e.id, { x: spot.x + c * (cell + SPACING), y: spot.y + r * (CARD_HEIGHT + SPACING), width: widthOf(e.name), height: CARD_HEIGHT });
+    });
+    return fit(parent);
+  };
+
+  // Each new element once its container stands, so it has a room to go in. New cards sharing a
+  // container go in together, as a grid.
+  const holdsKids = new Set(graph.elements.filter((e) => e.parent !== null).map((e) => e.parent!));
   const waiting = graph.elements.filter((e) => !rects.has(e.id));
   while (waiting.length) {
     const i = waiting.findIndex((e) => e.parent === null || rects.has(e.parent));
     if (i < 0) return null;
-    const [e] = waiting.splice(i, 1);
-    if (!e || !place(e)) return null;
+    const e = waiting[i]!;
+    const group = holdsKids.has(e.id) ? [e] : waiting.filter((w) => w.parent === e.parent && !holdsKids.has(w.id));
+    if (group.length > 1) {
+      for (const g of group) waiting.splice(waiting.indexOf(g), 1);
+      if (!placeGrid(group)) return null;
+      continue;
+    }
+    waiting.splice(i, 1);
+    if (!place(e)) return null;
   }
   return placed();
 }

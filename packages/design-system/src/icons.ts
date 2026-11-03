@@ -4,6 +4,8 @@ export {
   ArrowUp as IconArrowUp,
   ArrowLeft as IconBack,
   ArrowRight as IconForward,
+  PanelLeftClose as IconPanelClose,
+  PanelLeftOpen as IconPanelOpen,
   ChevronDown as IconChevronDown,
   ChevronRight as IconChevronRight,
   ChevronsDown as IconChevronsDown,

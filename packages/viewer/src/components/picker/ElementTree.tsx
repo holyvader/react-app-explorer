@@ -1,5 +1,5 @@
-import { IconChevronDown, IconChevronRight, IconFolder, IconLibrary } from "@rae/design-system/icons";
-import { type KeyboardEvent, type RefObject, useMemo, useRef, useState } from "react";
+import { IconChevronDown, IconChevronRight, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
+import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { buildTree, type TreeNode, visibleRows } from "../../graph/tree.ts";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../../store.ts";
@@ -8,8 +8,11 @@ import "./picker.css";
 export type TickState = "off" | "on" | "file" | "all" | "partial";
 
 export interface ElementTreeProps {
-  /** "toggle": rows tick elements in/out (picker). "pick": a click picks one, drawn ones left out (quick add). */
-  mode: "toggle" | "pick";
+  /**
+   * "toggle": rows tick elements in/out (picker). "pick": a click picks one, drawn ones left out
+   * (quick add). "browse": the file tree panel — a click opens / goes to the element, + adds it.
+   */
+  mode: "toggle" | "pick" | "browse";
   onActivate: (node: TreeNode) => void;
   /** Tick state of a row (toggle mode). */
   tickOf?: (node: TreeNode) => TickState | null;
@@ -19,6 +22,12 @@ export interface ElementTreeProps {
   inactive?: (node: TreeNode) => string | null;
   inputRef: RefObject<HTMLInputElement | null>;
   placeholder?: string;
+  /** Browse mode: whether a row's element is on the diagram (no + then; a click goes to it). */
+  drawn?: (node: TreeNode) => boolean;
+  /** Browse mode: the + next to a row's name. */
+  onAdd?: (node: TreeNode) => void;
+  /** Browse mode: the selected element's id; its row is marked, and opened up to when it changes. */
+  selectedId?: string;
 }
 
 const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: "–", partial: "–" };
@@ -27,7 +36,7 @@ const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: 
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
  * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
-export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder }: ElementTreeProps) {
+export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, drawn, onAdd, selectedId }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const excluded = useExplorer((s) => s.excluded);
   const hideAll = useExplorer((s) => s.hideAllLibraries);
@@ -43,6 +52,19 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   }, [snapshot, excluded, hideAll, showAssets]);
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);
 
+  // browse mode: a newly selected element's row comes into sight (its folders opened)
+  const [revealed, setRevealed] = useState<string>();
+  if (mode === "browse" && selectedId && selectedId !== revealed) {
+    setRevealed(selectedId);
+    const chain = pathTo(roots, selectedId);
+    if (chain && chain.some((k) => !open.has(k))) setOpen(new Set([...open, ...chain]));
+  }
+  useEffect(() => {
+    if (mode !== "browse" || !selectedId) return;
+    const row = list.current?.querySelector<HTMLElement>(`[data-id="${CSS.escape(selectedId)}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+  }, [mode, selectedId, rows]);
+
   const toggleOpen = (key: string, to?: boolean) =>
     setOpen((prev) => {
       const next = new Set(prev);
@@ -54,6 +76,11 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const focusRow = (i: number) => (list.current?.querySelectorAll<HTMLElement>("[role=treeitem]")[i])?.focus();
 
   const activate = (n: TreeNode) => {
+    // browse: a row opens / closes, and the panel goes to it if it's on the diagram
+    if (mode === "browse") {
+      if (n.children.length) toggleOpen(n.key);
+      return onActivate(n);
+    }
     const note = inactive?.(n);
     // Folders are addable too (the chevron / → opens them); the Libraries group only opens.
     if (n.kind === "libraries" || n.kind === "routes" || note) return toggleOpen(n.key);
@@ -92,7 +119,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           ref={inputRef}
           value={query}
           placeholder={placeholder ?? "Filter by name or path…"}
-          aria-label="Filter elements"
+          aria-label={mode === "browse" ? "Filter files" : "Filter elements"}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") {
@@ -110,7 +137,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           }}
         />
       </div>
-      <div className="rae-tree" role="tree" aria-label="Scanned elements" ref={list}>
+      <div className="rae-tree" role="tree" aria-label={mode === "browse" ? "Files" : "Scanned elements"} ref={list}>
         {rows.length === 0 && <div className="rae-tree__empty">Nothing matches.</div>}
         {rows.map((r, i) => {
           const n = r.node;
@@ -128,6 +155,9 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               aria-checked={tick ? tick !== "off" : undefined}
               className="rae-tree__row"
               data-inactive={note ? "" : undefined}
+              data-id={n.id ?? n.key}
+              data-drawn={mode === "browse" && drawn?.(n) ? "" : undefined}
+              data-selected={mode === "browse" && !!selectedId && (n.id ?? n.key) === selectedId ? "" : undefined}
               tabIndex={i === 0 ? 0 : -1}
               style={{ paddingLeft: 8 + r.depth * 16 }}
               onClick={() => activate(n)}
@@ -154,6 +184,21 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
                 <Icon size={14} />
               </span>
               <span className="rae-tree__name">{n.name}</span>
+              {mode === "browse" && onAdd && (n.id || n.kind === "folder") && !drawn?.(n) && (
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  className="rae-tree__add"
+                  aria-label={`Add ${n.name} to the diagram`}
+                  title="Add to the diagram"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAdd(n);
+                  }}
+                >
+                  <IconPlus size={13} />
+                </span>
+              )}
               {note && <span className="rae-tree__note">{note}</span>}
               {!note && n.kind === "file" && n.children.length > 0 && <span className="rae-tree__note">{n.children.length}</span>}
               {!note && node?.route?.rendering && (
@@ -168,4 +213,17 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
       </div>
     </>
   );
+}
+
+/** The keys of the rows down to the one for `id` (its folders, file…), without that row itself. */
+function pathTo(roots: TreeNode[], id: string): string[] | undefined {
+  const walk = (nodes: TreeNode[], chain: string[]): string[] | undefined => {
+    for (const n of nodes) {
+      if ((n.id ?? n.key) === id) return chain;
+      const found = n.children.length ? walk(n.children, [...chain, n.key]) : undefined;
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return walk(roots, []);
 }

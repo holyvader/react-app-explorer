@@ -5,7 +5,11 @@ import { floatingEdgeParams } from "../graph/floating.ts";
 import { formatCondition, summarize } from "../lib/conditions.ts";
 import { relationWord } from "../lib/relationWords.ts";
 
-export type ConditionEdgeData = { edge: GraphEdge; related?: boolean };
+/** `lane` (px) and `step` (its position among them): relations between the same two nodes, side by side. */
+export type ConditionEdgeData = { edge: GraphEdge; related?: boolean; lane?: number; step?: number };
+
+/** Labels of side-by-side relations: this far apart, one under another (px). */
+const LABEL_STEP = 24;
 export type ConditionFlowEdge = Edge<ConditionEdgeData, "condition">;
 
 /**
@@ -16,9 +20,13 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
   if (!sourceNode || !targetNode || !data) return null;
-  const { sx, sy, tx, ty, sourcePos, targetPos } = floatingEdgeParams(sourceNode, targetNode);
+  const { sx, sy, tx, ty, sourcePos, targetPos } = floatingEdgeParams(sourceNode, targetNode, data.lane);
   const edge = data.edge;
-  const [path, labelX, labelY] = getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sourcePos, targetPosition: targetPos });
+  const [path, midX, midY] = getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sourcePos, targetPosition: targetPos });
+  // side-by-side relations: their labels stacked one under another, in the lanes' order (the same
+  // whichever way each relation points), so they never cover each other
+  const labelX = midX;
+  const labelY = midY + (data.step ?? 0) * LABEL_STEP;
   const conditions = summarize(edge.conditions, 34);
   const variants = edge.variants?.length ?? 0;
   const title = [
