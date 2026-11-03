@@ -34,7 +34,11 @@ export function FileTree() {
       if (onDiagram.has(id)) {
         st.inspect(undefined);
         st.addNodes([id], { select: id, focus: id });
-      } else st.inspect(id);
+      } else {
+        // its details replace the diagram's selection (cleared first: a selection change ends an inspection)
+        st.select(undefined);
+        st.inspect(id);
+      }
     },
     [onDiagram],
   );
