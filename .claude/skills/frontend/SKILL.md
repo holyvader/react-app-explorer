@@ -58,7 +58,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 
 ## File tree (left)
 - `components/FileTree.tsx`: the scanned model (`buildTree`) in `ElementTree` mode "browse", in a `Panel` with `resize.side = "left"`. Collapsible to a thin strip; open state and width in the store (`treeOpen` / `treeWidth`, `rae.treeOpen` / `rae.treeWidth`).
-- A row click opens / closes it, and goes to the element (select + focus) if it's on the diagram. The + next to the name (`aria-label "Add <name> to the diagram"`) adds it. Rows on the diagram are bold, the selected one is tinted and revealed (its folders opened, scrolled into view).
+- A row click opens / closes it and shows its details. On the diagram: selected and centred there. Not on it: `inspect(id)` (store `inspectedId`) shows it in the details panel without touching the diagram's selection, with an **"Add to diagram"** button first (elements and folders). Any selection change clears `inspectedId`; closing the details of an inspected element goes back to the selection. The + next to a name (`aria-label "Add <name> to the diagram"`) adds it directly. Rows on the diagram are bold; the shown one is tinted and revealed (its folders opened, scrolled into view). A treeitem's accessible name includes the + label: locate rows in tests by `[data-id="<node id>"]` (folders `dir:<path>`).
 - Its filter box is "Filter files" and the tree "Files", so they don't clash with the picker's "Filter elements".
 - The sidebar is resizable (`Panel resize`, a drag handle on its left edge; double-click resets).
   Its width is `sidebarWidth` in the store, kept in localStorage `rae.sidebarWidth`.

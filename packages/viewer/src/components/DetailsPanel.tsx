@@ -27,6 +27,7 @@ import {
   IconCopy,
   IconFocus,
   IconOpen,
+  IconPlus,
   IconRouteChain,
 } from "@rae/design-system/icons";
 import { type ReactNode, useMemo, useState } from "react";
@@ -51,13 +52,17 @@ export function DetailsPanel() {
   const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const index = useExplorer((s) => s.index);
-  const selectedId = useExplorer((s) => s.selectedId);
+  // what the file tree points at, else the diagram's selection
+  const selectedId = useExplorer((s) => s.inspectedId ?? s.selectedId);
+  const onDiagram = useExplorer((s) => !!selectedId && s.graph.elements.some((e) => e.id === selectedId));
   const enabled = useExplorer((s) => s.enabled);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const editor = useExplorer((s) => s.editor);
-  const { select, expand, addNodes } = useExplorer.getState();
+  const { select, expand, addNodes, inspect } = useExplorer.getState();
+  // closing a file-tree inspection goes back to the diagram's selection (if any)
+  const closeDetails = () => (useExplorer.getState().inspectedId ? inspect(undefined) : select(undefined));
   const node = selectedId ? snapshot?.nodes[selectedId] : undefined;
 
   const relations = useMemo(() => {
@@ -70,7 +75,7 @@ export function DetailsPanel() {
   }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets]);
 
   // Folders aren't scanned nodes: they get their own details (what they contain).
-  if (selectedId && isFolder(selectedId)) return <FolderDetails id={selectedId} />;
+  if (selectedId && isFolder(selectedId)) return <FolderDetails id={selectedId} onDiagram={onDiagram} />;
   if (!snapshot || !node || !index) return null;
 
   const meta = KIND_META[node.kind];
@@ -101,7 +106,7 @@ export function DetailsPanel() {
               {caption}
             </Text>
           </Box>
-          <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={() => select(undefined)} />
+          <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={closeDetails} />
         </Flex>
 
         <Flex mt="3" align="center" gap="1.5" bg="syntax.bg" rounded="l2" px="2.5" py="1.5" minW="0">
@@ -139,13 +144,19 @@ export function DetailsPanel() {
           </Wrap>
         )}
 
-        <Flex mt="4" gap="2" align="center">
+        <Flex mt="4" gap="2" align="center" wrap="wrap">
+          {/* picked in the file tree and not drawn yet: adding it comes first */}
+          {!onDiagram && (
+            <Button size="sm" variant="solid" rounded="l2" onClick={() => addNodes([node.id], { select: node.id, focus: node.id })}>
+              <IconPlus size={15} /> Add to diagram
+            </Button>
+          )}
           {open && (
-            <Button size="sm" variant="solid" rounded="l2" onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}>
+            <Button size="sm" variant={onDiagram ? "solid" : "outline"} rounded="l2" onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}>
               <IconOpen size={15} /> Open in editor
             </Button>
           )}
-          <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />
+          {onDiagram && <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />}
           {snapshot && routeOf(snapshot, node.id) && (
             <ActionIconButton
               label={`Show the route chain of ${snapshot.nodes[routeOf(snapshot, node.id)!]!.route!.url} (layouts down to the page)`}

@@ -7,14 +7,15 @@ import { ElementTree } from "./picker/ElementTree.tsx";
 
 /**
  * The scanned files as a tree on the left — collapsible (to a thin strip) and resizable, both kept.
- * Click a row to open it, or go to it when it's on the diagram; its + adds it to the diagram.
+ * A row click shows its details (and opens it); on the diagram it's also selected and centred there.
+ * The + next to a name, or "Add to diagram" in the details, adds it.
  */
 export function FileTree() {
   const snapshot = useExplorer((s) => s.snapshot);
   const open = useExplorer((s) => s.treeOpen);
   const width = useExplorer((s) => s.treeWidth);
   const graph = useExplorer((s) => s.graph);
-  const selectedId = useExplorer((s) => s.selectedId);
+  const selectedId = useExplorer((s) => s.inspectedId ?? s.selectedId);
   const { setTreeOpen, setTreeWidth } = useExplorer.getState();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -24,11 +25,16 @@ export function FileTree() {
     const id = n.id ?? n.key;
     useExplorer.getState().addNodes([id], { select: id, focus: id });
   }, []);
-  // a row: on the diagram → go to it; else nothing (the tree opens / closes it)
+  // a row: its details (on the diagram → selected and centred there; else shown with "Add to diagram")
   const activate = useCallback(
     (n: TreeNode) => {
+      if (!n.id && n.kind !== "folder") return; // the Routes / Libraries groups only open
       const id = n.id ?? n.key;
-      if (onDiagram.has(id)) useExplorer.getState().addNodes([id], { select: id, focus: id });
+      const st = useExplorer.getState();
+      if (onDiagram.has(id)) {
+        st.inspect(undefined);
+        st.addNodes([id], { select: id, focus: id });
+      } else st.inspect(id);
     },
     [onDiagram],
   );

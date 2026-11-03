@@ -14,7 +14,7 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconRemoveWithContents } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconFocus, IconFolder, IconLayout, IconPlus, IconRemoveWithContents } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
@@ -26,7 +26,7 @@ const MAX_FILES = 120;
 const KIND_ORDER: NodeKind[] = ["module", "component", "hook", "function", "serverAction"];
 
 /** Details of a selected folder: what it contains, in the same visual language as other nodes. */
-export function FolderDetails({ id }: { id: string }) {
+export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?: boolean }) {
   const sidebarWidth = useExplorer((s) => s.sidebarWidth);
   const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
@@ -61,7 +61,12 @@ export function FolderDetails({ id }: { id: string }) {
               Folder · {c.files.length} {c.files.length === 1 ? "file" : "files"} · {total} scanned {total === 1 ? "element" : "elements"}
             </Text>
           </Box>
-          <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={() => select(undefined)} />
+          <ActionIconButton
+            label="Close"
+            icon={<IconClose />}
+            size="sm"
+            onClick={() => (useExplorer.getState().inspectedId ? useExplorer.getState().inspect(undefined) : select(undefined))}
+          />
         </Flex>
 
         <Flex mt="3" align="center" gap="1.5" bg="syntax.bg" rounded="l2" px="2.5" py="1.5" minW="0">
@@ -71,8 +76,13 @@ export function FolderDetails({ id }: { id: string }) {
           <ActionIconButton label="Copy path" icon={<IconCopy />} size="2xs" onClick={() => navigator.clipboard.writeText(path)} />
         </Flex>
 
-        <Flex mt="4" gap="2" align="center">
-          <Button size="sm" variant="solid" rounded="l2" disabled={!canAll} onClick={() => expandFolder(id, true)}>
+        <Flex mt="4" gap="2" align="center" wrap="wrap">
+          {!onDiagram && (
+            <Button size="sm" variant="solid" rounded="l2" onClick={() => addNodes([id], { select: id, focus: id })}>
+              <IconPlus size={15} /> Add to diagram
+            </Button>
+          )}
+          <Button size="sm" variant={onDiagram ? "solid" : "outline"} rounded="l2" disabled={!canAll} onClick={() => expandFolder(id, true)}>
             <IconChevronsDown size={15} /> Show everything inside
           </Button>
           <ActionIconButton label="Show the files inside" icon={<IconArrowDown />} size="sm" variant="outline" disabled={!canFiles} onClick={() => expandFolder(id, false)} />

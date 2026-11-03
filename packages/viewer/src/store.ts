@@ -79,6 +79,11 @@ interface ExplorerState {
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
   sidebarWidth: number;
+  /**
+   * An element shown in the details panel without being selected on the diagram (picked in the
+   * file tree, maybe not drawn at all). Any selection change clears it.
+   */
+  inspectedId?: string;
   /** The file tree on the left: open (else a thin strip), and its width. */
   treeOpen: boolean;
   treeWidth: number;
@@ -139,6 +144,7 @@ interface ExplorerState {
   setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
   setTreeOpen: (open: boolean) => void;
+  inspect: (id: string | undefined) => void;
   setTreeWidth: (width: number) => void;
   notify: (message: string | undefined) => void;
   setFolders: (on: boolean) => void;
@@ -438,6 +444,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       set({ sidebarWidth: width });
     },
 
+    inspect: (id) => set({ inspectedId: id }),
+
     setTreeOpen: (open) => {
       localStorage.setItem(KEYS.treeOpen, JSON.stringify(open));
       set({ treeOpen: open });
@@ -524,6 +532,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
     consumeFocus: () => set({ focusId: undefined, fitIds: undefined }),
   };
+});
+
+// Selecting on the diagram (or anything else changing the selection) ends a file-tree inspection.
+useExplorer.subscribe((s, prev) => {
+  if (s.inspectedId && (s.selectedId !== prev.selectedId || s.snapshot !== prev.snapshot)) useExplorer.setState({ inspectedId: undefined });
 });
 
 // ---- storing the current diagram (per project) -------------------------------------------
