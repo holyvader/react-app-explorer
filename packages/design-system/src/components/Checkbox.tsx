@@ -11,7 +11,7 @@ export interface CheckboxProps {
 
 export function Checkbox({ checked, onCheckedChange, children, size = "sm", disabled }: CheckboxProps) {
   return (
-    <ChakraCheckbox.Root checked={checked} onCheckedChange={(e) => onCheckedChange(e.checked === true)} size={size} disabled={disabled}>
+    <ChakraCheckbox.Root colorPalette="accent" checked={checked} onCheckedChange={(e) => onCheckedChange(e.checked === true)} size={size} disabled={disabled}>
       <ChakraCheckbox.HiddenInput />
       <ChakraCheckbox.Control />
       {children && <ChakraCheckbox.Label>{children}</ChakraCheckbox.Label>}

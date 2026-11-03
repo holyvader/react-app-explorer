@@ -18,7 +18,7 @@ export interface PlacedElement {
   height: number;
 }
 
-export const CARD_HEIGHT = 64;
+export const CARD_HEIGHT = 52;
 const MIN_WIDTH = 230;
 const MAX_WIDTH = 320;
 /** Room for the name beside icon, boundary chip and the action buttons. */
@@ -27,7 +27,7 @@ export const widthOf = (name: string) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH,
 export const frameWidthOf = (name: string) => widthOf(name) + 200;
 
 /** Room at the top of a frame for its header, and around what it holds. */
-export const PADDING = { top: 60, left: 16, bottom: 20, right: 16 } as const;
+export const PADDING = { top: 48, left: 14, bottom: 20, right: 14 } as const;
 /** Room between two cards side by side. */
 export const SPACING = 32;
 

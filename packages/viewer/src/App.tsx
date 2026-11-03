@@ -113,10 +113,10 @@ export function App() {
             {error}
           </Box>
         )}
-        {/* floating surfaces on the shell: file tree, canvas, details */}
-        <Flex flex="1" minH="0" gap="2" px="2" pb="2">
+        {/* docked side by side, flush: file tree, canvas, details */}
+        <Flex flex="1" minH="0">
           <FileTree />
-          <Box flex="1" position="relative" minW="0" bg="canvas.bg" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" overflow="hidden">
+          <Box flex="1" position="relative" minW="0" bg="canvas.bg" overflow="hidden">
             <ScanProgress />
             <Notice />
             {loading ? (
@@ -126,12 +126,12 @@ export function App() {
             ) : !snapshot ? (
               <Flex h="full" align="center" justify="center">
                 <EmptyState
-                  icon={<BrandMark size={64} />}
+                  icon={<BrandMark size={72} tile />}
                   title="Explore a React or Next.js app"
                   description="Scan a project folder to map its components, hooks, routes and how they connect. You can also run `bun run scan <path>` in a terminal, or load a snapshot file."
                 >
-                  <Button onClick={() => setScanOpen(true)}>
-                    <IconScan size={16} /> Scan a project
+                  <Button colorPalette="accent" size="sm" onClick={() => setScanOpen(true)}>
+                    <IconScan size={15} /> Scan a project
                   </Button>
                 </EmptyState>
               </Flex>
@@ -146,8 +146,8 @@ export function App() {
                         title="Empty diagram"
                         description={`${Object.keys(snapshot.nodes).length} scanned nodes. Add one to start exploring.`}
                       >
-                        <Button onClick={() => setSearchOpen(true)}>
-                          <IconPlus size={16} /> Start exploration
+                        <Button colorPalette="accent" size="sm" onClick={() => setSearchOpen(true)}>
+                          <IconPlus size={15} /> Start exploration
                         </Button>
                         <Text fontSize="xs" color="fg.muted">
                           or press Space · right-click the canvas to add an element there

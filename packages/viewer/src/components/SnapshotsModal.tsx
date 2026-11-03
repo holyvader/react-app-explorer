@@ -165,7 +165,7 @@ export function SnapshotsModal({ open, onOpenChange, list, current, onDeleted }:
                               {new Date(s.createdAt).toLocaleString()}
                             </Text>
                             {s.file === current && (
-                              <Badge size="xs" colorPalette="blue" variant="subtle">
+                              <Badge size="xs" colorPalette="accent" variant="subtle">
                                 Loaded
                               </Badge>
                             )}

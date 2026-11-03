@@ -26,7 +26,7 @@ export function Modal({ open, onOpenChange, title, children, footer, size = "lg"
       <Portal>
         <Dialog.Backdrop />
         <Dialog.Positioner>
-          <Dialog.Content>
+          <Dialog.Content rounded="panel" shadow="popover">
             {title && (
               <Dialog.Header>
                 <Dialog.Title>{title}</Dialog.Title>

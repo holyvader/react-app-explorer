@@ -2,31 +2,31 @@ import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
 import { KIND_META, duration, fileNote, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
-import { CardShape } from "./CardShape.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
 /**
- * A single element, its shape telling its kind: component (rounded rectangle), hook (hexagon),
- * function (solid pill), server action (arrow), file module (folded sheet), library (dashed pill).
- * Icon tile + name + quiet caption; actions float in on hover / selection.
+ * A single element: a flat card whose corners tell its kind (component rounded, hook pill, function
+ * a rounded lead-in, server action slanted corners, type square, library dashed pill), its icon and
+ * caption in the kind's colour. Actions show on hover / selection.
  * Plain HTML + canvas.css: it re-renders on every drag frame.
  */
-function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
+function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
   const { node, element } = data;
   // An added folder with nothing drawn inside yet: a dashed folder card.
   if (element.kind === "folder") {
     return (
       <div className="rae-card" data-kind="folder">
         <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
-        <CardShape kind="folder" width={width ?? 0} height={height ?? 0} />
         <div className="rae-card__body">
           <span className="rae-card__tile" aria-hidden>
-            <IconFolder size={16} strokeWidth={2.2} />
+            <IconFolder size={17} />
           </span>
           <div className="rae-card__text">
             <div className="rae-name">{element.name}</div>
-            <div className="rae-card__caption">Folder{data.scannedCount !== undefined ? ` · ${data.scannedCount} scanned elements` : ""}</div>
+            <div className="rae-card__caption">
+              folder<span className="rae-card__extra">{data.scannedCount !== undefined ? ` · ${data.scannedCount} scanned elements` : ""}</span>
+            </div>
           </div>
         </div>
         <div className="rae-card__actions">
@@ -39,27 +39,33 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   if (!node) return null;
   const meta = KIND_META[node.kind];
   const Icon = meta.icon;
-  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean).join(" · ");
+  // the kind in its colour, then quiet extras: "component · async", "function · cached 1h"
+  const what = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
+  const extras = [fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean);
+  const boundary = node.moduleType && element.parent === null && node.moduleType !== "server" ? node.moduleType : undefined;
   return (
     <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
-      <CardShape kind={node.kind} width={width ?? 0} height={height ?? 0} dashed={node.missing} />
       <div className="rae-card__body">
         <span className="rae-card__tile" aria-hidden>
-          <Icon size={16} strokeWidth={2.2} />
+          <Icon size={17} />
         </span>
         <div className="rae-card__text">
           <div className="rae-name">{element.name}</div>
-          <div className="rae-card__caption">{caption}</div>
+          <div className="rae-card__caption">
+            {what}
+            {extras.length > 0 && <span className="rae-card__extra"> · {extras.join(" · ")}</span>}
+            {boundary && (
+              <span className="rae-card__extra" data-boundary={boundary}>
+                {" "}
+                · {boundary}
+              </span>
+            )}
+          </div>
         </div>
         {node.route?.rendering && (
           <span className="rae-chip rae-card__boundary" data-render={renderingKey(node.route.rendering)} title={node.route.rendering.reasons.join("\n")}>
             {renderingLabel(node.route.rendering)}
-          </span>
-        )}
-        {node.moduleType && element.parent === null && (
-          <span className="rae-chip rae-card__boundary" data-boundary={node.moduleType}>
-            {node.moduleType}
           </span>
         )}
       </div>

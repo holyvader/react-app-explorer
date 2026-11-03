@@ -1,4 +1,4 @@
-import { IconChevronDown, IconChevronRight, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
+import { IconChevronDown, IconChevronRight, IconClose, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
 import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { buildTree, type TreeNode, visibleRows } from "../../graph/tree.ts";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
@@ -22,6 +22,8 @@ export interface ElementTreeProps {
   inactive?: (node: TreeNode) => string | null;
   inputRef: RefObject<HTMLInputElement | null>;
   placeholder?: string;
+  /** Without the filter box (the file tree shows it on demand). */
+  hideFilter?: boolean;
   /** Browse mode: whether a row's element is on the diagram (no + then; a click goes to it). */
   drawn?: (node: TreeNode) => boolean;
   /** Browse mode: the + next to a row's name. */
@@ -36,12 +38,14 @@ const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: 
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
  * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
-export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, drawn, onAdd, selectedId }: ElementTreeProps) {
+export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const excluded = useExplorer((s) => s.excluded);
   const hideAll = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const [query, setQuery] = useState("");
+  // the filter box hidden: its text no longer filters
+  if (hideFilter && query) setQuery("");
   const [open, setOpen] = useState<Set<string>>(new Set());
   const list = useRef<HTMLDivElement>(null);
 
@@ -114,7 +118,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
 
   return (
     <>
-      <div className="rae-tree-search">
+      <div className="rae-tree-search" hidden={hideFilter}>
         <input
           ref={inputRef}
           value={query}
@@ -136,6 +140,20 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
             }
           }}
         />
+        {query && (
+          <button
+            type="button"
+            className="rae-tree-search__clear"
+            aria-label="Clear the filter"
+            title="Clear the filter"
+            onClick={() => {
+              setQuery("");
+              inputRef.current?.focus();
+            }}
+          >
+            <IconClose size={13} />
+          </button>
+        )}
       </div>
       <div className="rae-tree" role="tree" aria-label={mode === "browse" ? "Files" : "Scanned elements"} ref={list}>
         {rows.length === 0 && <div className="rae-tree__empty">Nothing matches.</div>}
@@ -159,7 +177,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               data-drawn={mode === "browse" && drawn?.(n) ? "" : undefined}
               data-selected={mode === "browse" && !!selectedId && (n.id ?? n.key) === selectedId ? "" : undefined}
               tabIndex={i === 0 ? 0 : -1}
-              style={{ paddingLeft: 8 + r.depth * 16 }}
+              style={{ paddingLeft: mode === "browse" ? 10 + r.depth * 12 : 8 + r.depth * 16 }}
               onClick={() => activate(n)}
               onKeyDown={(e) => onRowKey(e, i)}
               title={n.path || n.name}
@@ -173,7 +191,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
                   toggleOpen(n.key);
                 }}
               >
-                {n.children.length ? r.open ? <IconChevronDown size={13} /> : <IconChevronRight size={13} /> : null}
+                {n.children.length ? r.open ? <IconChevronDown size={11} /> : <IconChevronRight size={11} /> : null}
               </span>
               {tick && (
                 <span className="rae-tree__tick" data-state={tick} aria-hidden>

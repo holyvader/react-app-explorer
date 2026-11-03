@@ -1,4 +1,4 @@
-import "@fontsource-variable/inter";
+import "@fontsource-variable/ibm-plex-sans";
 import "@fontsource-variable/jetbrains-mono";
 import { ChakraProvider } from "@chakra-ui/react";
 import type { ReactNode } from "react";

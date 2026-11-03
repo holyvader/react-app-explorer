@@ -3,6 +3,8 @@ import {
   ActionIconButton,
   BoundaryChip,
   Box,
+  CodeChip,
+  KindChip,
   Button,
   Code,
   CodeToken,
@@ -11,6 +13,7 @@ import {
   HStack,
   KindTile,
   Panel,
+  PanelBar,
   PanelHeader,
   PanelSection,
   Stack,
@@ -34,7 +37,7 @@ import {
 import { type ReactNode, useMemo, useState } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
-import { editorUrl, openInEditor } from "../lib/editor.ts";
+import { EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
@@ -58,6 +61,7 @@ export function DetailsPanel() {
   // what the file tree points at, else the diagram's selection
   const selectedId = useExplorer((s) => s.inspectedId ?? s.selectedId);
   const onDiagram = useExplorer((s) => !!selectedId && s.graph.elements.some((e) => e.id === selectedId));
+  const multiSelected = useExplorer((s) => !s.inspectedId && s.selection.length > 1);
   const enabled = useExplorer((s) => s.enabled);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
@@ -77,6 +81,8 @@ export function DetailsPanel() {
     };
   }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets]);
 
+  // Several selected on the diagram: no one element's details (a file-tree inspection still shows).
+  if (multiSelected) return null;
   // Folders aren't scanned nodes: they get their own details (what they contain).
   if (selectedId && isFolder(selectedId)) return <FolderDetails id={selectedId} onDiagram={onDiagram} />;
   if (!snapshot || !node || !index) return null;
@@ -90,7 +96,8 @@ export function DetailsPanel() {
       .reduce((m, h) => m.set(h.targetId!, (m.get(h.targetId!) ?? 0) + 1), new Map<string, number>()),
   ].map(([id, count]) => ({ id, count }));
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
-  const caption = node.route ? routeCaption(node.route) : [node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind[0]!.toUpperCase() + node.typeKind.slice(1) : meta.label, fileNote(node), node.nextRole ? `next ${node.nextRole}` : undefined, node.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const kindWord = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
+  const tags = [fileNote(node), node.isAsync ? "async" : undefined].filter((t): t is string => !!t);
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
@@ -103,40 +110,72 @@ export function DetailsPanel() {
           <DetailsStrip
             name={node.name}
             tile={
-              <KindTile kind={node.kind} size={28}>
-                <Icon size={14} strokeWidth={2.2} />
+              <KindTile kind={node.kind} size={20}>
+                <Icon size={17} />
               </KindTile>
             }
           />
         ),
       }}
     >
+      <PanelBar label="Details" sticky>
+        <ActionIconButton label="Minimize the details" icon={<IconDetailsClose />} size="2xs" color="fg.subtle" onClick={() => useExplorer.getState().setDetailsOpen(false)} />
+        <ActionIconButton label="Close" icon={<IconClose />} size="2xs" color="fg.subtle" onClick={closeDetails} />
+      </PanelBar>
       <PanelHeader>
-        <Flex gap="3" align="start">
-          <KindTile kind={node.kind} size={44}>
-            <Icon size={20} strokeWidth={2.2} />
+        <Flex gap="2.5" align="center" minW="0">
+          <KindTile kind={node.kind} size={20}>
+            <Icon size={20} />
           </KindTile>
-          <Box flex="1" minW="0">
-            <Text fontSize="lg" fontWeight="semibold" letterSpacing="-0.01em" lineHeight="1.25" truncate>
-              {node.name}
-            </Text>
-            <Text fontSize="xs" color="fg.muted" mt="0.5">
-              {caption}
-            </Text>
-          </Box>
-          <HStack gap="0.5">
-            <ActionIconButton label="Minimize the details" icon={<IconDetailsClose />} size="sm" onClick={() => useExplorer.getState().setDetailsOpen(false)} />
-            <ActionIconButton label="Close" icon={<IconClose />} size="sm" onClick={closeDetails} />
-          </HStack>
+          <Text textStyle="panelTitle" truncate title={node.name}>
+            {node.name}
+          </Text>
         </Flex>
 
-        <Flex mt="3" align="center" gap="1.5" bg="syntax.bg" rounded="l2" px="2.5" py="1.5" minW="0">
-          <Text fontFamily="mono" fontSize="xs" color="fg.muted" truncate flex="1" title={node.filePath}>
+        {/* what it is: kind, boundary, Next.js role, then plain tags */}
+        <Wrap gap="5px" mt="2.5" align="center">
+          <KindChip kind={node.kind}>{kindWord}</KindChip>
+          {node.moduleType && <BoundaryChip boundary={node.moduleType} />}
+          {node.nextRole && <KindChip kind="route">{node.nextRole}</KindChip>}
+          {tags.map((t) => (
+            <CodeChip key={t} fontFamily="body">
+              {t}
+            </CodeChip>
+          ))}
+          {node.directives?.map((d) => (
+            <TagChip key={d} color="kind.serverAction.solid" mono>
+              &apos;{d}&apos;
+            </TagChip>
+          ))}
+        </Wrap>
+
+        <Flex mt="2.5" align="center" gap="2" minW="0">
+          <Text fontFamily="mono" fontSize="11.5px" color="fg.muted" truncate flex="1" title={node.filePath}>
             {node.filePath}
-            {node.loc && node.kind !== "module" ? `:${node.loc.line}` : ""}
+            {node.loc && node.kind !== "module" && (
+              <Text as="span" color="fg.subtle">
+                :{node.loc.line}
+              </Text>
+            )}
           </Text>
           {node.absPath && (
-            <ActionIconButton label="Copy path" icon={<IconCopy />} size="2xs" onClick={() => navigator.clipboard.writeText(`${node.absPath}:${node.loc?.line ?? 1}`)} />
+            <ActionIconButton label="Copy path" icon={<IconCopy />} size="2xs" color="fg.subtle" onClick={() => navigator.clipboard.writeText(`${node.absPath}:${node.loc?.line ?? 1}`)} />
+          )}
+          {open && (
+            <Button
+              size="2xs"
+              h="24px"
+              px="2"
+              variant="outline"
+              borderColor="border.emphasized"
+              rounded="5px"
+              fontSize="11.5px"
+              fontWeight="normal"
+              flexShrink={0}
+              onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}
+            >
+              <IconOpen size={12} /> Open in {EDITORS.find((e) => e.value === editor)?.label ?? "editor"}
+            </Button>
           )}
         </Flex>
 
@@ -146,53 +185,38 @@ export function DetailsPanel() {
             that isn't built yet, or a broken path or alias.
           </Text>
         )}
-        {(node.moduleType || node.directives?.length || node.moduleId) && (
-          <Wrap gap="1.5" mt="3" align="center">
-            {node.moduleId && (
-              <>
-                <Text fontSize="xs" color="fg.muted">
-                  in
-                </Text>
-                <NodeChip id={node.moduleId} anchor={node.id} />
-              </>
-            )}
-            {node.moduleType && <BoundaryChip boundary={node.moduleType} rounded="full" px="2" />}
-            {node.directives?.map((d) => (
-              <TagChip key={d} color="kind.serverAction.solid" mono>
-                &apos;{d}&apos;
-              </TagChip>
-            ))}
+        {node.moduleId && (
+          <Wrap gap="1.5" mt="2.5" align="center">
+            <Text fontSize="11.5px" color="fg.subtle">
+              in
+            </Text>
+            <NodeChip id={node.moduleId} anchor={node.id} />
           </Wrap>
         )}
 
-        <Flex mt="4" gap="2" align="center" wrap="wrap">
+        <Flex mt="3" gap="1.5" align="center" wrap="wrap">
           {/* picked in the file tree and not drawn yet: adding it comes first */}
           {!onDiagram && (
-            <Button size="sm" variant="solid" rounded="l2" onClick={() => addNodes([node.id], { select: node.id, focus: node.id })}>
-              <IconPlus size={15} /> Add to diagram
+            <Button size="xs" colorPalette="accent" rounded="l2" onClick={() => addNodes([node.id], { select: node.id, focus: node.id })}>
+              <IconPlus size={14} /> Add to diagram
             </Button>
           )}
-          {open && (
-            <Button size="sm" variant={onDiagram ? "solid" : "outline"} rounded="l2" onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}>
-              <IconOpen size={15} /> Open in editor
-            </Button>
-          )}
-          {onDiagram && <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="sm" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />}
+          {onDiagram && <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="xs" variant="outline" onClick={() => addNodes([node.id], { focus: node.id })} />}
           {snapshot && routeOf(snapshot, node.id) && (
             <ActionIconButton
               label={`Show the route chain of ${snapshot.nodes[routeOf(snapshot, node.id)!]!.route!.url} (layouts down to the page)`}
               icon={<IconRouteChain />}
-              size="sm"
+              size="xs"
               variant="outline"
               onClick={() => useExplorer.getState().showRouteChain(node.id)}
             />
           )}
           <Box flex="1" />
-          <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
-            <ActionIconButton label="Show parents" icon={<IconArrowUp />} size="xs" onClick={() => expand(node.id, "parents", false)} />
-            <ActionIconButton label="Parents up to root" icon={<IconChevronsUp />} size="xs" onClick={() => expand(node.id, "parents", true)} />
-            <ActionIconButton label="Show children" icon={<IconArrowDown />} size="xs" onClick={() => expand(node.id, "children", false)} />
-            <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="xs" onClick={() => expand(node.id, "children", true)} />
+          <HStack gap="0" bg="bg.emphasized" rounded="l2" p="2px">
+            <ActionIconButton label="Show parents" icon={<IconArrowUp />} size="2xs" onClick={() => expand(node.id, "parents", false)} />
+            <ActionIconButton label="Parents up to root" icon={<IconChevronsUp />} size="2xs" onClick={() => expand(node.id, "parents", true)} />
+            <ActionIconButton label="Show children" icon={<IconArrowDown />} size="2xs" onClick={() => expand(node.id, "children", false)} />
+            <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="2xs" onClick={() => expand(node.id, "children", true)} />
           </HStack>
         </Flex>
       </PanelHeader>

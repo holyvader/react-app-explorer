@@ -42,7 +42,7 @@ export function ContextMenu({ at, onClose, entries, title }: ContextMenuProps) {
     >
       <Portal>
         <Menu.Positioner>
-          <Menu.Content minW="64" maxW="sm">
+          <Menu.Content minW="64" maxW="sm" rounded="l3" shadow="popover">
             {title && (
               <Box px="2" py="1.5" borderBottomWidth="1px" borderColor="border" mb="1">
                 {title}
@@ -92,7 +92,7 @@ function Entries({ entries }: { entries: MenuEntry[] }) {
                 </Menu.TriggerItem>
                 <Portal>
                   <Menu.Positioner>
-                    <Menu.Content minW="64" maxW="md" maxH="70vh" overflowY="auto">
+                    <Menu.Content minW="64" maxW="md" maxH="70vh" overflowY="auto" rounded="l3" shadow="popover">
                       <Entries entries={e.entries} />
                     </Menu.Content>
                   </Menu.Positioner>

@@ -66,7 +66,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button onClick={scan} disabled={!path.trim() || scanning} title={scanning ? "A scan is running — cancel it in the progress panel first" : undefined}>
+          <Button colorPalette="accent" onClick={scan} disabled={!path.trim() || scanning} title={scanning ? "A scan is running — cancel it in the progress panel first" : undefined}>
             {scanning ? <Spinner size="xs" /> : <IconScan size={16} />} {scanning ? "Scanning…" : "Scan"}
           </Button>
         </HStack>

@@ -1,32 +1,40 @@
-import { ActionIconButton, Box, BrandMark, Button, Flex, SegmentedToggles, Select, type SelectOption, Text, ToolGroup, Tooltip } from "@rae/design-system";
+import {
+  ActionIconButton,
+  Box,
+  BrandMark,
+  Button,
+  ContextMenu,
+  Flex,
+  type MenuEntry,
+  Popover,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  ToolGroup,
+  Tooltip,
+  setColorMode,
+  useColorMode,
+} from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
-import { IconAsset, IconClear, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
-import { type ReactNode, useEffect, useRef } from "react";
-import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
+import {
+  IconChevronDown,
+  IconClear,
+  IconHistory,
+  IconLayout,
+  IconLibrary,
+  IconPlus,
+  IconRedo,
+  IconScan,
+  IconSearch,
+  IconUndo,
+  IconUpload,
+  IconViewOptions,
+} from "@rae/design-system/icons";
+import { useRef, useState } from "react";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { useExplorer } from "../store.ts";
-
-/** Each relation filter's dot: the same colour as its edges on the canvas. */
-const GROUP_COLOR: Record<EdgeGroup, string> = {
-  imports: "relation.imports",
-  declares: "relation.declares",
-  renders: "relation.renders",
-  hooks: "relation.usesHook",
-  invokes: "relation.invokes",
-  types: "relation.usesType",
-  navigation: "relation.navigates",
-  cache: "relation.invalidates",
-};
-
-/** A view button's text: below 2080px only the icon shows (the tooltip says what it is), so the toolbar fits. */
-function Label({ children }: { children: string }) {
-  return (
-    <Text as="span" display="none" css={{ "@media (min-width: 2080px)": { display: "inline" } }}>
-      {children}
-    </Text>
-  );
-}
 
 export interface ToolbarProps {
   list?: SnapshotList;
@@ -38,172 +46,248 @@ export interface ToolbarProps {
   onLibraries: () => void;
 }
 
+const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
+/** "today 14:02", else "3 Nov 14:02": the snapshot's moment, short. */
+const when = (iso: string) => {
+  const d = new Date(iso);
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${isToday(d) ? "today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
+};
+
+/** The app bar: mark, project and snapshot, search (adds to the diagram), history, view options, Scan and Add. */
 export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onManageSnapshots, onLibraries }: ToolbarProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
-  const enabled = useExplorer((s) => s.enabled);
-  const editor = useExplorer((s) => s.editor);
-  const excluded = useExplorer((s) => s.excluded);
-  const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
-  const showAssets = useExplorer((s) => s.showAssets);
   const canUndo = useExplorer((s) => s.past.length > 0);
   const canRedo = useExplorer((s) => s.future.length > 0);
-  const { setSearchOpen, clear, toggleGroup, relayout, setEditor, setShowAssets, undo, redo } = useExplorer.getState();
+  const { setSearchOpen, relayout, undo, redo } = useExplorer.getState();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
-  // grouped by the scanned folder (newest first, as the list comes), each entry its date and size
-  const options: SelectOption[] = (list?.snapshots ?? []).map((s) => ({
-    value: s.file,
-    label: `${new Date(s.createdAt).toLocaleString()}${s.nodeCount ? ` · ${s.nodeCount} nodes` : ""}`,
-    group: s.rootDir ? `${projectName(s.rootDir)} — ${shortPath(s.rootDir)}` : "Other",
-  }));
-  if (current && !options.some((o) => o.value === current)) options.unshift({ value: current, label: current });
+  const snapshots = list?.snapshots ?? [];
+  const currentEntry = snapshots.find((s) => s.file === current);
+  // the snapshots grouped by the scanned folder (newest first, as the list comes)
+  const groups = new Map<string, typeof snapshots>();
+  for (const s of snapshots) {
+    const g = s.rootDir ? `${projectName(s.rootDir)} — ${shortPath(s.rootDir)}` : "Other";
+    groups.set(g, [...(groups.get(g) ?? []), s]);
+  }
+  const entries: MenuEntry[] = [
+    ...[...groups].flatMap(([group, items]): MenuEntry[] => [
+      { type: "label", label: group },
+      ...items.map(
+        (s): MenuEntry => ({
+          type: "item",
+          value: s.file,
+          label: when(s.createdAt),
+          hint: s.file === current ? "open" : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
+          onSelect: () => onPickSnapshot(s.file),
+        }),
+      ),
+    ]),
+    ...(snapshots.length ? [{ type: "separator" } as const] : []),
+    { type: "item", value: "scan", label: "Scan a project…", icon: <IconScan size={14} />, onSelect: onScan },
+    { type: "item", value: "manage", label: "Manage snapshots…", icon: <IconHistory size={14} />, onSelect: onManageSnapshots, disabled: !snapshots.length },
+    { type: "item", value: "load", label: "Load snapshot file…", icon: <IconUpload size={14} />, onSelect: () => fileRef.current?.click() },
+  ];
 
   return (
-    <Flex align="center" gap="2.5" px="3" h="14" flexShrink={0} minW="0">
-      {/* brand */}
-      <Flex align="center" gap="2.5" flexShrink={0} pl="1" pr="1">
-        <BrandMark size={30} />
-        <Box lineHeight="1.1" display="none" css={{ "@media (min-width: 1800px)": { display: "block" } }}>
-          <Text fontSize="sm" fontWeight="bold" letterSpacing="-0.02em">
-            App Explorer
+    <Flex align="center" gap="2.5" pl="3.5" pr="3" h="44px" flexShrink={0} minW="0" bg="panel.bg" borderBottomWidth="1px" borderColor="border">
+      <Flex align="center" gap="9px" flexShrink={0}>
+        <BrandMark size={22} />
+        <Text fontSize="13px" fontWeight="semibold">
+          Explorer
+        </Text>
+      </Flex>
+      <Divider />
+
+      {/* the project and its snapshot: a menu of the snapshots, scanning, loading a file */}
+      <Tooltip content={snapshot ? `Scanned folder: ${snapshot.rootDir}${list ? `\nSnapshots in ${list.dir}` : ""}` : list ? `Snapshots in ${list.dir}` : "Snapshots"}>
+        <Flex
+          as="button"
+          align="center"
+          gap="2"
+          h="30px"
+          px="9px"
+          rounded="l2"
+          fontSize="12.5px"
+          minW="0"
+          flexShrink={1}
+          cursor="pointer"
+          _hover={{ bg: "bg.muted" }}
+          aria-haspopup="menu"
+          aria-label={`Snapshots: ${snapshot ? projectName(snapshot.rootDir) : "none open"}${currentEntry ? `, ${when(currentEntry.createdAt)}` : ""}`}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenuAt({ x: r.left, y: r.bottom + 4 });
+          }}
+        >
+          <Text as="span" fontWeight="medium" truncate>
+            {snapshot ? projectName(snapshot.rootDir) : snapshots.length ? "Open a snapshot" : "No project"}
           </Text>
-          <Text fontSize="2xs" color="fg.subtle" fontWeight="medium">
-            React · Next.js
+          {currentEntry && (
+            <Text as="span" color="fg.subtle" fontFamily="mono" fontSize="11.5px" whiteSpace="nowrap">
+              · {when(currentEntry.createdAt)}
+            </Text>
+          )}
+          <Box color="fg.subtle" display="inline-flex" flexShrink={0}>
+            <IconChevronDown size={13} />
+          </Box>
+        </Flex>
+      </Tooltip>
+      <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onLoadFile(f);
+          e.target.value = "";
+        }}
+      />
+
+      {/* search: finds an element and adds it to the diagram (⌘K, Space on the canvas) */}
+      <Flex flex="1" justify="center" minW="0">
+        <Flex
+          as="button"
+          align="center"
+          gap="2.5"
+          w="440px"
+          maxW="full"
+          h="30px"
+          pl="11px"
+          pr="2"
+          bg="syntax.bg"
+          borderWidth="1px"
+          borderColor="card.border"
+          rounded="7px"
+          color="fg.subtle"
+          fontSize="12.5px"
+          cursor={snapshot ? "text" : "default"}
+          opacity={snapshot ? 1 : 0.5}
+          aria-disabled={!snapshot}
+          _hover={snapshot ? { borderColor: "border.emphasized" } : undefined}
+          onClick={() => snapshot && setSearchOpen(true)}
+          aria-label="Add an element (⌘K)"
+        >
+          <IconSearch size={14} />
+          <Text as="span" flex="1" textAlign="left" truncate>
+            Add an element…
           </Text>
-        </Box>
+          <Text as="span" fontFamily="mono" fontSize="10.5px" px="1.5" borderWidth="1px" borderColor="border.emphasized" rounded="l1" lineHeight="16px">
+            ⌘K
+          </Text>
+        </Flex>
       </Flex>
 
-      {/* workspace: the scanned project, its snapshot, scanning */}
-      <ToolGroup pl="3" gap="2" flexShrink={0}>
-        {snapshot ? (
-          <Tooltip content={`Scanned folder: ${snapshot.rootDir}`}>
-            <Box minW="0" maxW="140px" flexShrink={0} lineHeight="1.15" css={{ "@media (min-width: 1600px)": { maxWidth: "220px" } }}>
-              <Text fontSize="sm" fontWeight="semibold" truncate letterSpacing="-0.01em">
-                {projectName(snapshot.rootDir)}
-              </Text>
-              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate>
-                {shortPath(snapshot.rootDir)}
-              </Text>
-            </Box>
-          </Tooltip>
-        ) : (
-          <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
-            No project
-          </Text>
-        )}
-        <Box w="1px" h="6" bg="shell.border" flexShrink={0} />
-        <Tooltip content={list ? `Snapshots in ${list.dir}` : "Snapshots"}>
-          <Box flexShrink={0}>
-            <Select
-              value={current ?? ""}
-              onValueChange={onPickSnapshot}
-              options={options}
-              placeholder={options.length ? "Select snapshot" : "No snapshots found"}
-              width="168px"
-              size="xs"
-            />
-          </Box>
-        </Tooltip>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onLoadFile(f);
-            e.target.value = "";
-          }}
-        />
-        <Flex gap="0.5" flexShrink={0}>
-          <ActionIconButton label="Scan a project…" icon={<IconScan />} size="xs" onClick={onScan} />
-          <ActionIconButton label="Manage snapshots…" icon={<IconHistory />} size="xs" onClick={onManageSnapshots} disabled={!list?.snapshots.length} />
-          <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} size="xs" onClick={() => fileRef.current?.click()} />
-        </Flex>
-      </ToolGroup>
-      {snapshot && (
-        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap" display="none" css={{ "@media (min-width: 2400px)": { display: "block" } }}>
-          {snapshot.framework} · {snapshot.stats.files} files · {visible.length} shown
-        </Text>
-      )}
-
-      <Box flex="1" />
-
-      {/* relation filters, with their canvas colours */}
-      {/* the relation toggles shrink (scrolling sideways) rather than push the toolbar off-screen */}
-      <FadingRow>
-      <SegmentedToggles
-        label="Relations"
-        items={EDGE_GROUPS.map(({ group, label }) => ({ value: group, label, color: GROUP_COLOR[group], on: enabled[group] }))}
-        onToggle={(g) => toggleGroup(g as EdgeGroup)}
-      />
-      </FadingRow>
-
-      {/* view options */}
       <ToolGroup>
-        <Tooltip content={showAssets ? "Asset files (CSS, images, JSON) are shown" : "Show asset files (CSS, images, JSON)"}>
-          <Button size="xs" variant={showAssets ? "surface" : "ghost"} onClick={() => setShowAssets(!showAssets)} aria-pressed={showAssets} aria-label="Assets" rounded="l2">
-            <IconAsset size={14} /> <Label>Assets</Label>
-          </Button>
-        </Tooltip>
-        <Tooltip content={hideAllLibraries ? "All 3rd-party libraries hidden" : `${excluded.length} libraries hidden: ${excluded.join(", ") || "none"}`}>
-          <Button size="xs" variant="ghost" onClick={onLibraries} aria-label={hideAllLibraries ? "Libraries all" : excluded.length ? `Libraries ${excluded.length}` : "Libraries"} rounded="l2">
-            <IconLibrary size={14} /> <Label>Libraries</Label>
-            {(hideAllLibraries || excluded.length > 0) && (
-              <Text as="span" fontSize="2xs" fontWeight="semibold" bg="bg.panel" px="1.5" rounded="full" color="fg.muted">
-                {hideAllLibraries ? "all" : excluded.length}
-              </Text>
-            )}
-          </Button>
-        </Tooltip>
-        <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={EDITORS} width="118px" size="xs" />
+        <BarIcon label="Undo (⌘Z)" icon={<IconUndo />} onClick={undo} disabled={!canUndo} />
+        <BarIcon label="Redo (⇧⌘Z)" icon={<IconRedo />} onClick={redo} disabled={!canRedo} />
+        <BarIcon label="Re-layout everything" icon={<IconLayout />} onClick={relayout} disabled={!visible.length} />
+        <ViewOptions onLibraries={onLibraries} />
       </ToolGroup>
-
-      {/* history & canvas */}
-      <ToolGroup>
-        <ActionIconButton label="Undo (⌘Z)" icon={<IconUndo />} size="xs" onClick={undo} disabled={!canUndo} />
-        <ActionIconButton label="Redo (⇧⌘Z)" icon={<IconRedo />} size="xs" onClick={redo} disabled={!canRedo} />
-        <ActionIconButton label="Re-layout everything" icon={<IconLayout />} size="xs" onClick={relayout} disabled={!visible.length} />
-        <ActionIconButton label="Clear canvas" icon={<IconClear />} size="xs" onClick={clear} disabled={!visible.length} />
-      </ToolGroup>
-
-      <Button size="sm" rounded="l3" onClick={() => setSearchOpen(true)} disabled={!snapshot} px="4" shadow="0 1px 2px rgb(15 23 42 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.12)">
-        <IconPlus size={16} /> Add
+      <Divider />
+      <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize="12.5px" fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Scan a project…">
+        <IconScan size={14} /> Scan
+      </Button>
+      <Button size="xs" h="30px" px="11px" colorPalette="accent" fontSize="12.5px" fontWeight="semibold" gap="6px" rounded="l2" onClick={() => setSearchOpen(true)} disabled={!snapshot}>
+        <IconPlus size={14} /> Add
       </Button>
     </Flex>
   );
 }
 
-/** A row that scrolls sideways when it doesn't fit (the relation filters), fading out at its end while more is hidden there. */
-function FadingRow({ children }: { children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const mark = () => el.toggleAttribute("data-overflow", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-    mark();
-    el.addEventListener("scroll", mark, { passive: true });
-    const ro = new ResizeObserver(mark);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", mark);
-      ro.disconnect();
-    };
-  }, []);
+const Divider = () => <Box w="1px" h="18px" bg="card.border" flexShrink={0} />;
+
+function BarIcon(props: { label: string; icon: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
+  return <ActionIconButton size="xs" w="30px" h="30px" minW="30px" color="kind.module.fg" css={{ "& svg": { width: "15px", height: "15px" } }} {...props} />;
+}
+
+/** View options: colour mode, asset files, hidden libraries, the editor files open in, clearing the canvas. */
+function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
+  const [open, setOpen] = useState(false);
+  const mode = useColorMode();
+  const editor = useExplorer((s) => s.editor);
+  const excluded = useExplorer((s) => s.excluded);
+  const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
+  const showAssets = useExplorer((s) => s.showAssets);
+  const visible = useExplorer((s) => s.visible);
+  const { setEditor, setShowAssets, clear } = useExplorer.getState();
   return (
-    <Box
-      ref={ref}
-      minW="0"
-      flexShrink={1}
-      overflowX="auto"
-      css={{
-        scrollbarWidth: "none",
-        "&::-webkit-scrollbar": { display: "none" },
-        "&[data-overflow]": { maskImage: "linear-gradient(to right, black calc(100% - 40px), transparent)" },
-      }}
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      label="View options"
+      placement="bottom"
+      width="280px"
+      trigger={
+        <Box display="inline-flex">
+          <BarIcon label="View options" icon={<IconViewOptions />} />
+        </Box>
+      }
     >
+      <Stack gap="0" fontSize="12.5px">
+        <Text textStyle="panelLabel" color="fg.subtle" px="3.5" pt="3" pb="2">
+          View
+        </Text>
+        <Row label="Dark mode">
+          <Switch size="xs" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
+        </Row>
+        <Row label="Asset files" hint="CSS, images, JSON">
+          <Switch size="xs" label="Asset files" checked={showAssets} onCheckedChange={setShowAssets} />
+        </Row>
+        <Row label="Libraries" hint={hideAllLibraries ? "all hidden" : excluded.length ? `${excluded.length} hidden` : "all shown"}>
+          <Button
+            size="2xs"
+            variant="outline"
+            rounded="l2"
+            onClick={() => {
+              setOpen(false);
+              onLibraries();
+            }}
+          >
+            <IconLibrary size={12} /> Choose…
+          </Button>
+        </Row>
+        <Row label="Open files in">
+          <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={EDITORS} width="130px" size="xs" />
+        </Row>
+        <Box borderTopWidth="1px" borderColor="border.muted" mt="1" p="2">
+          <Button
+            size="xs"
+            variant="ghost"
+            w="full"
+            justifyContent="start"
+            rounded="l2"
+            color="fg.muted"
+            disabled={!visible.length}
+            onClick={() => {
+              clear();
+              setOpen(false);
+            }}
+          >
+            <IconClear size={14} /> Clear the canvas
+          </Button>
+        </Box>
+      </Stack>
+    </Popover>
+  );
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <Flex align="center" gap="3" px="3.5" minH="36px">
+      <Box flex="1" minW="0">
+        <Text>{label}</Text>
+        {hint && (
+          <Text fontSize="11px" color="fg.subtle">
+            {hint}
+          </Text>
+        )}
+      </Box>
       {children}
-    </Box>
+    </Flex>
   );
 }

@@ -1,6 +1,6 @@
-import { ActionIconButton, Box, Flex, Panel, Text } from "@rae/design-system";
-import { IconFolderTree, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
-import { useCallback, useMemo, useRef } from "react";
+import { ActionIconButton, Flex, Panel, PanelBar, Text } from "@rae/design-system";
+import { IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../graph/tree.ts";
 import { TREE_WIDTH, useExplorer } from "../store.ts";
 import { ElementTree } from "./picker/ElementTree.tsx";
@@ -18,6 +18,10 @@ export function FileTree() {
   const selectedId = useExplorer((s) => s.inspectedId ?? s.selectedId);
   const { setTreeOpen, setTreeWidth } = useExplorer.getState();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [filtering, setFiltering] = useState(false);
+  useEffect(() => {
+    if (filtering) inputRef.current?.focus();
+  }, [filtering]);
 
   const onDiagram = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
   const drawn = useCallback((n: TreeNode) => onDiagram.has(n.id ?? n.key), [onDiagram]);
@@ -50,11 +54,12 @@ export function FileTree() {
       collapse={{
         collapsed: !open,
         strip: (
-          <Flex direction="column" align="center" py="2" h="full" cursor="pointer" onClick={() => setTreeOpen(true)} _hover={{ bg: "bg.subtle" }} transition="background 160ms ease">
+          <Flex direction="column" align="center" py="1" h="full" cursor="pointer" onClick={() => setTreeOpen(true)} _hover={{ bg: "bg.subtle" }}>
             <ActionIconButton
               label="Show the file tree"
               icon={<IconPanelOpen />}
-              size="xs"
+              size="2xs"
+              color="fg.subtle"
               onClick={(e) => {
                 e.stopPropagation();
                 setTreeOpen(true);
@@ -67,17 +72,34 @@ export function FileTree() {
       flexDirection="column"
       overflowY="hidden"
     >
-      <Flex align="center" gap="2" pl="4" pr="2" h="11" flexShrink={0}>
-        <Box color="fg.muted" display="inline-flex">
-          <IconFolderTree size={14} />
-        </Box>
-        <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="0.06em" color="fg.muted" flex="1">
-          Files
-        </Text>
-        <ActionIconButton label="Hide the file tree" icon={<IconPanelClose />} size="2xs" variant="ghost" onClick={() => setTreeOpen(false)} />
+      <PanelBar label="Files">
+        <ActionIconButton
+          label={filtering ? "Stop filtering" : "Filter files"}
+          icon={<IconFilter />}
+          size="2xs"
+          color={filtering ? "fg" : "fg.subtle"}
+          bg={filtering ? "bg.muted" : undefined}
+          aria-pressed={filtering}
+          onClick={() => setFiltering(!filtering)}
+        />
+        <ActionIconButton label="Hide the file tree" icon={<IconPanelClose />} size="2xs" color="fg.subtle" onClick={() => setTreeOpen(false)} />
+      </PanelBar>
+      <Flex
+        direction="column"
+        flex="1"
+        minH="0"
+        className="rae-filetree"
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && filtering) setFiltering(false);
+        }}
+      >
+        <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
       </Flex>
-      <Flex direction="column" flex="1" minH="0" className="rae-filetree">
-        <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" />
+      {/* what was scanned, quietly */}
+      <Flex align="center" h="28px" px="3" flexShrink={0} borderTopWidth="1px" borderColor="border.muted">
+        <Text fontFamily="mono" fontSize="10.5px" color="fg.subtle" truncate>
+          {snapshot.stats.files} files · {Object.keys(snapshot.nodes).length} el · types {snapshot.stats.types ? "✓" : "–"} · {Math.round(snapshot.stats.durationMs)}ms
+        </Text>
       </Flex>
     </Panel>
   );

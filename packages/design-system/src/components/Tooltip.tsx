@@ -15,11 +15,11 @@ export interface TooltipProps {
 export function Tooltip({ content, children, disabled, placement = "top" }: TooltipProps) {
   if (disabled || !content) return children;
   return (
-    <ChakraTooltip.Root openDelay={300} closeDelay={50} positioning={{ placement }} lazyMount unmountOnExit>
+    <ChakraTooltip.Root openDelay={600} closeDelay={50} positioning={{ placement }} lazyMount unmountOnExit>
       <ChakraTooltip.Trigger asChild>{children}</ChakraTooltip.Trigger>
       <Portal>
         <ChakraTooltip.Positioner>
-          <ChakraTooltip.Content maxW="md" fontSize="xs">
+          <ChakraTooltip.Content maxW="md" fontSize="11.5px" bg="bg.emphasized" color="fg" rounded="l2" shadow="popover">
             {content}
           </ChakraTooltip.Content>
         </ChakraTooltip.Positioner>

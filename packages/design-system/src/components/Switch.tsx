@@ -7,12 +7,14 @@ export interface SwitchProps {
   children?: ReactNode;
   size?: "xs" | "sm" | "md";
   disabled?: boolean;
+  /** Accessible name when there's no visible label (`children`). */
+  label?: string;
 }
 
-export function Switch({ checked, onCheckedChange, children, size = "sm", disabled }: SwitchProps) {
+export function Switch({ checked, onCheckedChange, children, size = "sm", disabled, label }: SwitchProps) {
   return (
-    <ChakraSwitch.Root checked={checked} onCheckedChange={(e) => onCheckedChange(e.checked)} size={size} disabled={disabled}>
-      <ChakraSwitch.HiddenInput />
+    <ChakraSwitch.Root checked={checked} onCheckedChange={(e) => onCheckedChange(e.checked)} size={size} disabled={disabled} colorPalette="accent">
+      <ChakraSwitch.HiddenInput aria-label={label} />
       <ChakraSwitch.Control />
       {children && <ChakraSwitch.Label>{children}</ChakraSwitch.Label>}
     </ChakraSwitch.Root>

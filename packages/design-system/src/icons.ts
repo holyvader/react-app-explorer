@@ -23,7 +23,6 @@ export {
   X as IconClose,
   EyeOff as IconHide,
   X as IconRemove,
-  Trash2 as IconRemoveWithContents,
   PackageOpen as IconUnwrap,
   ExternalLink as IconOpen,
   Copy as IconCopy,
@@ -52,5 +51,10 @@ export {
   DatabaseZap as IconCache,
   FileImage as IconAsset,
   TriangleAlert as IconWarning,
+  SlidersHorizontal as IconViewOptions,
+  ListFilter as IconFilter,
+  Ellipsis as IconMore,
+  Sun as IconLight,
+  Moon as IconDark,
 } from "lucide-react";
 export type { LucideIcon as Icon } from "lucide-react";

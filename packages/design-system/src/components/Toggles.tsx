@@ -1,19 +1,29 @@
-import { chakra, Flex, type FlexProps } from "@chakra-ui/react";
+import { chakra, Flex, Text, type FlexProps } from "@chakra-ui/react";
 import type { ReactNode } from "react";
 import { tokenVar } from "../tokens.ts";
 
 export interface ToggleItem {
   value: string;
   label: ReactNode;
-  /** Colour token for the leading dot. */
+  /** Colour token for the leading swatch. */
   color?: string;
+  /** The swatch's shape (the second cue after colour): square (default), circle or diamond. */
+  shape?: "square" | "circle" | "diamond";
   on: boolean;
 }
 
-/** A segmented row of on/off toggles (e.g. relation filters), each with an optional colour dot. */
-export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem[]; onToggle: (value: string) => void; label: string }) {
+/**
+ * A row of on/off toggles (e.g. the relation filters on the canvas), each with a colour swatch:
+ * on, a filled swatch on a raised chip; off, a hollow square in quiet text.
+ */
+export function SegmentedToggles({ items, onToggle, label, title }: { items: ToggleItem[]; onToggle: (value: string) => void; label: string; title?: ReactNode }) {
   return (
-    <Flex role="group" aria-label={label} bg="bg.panel" borderWidth="1px" borderColor="shell.border" shadow="control" rounded="l3" p="0.5" gap="0.5">
+    <Flex role="group" aria-label={label} align="center" bg="bg.subtle" borderWidth="1px" borderColor="card.border" rounded="l3" p="1" gap="0.5" fontSize="12px">
+      {title && (
+        <Text as="span" pl="1.5" pr="2" color="fg.subtle" fontWeight="medium" whiteSpace="nowrap">
+          {title}
+        </Text>
+      )}
       {items.map((it) => (
         <chakra.button
           key={it.value}
@@ -23,27 +33,17 @@ export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem
           display="inline-flex"
           alignItems="center"
           gap="1.5"
-          h="7"
-          px="2.5"
-          rounded="l2"
-          fontSize="xs"
-          fontWeight="medium"
+          h="6"
+          px="2"
+          rounded="5px"
+          whiteSpace="nowrap"
           cursor="pointer"
           color={it.on ? "fg" : "fg.subtle"}
-          bg={it.on ? "bg.muted" : "transparent"}
-          transition="background 200ms ease, color 200ms ease"
-          _hover={{ color: "fg" }}
+          bg={it.on ? "border" : "transparent"}
+          _hover={{ color: "fg", bg: it.on ? "border.emphasized" : "bg.muted" }}
+          _focusVisible={{ outline: "1.5px solid var(--chakra-colors-selection-solid)", outlineOffset: "0" }}
         >
-          {it.color && (
-            <chakra.span
-              w="2"
-              h="2"
-              rounded="full"
-              transition="opacity 200ms ease"
-              opacity={it.on ? 1 : 0.35}
-              style={{ background: tokenVar(it.color) }}
-            />
-          )}
+          {it.color && <Swatch color={it.color} shape={it.shape} on={it.on} />}
           {it.label}
         </chakra.button>
       ))}
@@ -51,10 +51,24 @@ export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem
   );
 }
 
-/** A soft container grouping related toolbar controls. */
+function Swatch({ color, shape = "square", on }: { color: string; shape?: ToggleItem["shape"]; on: boolean }) {
+  if (!on) return <chakra.span w="2" h="2" rounded="2px" borderWidth="1.5px" borderColor="syntax.punct" flexShrink={0} />;
+  return (
+    <chakra.span
+      w="2"
+      h="2"
+      flexShrink={0}
+      rounded={shape === "circle" ? "full" : "2px"}
+      transform={shape === "diamond" ? "rotate(45deg) scale(0.85)" : undefined}
+      style={{ background: tokenVar(color) }}
+    />
+  );
+}
+
+/** Groups related toolbar controls (icon buttons side by side). */
 export function ToolGroup({ children, ...rest }: FlexProps) {
   return (
-    <Flex align="center" gap="0.5" bg="bg.panel" borderWidth="1px" borderColor="shell.border" shadow="control" rounded="l3" p="0.5" {...rest}>
+    <Flex align="center" gap="0.5" {...rest}>
       {children}
     </Flex>
   );

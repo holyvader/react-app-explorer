@@ -11,10 +11,10 @@ export interface Shortcut {
 export function ShortcutLegend({ shortcuts, title = "Keyboard shortcuts" }: { shortcuts: Shortcut[]; title?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <Box bg="bg.panel" borderWidth="1px" borderColor="border" rounded="md" shadow="sm" fontSize="xs" maxW="sm">
+    <Box bg="bg.subtle" borderWidth="1px" borderColor="card.border" rounded="l3" fontSize="xs" maxW="sm">
       <Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)} lazyMount unmountOnExit>
         <Collapsible.Trigger asChild>
-          <Flex as="button" align="center" gap="1.5" px="2.5" py="1.5" w="full" cursor="pointer" color="fg.muted">
+          <Flex as="button" align="center" gap="1.5" px="2.5" h="32px" w="full" cursor="pointer" color="fg.muted" _hover={{ color: "fg" }}>
             <Keyboard size={14} />
             <Text flex="1" textAlign="left">
               {title}

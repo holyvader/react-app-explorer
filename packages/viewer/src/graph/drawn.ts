@@ -78,6 +78,14 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
       }
     }
   }
+  else {
+    // Routes nest like files hold declarations: only what's drawn. A drawn route sits in its nearest
+    // drawn parent route; a drawn route file (or a declaration whose file isn't drawn) in its route.
+    for (const r of drawnRouteNesting(snapshot, shown)) {
+      parentOf.set(r.id, r.parent);
+      inRoute.add(r.id);
+    }
+  }
   if (opts.folders) {
     const { frames, nearest } = foldersFor(snapshot, new Set([...shown].filter((id) => !inRoute.has(id) && nodes[id]!.kind !== "route")), explicitFolders);
     for (const f of frames) {
@@ -173,6 +181,26 @@ function routesFor(snapshot: Snapshot, shown: Set<string>): { id: string; parent
     return up;
   };
   return [...all].filter((id) => !collapsed(id)).map((id) => ({ id, parent: drawnParent(id), holds: holds.get(id) ?? [] }));
+}
+
+/** Where drawn routes and route files sit when routes nest only among what's drawn (no frames added). */
+function drawnRouteNesting(snapshot: Snapshot, shown: Set<string>): { id: string; parent: string }[] {
+  const nodes = snapshot.nodes;
+  const out: { id: string; parent: string }[] = [];
+  for (const id of shown) {
+    const n = nodes[id]!;
+    if (n.kind === "route") {
+      let up = n.route?.parent;
+      while (up && !shown.has(up)) up = nodes[up]?.route?.parent;
+      if (up) out.push({ id, parent: up });
+      continue;
+    }
+    // a route's file; or a declaration in one whose file isn't drawn
+    const file = n.kind === "module" ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
+    const route = file ? routeOfFile(snapshot, file) : undefined;
+    if (route && shown.has(route)) out.push({ id, parent: route });
+  }
+  return out;
 }
 
 /** The route an element belongs to: itself (a route), the route of its file, or of its declaration's file. */

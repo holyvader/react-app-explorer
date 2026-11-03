@@ -108,7 +108,7 @@ export function ExplorationPicker() {
         <Button size="xs" variant="outline" disabled={!visible.length} onClick={() => clear()}>
           Clear
         </Button>
-        <Button size="xs" onClick={() => setSearchOpen(false)}>
+        <Button size="xs" colorPalette="accent" onClick={() => setSearchOpen(false)}>
           Done
         </Button>
       </div>

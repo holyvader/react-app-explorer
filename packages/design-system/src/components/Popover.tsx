@@ -35,7 +35,7 @@ export function Popover({ open, onOpenChange, trigger, at, placement = "bottom",
       {trigger && <ChakraPopover.Trigger asChild>{trigger}</ChakraPopover.Trigger>}
       <Portal>
         <ChakraPopover.Positioner>
-          <ChakraPopover.Content aria-label={label} width={width} maxW="calc(100vw - 32px)" height={height} rounded="xl" overflow="hidden" display="flex" flexDirection="column">
+          <ChakraPopover.Content aria-label={label} width={width} maxW="calc(100vw - 32px)" height={height} rounded="l3" shadow="popover" overflow="hidden" display="flex" flexDirection="column">
             {children}
           </ChakraPopover.Content>
         </ChakraPopover.Positioner>

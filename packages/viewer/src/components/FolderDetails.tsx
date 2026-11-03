@@ -14,7 +14,7 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconLayout, IconPlus, IconRemoveWithContents } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconLayout, IconPlus, IconRemove } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
@@ -57,8 +57,8 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
           <DetailsStrip
             name={name}
             tile={
-              <KindTile kind="module" size={28} style={{ background: "var(--chakra-colors-bg-muted)", boxShadow: "inset 0 0 0 1px var(--chakra-colors-border)" }} color="fg.muted">
-                <IconFolder size={14} strokeWidth={2.2} />
+              <KindTile kind="module" size={20} color="fg.subtle">
+                <IconFolder size={17} />
               </KindTile>
             }
           />
@@ -67,8 +67,8 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
     >
       <PanelHeader>
         <Flex gap="3" align="start">
-          <KindTile kind="module" size={44} style={{ background: "var(--chakra-colors-bg-muted)", boxShadow: "inset 0 0 0 1px var(--chakra-colors-border)" }} color="fg.muted">
-            <IconFolder size={20} strokeWidth={2.2} />
+          <KindTile kind="module" size={20} color="fg.subtle">
+            <IconFolder size={20} />
           </KindTile>
           <Box flex="1" minW="0">
             <Text fontSize="lg" fontWeight="semibold" letterSpacing="-0.01em" lineHeight="1.25" truncate>
@@ -110,7 +110,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
           <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
             <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="xs" onClick={() => addNodes([], { focus: id })} />
             <ActionIconButton label="Tidy up inside" icon={<IconLayout />} size="xs" onClick={() => void arrange(id)} />
-            <ActionIconButton label="Remove with everything inside" icon={<IconRemoveWithContents />} size="xs" onClick={() => hideNode(id)} />
+            <ActionIconButton label="Remove with everything inside" icon={<IconRemove />} size="xs" onClick={() => hideNode(id)} />
           </HStack>
         </Flex>
       </PanelHeader>

@@ -10,7 +10,6 @@ import {
   IconFolder,
   IconRouteChain,
   IconRemove,
-  IconRemoveWithContents,
   IconLayout,
   IconOpen,
   IconRelations,
@@ -125,7 +124,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       ...subfolderMenu(id, path, drawnNow),
       { type: "separator" },
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
-      { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemoveWithContents size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
+      { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemove size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
     ];
   }
   if (!node) return [];
@@ -216,7 +215,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   if (multi) {
     entries.push({ type: "item", value: "hide-selected", label: `Remove ${st.selection.length} selected`, icon: <IconRemove size={I} />, hint: "⌫", onSelect: () => hideNodes(st.selection) });
   }
-  entries.push({ type: "item", value: "hide", label: holds ? "Remove with everything inside" : "Remove from the diagram", icon: holds ? <IconRemoveWithContents size={I} /> : <IconRemove size={I} />, hint: multi ? undefined : "⌫", onSelect: () => hideNode(id) });
+  entries.push({ type: "item", value: "hide", label: holds ? "Remove with everything inside" : "Remove from the diagram", icon: <IconRemove size={I} />, hint: multi ? undefined : "⌫", onSelect: () => hideNode(id) });
   return entries;
 }
 

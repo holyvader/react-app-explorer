@@ -24,20 +24,22 @@ export interface PanelCollapse {
 }
 
 /** A collapsed panel's width. */
-export const PANEL_STRIP = 44;
+export const PANEL_STRIP = 40;
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+const SIDE_BORDER = (side: "left" | "right") => (side === "left" ? { borderRightWidth: "1px" } : { borderLeftWidth: "1px" });
 
 /**
- * Side panel container (e.g. details sidebar), a floating surface on the app shell. With
- * `resize`, its inner edge is a drag handle (plain pointer events: no re-render storm, the width is
- * reported as it changes). With `collapse`, it folds to a thin strip and back, smoothly: the width
- * animates while the content (kept at its full width, so nothing reflows) fades out.
+ * Side panel (file tree, details), docked flush against the canvas: the panel background with a
+ * hairline on its inner edge. With `resize`, that edge is a drag handle (plain pointer events: no
+ * re-render storm, the width is reported as it changes). With `collapse`, it folds to a thin strip
+ * and back: the width animates (200ms) while the content, kept at its full width so nothing
+ * reflows, fades out.
  */
 export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resize?: PanelResize; collapse?: PanelCollapse }) {
   const [dragging, setDragging] = useState(false);
   if (!resize) {
     return (
-      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflowY="auto" {...rest}>
+      <Box bg="panel.bg" borderColor="border" {...SIDE_BORDER("right")} h="full" overflowY="auto" {...rest}>
         {children}
       </Box>
     );
@@ -52,7 +54,7 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
       position="relative"
       h="full"
       flexShrink={0}
-      style={{ width: collapsed ? PANEL_STRIP : width, transition: dragging ? "none" : `width 320ms ${EASE}` }}
+      style={{ width: collapsed ? PANEL_STRIP : width, transition: dragging ? "none" : `width 200ms ${EASE}` }}
       data-collapsed={collapsed || undefined}
     >
       {!collapsed && (
@@ -63,14 +65,17 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
           aria-valuenow={width}
           tabIndex={0}
           position="absolute"
-          {...(side === "right" ? { left: "-7px" } : { right: "-7px" })}
+          {...(side === "right" ? { left: "-3px" } : { right: "-3px" })}
           top="0"
           bottom="0"
           w="6px"
-          rounded="full"
           zIndex="2"
           cursor="col-resize"
-          css={{ "&:hover, &[data-dragging]": { background: "color-mix(in srgb, var(--chakra-colors-component-500) 45%, transparent)" }, transition: "background 0.15s" }}
+          css={{
+            "&::after": { content: '""', position: "absolute", top: 0, bottom: 0, left: "2px", width: "2px", background: "transparent", transition: "background 140ms ease" },
+            "&:hover::after, &[data-dragging]::after, &:focus-visible::after": { background: "var(--chakra-colors-selection-solid)" },
+            outline: "none",
+          }}
           onPointerDown={(e) => {
             e.preventDefault();
             const el = e.currentTarget;
@@ -98,13 +103,13 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
           }}
         />
       )}
-      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflow="hidden" position="relative">
+      <Box bg="panel.bg" borderColor="border" {...SIDE_BORDER(side)} h="full" overflow="hidden" position="relative">
         {/* the content keeps its full width while the panel folds, so nothing reflows mid-animation */}
         <Box
           h="full"
           overflowY="auto"
           {...rest}
-          style={{ width, opacity: collapsed ? 0 : 1, transition: `opacity ${collapsed ? 140 : 260}ms ease ${collapsed ? "0ms" : "90ms"}` }}
+          style={{ width, opacity: collapsed ? 0 : 1, transition: `opacity ${collapsed ? 120 : 200}ms ease ${collapsed ? "0ms" : "80ms"}` }}
           pointerEvents={collapsed ? "none" : undefined}
           aria-hidden={collapsed || undefined}
           inert={collapsed || undefined}
@@ -115,7 +120,7 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
           <Box
             position="absolute"
             inset="0"
-            style={{ opacity: collapsed ? 1 : 0, transition: `opacity ${collapsed ? 260 : 120}ms ease ${collapsed ? "120ms" : "0ms"}` }}
+            style={{ opacity: collapsed ? 1 : 0, transition: `opacity ${collapsed ? 200 : 100}ms ease ${collapsed ? "100ms" : "0ms"}` }}
             pointerEvents={collapsed ? undefined : "none"}
             aria-hidden={!collapsed || undefined}
             inert={!collapsed || undefined}
@@ -128,21 +133,33 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
   );
 }
 
-/** Sticky panel header: free-form content (tile, title, actions…). */
-export function PanelHeader({ children }: { children: ReactNode }) {
+/** A panel's 34px top bar: its uppercase label (FILES, DETAILS) and actions on the right. */
+export function PanelBar({ label, children, sticky }: { label: ReactNode; children?: ReactNode; sticky?: boolean }) {
   return (
-    <Box
-      px="5"
-      pt="5"
-      pb="4"
-      position="sticky"
-      top="0"
-      zIndex="1"
-      bg="bg.panel"
+    <Flex
+      align="center"
+      gap="1"
+      h="34px"
+      pl="3.5"
+      pr="1.5"
+      flexShrink={0}
       borderBottomWidth="1px"
       borderColor="border.muted"
-      style={{ backdropFilter: "saturate(1.4) blur(8px)", background: "color-mix(in srgb, var(--chakra-colors-bg-panel) 88%, transparent)" }}
+      bg="panel.bg"
+      {...(sticky ? { position: "sticky", top: "0", zIndex: "2" } : {})}
     >
+      <Text textStyle="panelLabel" color="fg.subtle" flex="1" truncate>
+        {label}
+      </Text>
+      {children}
+    </Flex>
+  );
+}
+
+/** The panel's title block (icon, name, chips, path…): free-form content under the bar. */
+export function PanelHeader({ children }: { children: ReactNode }) {
+  return (
+    <Box px="4" pt="4" pb="3.5" bg="panel.bg" borderBottomWidth="1px" borderColor="border.muted">
       {children}
     </Box>
   );
@@ -157,7 +174,7 @@ export interface PanelSectionProps {
   children: ReactNode;
 }
 
-/** Collapsible section inside a Panel: title, count pill, chevron. */
+/** Collapsible section inside a Panel: chevron, title, then an aside or a count on the right. */
 export function PanelSection({ title, count, defaultOpen = true, aside, children }: PanelSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -165,34 +182,24 @@ export function PanelSection({ title, count, defaultOpen = true, aside, children
     <Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)} lazyMount unmountOnExit>
       <Box borderBottomWidth="1px" borderColor="border.muted">
         <Collapsible.Trigger asChild>
-          <Flex
-            as="button"
-            w="full"
-            px="5"
-            py="3"
-            align="center"
-            gap="2"
-            cursor="pointer"
-            transition="background 150ms ease"
-            _hover={{ bg: "bg.subtle" }}
-          >
-            <Text fontSize="sm" fontWeight="semibold" color="fg">
+          <Flex as="button" w="full" h="32px" px="3.5" align="center" gap="1.5" cursor="pointer" _hover={{ bg: "bg.subtle" }}>
+            <Box color="fg.subtle" display="inline-flex" transform={open ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 140ms ease">
+              <ChevronDown size={12} />
+            </Box>
+            <Text textStyle="sectionLabel" color="kind.module.fg">
               {title}
             </Text>
+            <Box flex="1" />
+            {aside}
             {count !== undefined && (
-              <Text as="span" fontSize="2xs" fontWeight="semibold" color="fg.muted" bg="bg.muted" px="1.5" rounded="full" lineHeight="18px">
+              <Text as="span" fontFamily="mono" fontSize="10.5px" color="fg.subtle">
                 {count}
               </Text>
             )}
-            <Box flex="1" />
-            {aside}
-            <Box color="fg.subtle" transition="transform 200ms ease" transform={open ? "rotate(0deg)" : "rotate(-90deg)"}>
-              <ChevronDown size={16} />
-            </Box>
           </Flex>
         </Collapsible.Trigger>
         <Collapsible.Content>
-          <Box px="5" pb="4">
+          <Box px="3.5" pb="3">
             {children}
           </Box>
         </Collapsible.Content>

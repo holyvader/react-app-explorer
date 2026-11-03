@@ -15,7 +15,7 @@ export function ConfirmExpansion() {
           <Button variant="outline" onClick={cancelPending}>
             Cancel
           </Button>
-          <Button onClick={confirmPending}>Add {pending?.ids.length} nodes</Button>
+          <Button colorPalette="accent" onClick={confirmPending}>Add {pending?.ids.length} nodes</Button>
         </HStack>
       }
     >

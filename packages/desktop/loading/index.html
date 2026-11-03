@@ -5,10 +5,10 @@
     <title>React App Explorer</title>
     <style>
       html, body { height: 100%; margin: 0; }
-      body { display: grid; place-items: center; background: #eceff3; color: #6b7280; font: 13px/1.5 Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+      body { display: grid; place-items: center; background: #EFEEEA; color: #6B6964; font: 13px/1.5 'IBM Plex Sans', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
       .mark { width: 64px; height: 64px; display: block; margin: 0 auto 18px; filter: drop-shadow(0 10px 22px rgb(11 20 38 / 0.28)); }
-      .name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: #111827; margin-bottom: 14px; }
-      @media (prefers-color-scheme: dark) { body { background: #0a0d12; color: #9ca3af; } .name { color: #f3f4f6; } code, pre { background: #1f2937 !important; color: #e5e7eb; } }
+      .name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: #1F1E1C; margin-bottom: 14px; }
+      @media (prefers-color-scheme: dark) { body { background: #141518; color: #9A9DA4; } .name { color: #E6E7EA; } code, pre { background: #1E2025 !important; color: #E6E7EA; } }
       .box { max-width: 560px; padding: 24px; text-align: center; }
       .spin { width: 18px; height: 18px; margin: 0 auto 10px; border: 2px solid #429cb544; border-top-color: #429cb5; border-radius: 50%; animation: s 0.8s linear infinite; }
       @keyframes s { to { transform: rotate(360deg); } }
@@ -22,51 +22,7 @@
   </head>
   <body>
     <div class="box">
-      <svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="100 100 824 824">
-  <defs>
-    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#1D4E63"/>
-      <stop offset="0.55" stop-color="#14304A"/>
-      <stop offset="1" stop-color="#0B1426"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.5">
-      <stop offset="0" stop-color="#7DD3E8" stop-opacity="0.45"/>
-      <stop offset="1" stop-color="#7DD3E8" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
-      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="core" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#D6EEF4"/>
-    </linearGradient>
-    <linearGradient id="teal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#82C8DA"/><stop offset="1" stop-color="#429CB5"/></linearGradient>
-    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C4B5FD"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>
-    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FDBA74"/><stop offset="1" stop-color="#F97316"/></linearGradient>
-  </defs>
-  
-  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
-  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#glow)"/>
-  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#sheen)"/>
-  <rect x="101.5" y="101.5" width="821" height="821" rx="184.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="3"/>
-  
-  <circle cx="512" cy="500" r="196" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="10" stroke-dasharray="2 30" stroke-linecap="round"/>
-  
-  <g stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="22" stroke-linecap="round">
-    <line x1="512" y1="500" x2="318" y2="322"/>
-    <line x1="512" y1="500" x2="716" y2="330"/>
-    <line x1="512" y1="500" x2="600" y2="732"/>
-  </g>
-  
-  <rect x="244" y="248" width="148" height="148" rx="40" fill="url(#teal)"/>
-  <rect x="648" y="262" width="136" height="136" rx="68" fill="url(#violet)"/>
-  <rect x="536" y="668" width="128" height="128" rx="34" fill="url(#amber)" transform="rotate(12 600 732)"/>
-  
-  <circle cx="512" cy="500" r="104" fill="url(#core)"/>
-  <circle cx="512" cy="500" r="52" fill="#14304A"/>
-  <circle cx="512" cy="500" r="22" fill="#7DD3E8"/>
-</svg>
+      <svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 140"><rect x="0.5" y="0.5" width="139" height="139" rx="32" fill="#1E2025" stroke="#33353B"/><g transform="translate(30 30) scale(0.8333)"><g fill="none" stroke="#E6E7EA" stroke-width="3.1667" stroke-linecap="round" stroke-linejoin="round"><path d="M31.75 57.5 22.25 48 31.75 38.5"/><path d="M64.25 57.5 73.75 48 64.25 38.5"/><circle cx="48" cy="48" r="8" fill="#E6E7EA" stroke="none"/></g></g></svg>
       <div class="name">React App Explorer</div>
       <div class="spin"></div>
       <span id="msg">Starting…</span>

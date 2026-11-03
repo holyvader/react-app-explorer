@@ -1,12 +1,13 @@
 export * from "./primitives.ts";
 export { DesignSystemProvider } from "./provider.tsx";
+export { applyStoredColorMode, getColorMode, setColorMode, useColorMode, type ColorMode } from "./colorMode.ts";
 export { system, type BoundaryToken, type NodeKindToken } from "./theme.ts";
 export { ActionIconButton, type ActionIconButtonProps } from "./components/ActionIconButton.tsx";
 export { BoundaryChip, CodeChip, KindChip } from "./components/Chip.tsx";
 export { DataTable, type DataTableColumn, type DataTableProps } from "./components/DataTable.tsx";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState.tsx";
 export { Modal, type ModalProps } from "./components/Modal.tsx";
-export { PANEL_STRIP, Panel, PanelHeader, PanelSection, type PanelCollapse, type PanelResize, type PanelSectionProps } from "./components/Panel.tsx";
+export { PANEL_STRIP, Panel, PanelBar, PanelHeader, PanelSection, type PanelCollapse, type PanelResize, type PanelSectionProps } from "./components/Panel.tsx";
 export { PropertyList, type PropertyItem } from "./components/PropertyList.tsx";
 export { SearchInput, type SearchInputProps } from "./components/SearchInput.tsx";
 export { Select, type SelectOption, type SelectProps } from "./components/Select.tsx";

@@ -1,5 +1,5 @@
 import type { Edge as GraphEdge } from "@rae/schema";
-import { ContextMenu, ShortcutLegend, type Shortcut } from "@rae/design-system";
+import { ContextMenu, SegmentedToggles, ShortcutLegend, type Shortcut, type ToggleItem, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
   Background,
@@ -10,16 +10,17 @@ import {
   MarkerType,
   MiniMap,
   type NodeChange,
+  Panel as FlowPanel,
   type OnNodeDrag,
   ReactFlow,
   useReactFlow,
 } from "@xyflow/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
 import { folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
-import { childEdges, hasUndrawn, parentEdges } from "../graph/relations.ts";
+import { childEdges, EDGE_GROUPS, type EdgeGroup, hasUndrawn, parentEdges } from "../graph/relations.ts";
 import { IconBack, IconForward } from "@rae/design-system/icons";
 import { KIND_META } from "../lib/kinds.tsx";
 import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.ts";
@@ -49,15 +50,15 @@ function edgeLook(e: GraphEdge): { className: string; color: string } {
         return { className: "rae-edge rae-edge--imports-lazy", color: cssVar("relation.imports") };
       return { className: "rae-edge rae-edge--imports", color: cssVar("relation.imports") };
     case "renders":
-      return { className: "rae-edge rae-edge--renders", color: cssVar("kind.component.solid") };
+      return { className: "rae-edge rae-edge--renders", color: cssVar("relation.renders") };
     case "usesHook":
-      return { className: "rae-edge rae-edge--usesHook", color: cssVar("kind.hook.solid") };
+      return { className: "rae-edge rae-edge--usesHook", color: cssVar("relation.usesHook") };
     case "invokes":
-      return { className: "rae-edge rae-edge--invokes", color: cssVar("kind.function.solid") };
+      return { className: "rae-edge rae-edge--invokes", color: cssVar("relation.invokes") };
     case "invokesAction":
-      return { className: "rae-edge rae-edge--invokesAction", color: cssVar("kind.serverAction.solid") };
+      return { className: "rae-edge rae-edge--invokesAction", color: cssVar("relation.invokesAction") };
     case "declares":
-      return { className: "rae-edge rae-edge--declares", color: cssVar("kind.module.muted") };
+      return { className: "rae-edge rae-edge--declares", color: cssVar("relation.declares") };
     case "usesType":
       return { className: "rae-edge rae-edge--usesType", color: cssVar("relation.usesType") };
     case "routeFile":
@@ -86,7 +87,8 @@ const SHORTCUTS: Shortcut[] = [
   { keys: ["Right-click"], does: "On an element, all its actions and relations" },
   { keys: ["Double-click"], does: "Zoom in (also inside a frame)" },
   { keys: ["Drag"], does: "Pan, also inside a file or folder frame" },
-  { keys: ["⌘", "Ctrl"], does: "With a click, add to the selection" },
+  { keys: ["⌘", "Ctrl", "⇧"], does: "With a click, add to the selection" },
+  { keys: ["⇧ Drag"], does: "On empty space, draw a box: what it touches joins the selection" },
   { keys: ["⌘ A", "Ctrl A"], does: "Select every element on the diagram" },
   { keys: ["Delete", "⌫"], does: "Remove the selected elements" },
   { keys: ["⌘ Z", "Ctrl Z"], does: "Undo a step" },
@@ -96,7 +98,9 @@ const SHORTCUTS: Shortcut[] = [
 ];
 
 const RAISED_Z = 1000;
-const FIT = { padding: 0.15, maxZoom: 1, duration: 350 } as const;
+/** Fitting keeps clear of the canvas chrome: the relation filters on top, the controls and minimap below. */
+const FIT_PADDING = { top: "68px", bottom: "64px", left: "48px", right: "48px" } as const;
+const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 350 } as const;
 
 /**
  * Runs a viewport change once React Flow knows the nodes: with hundreds of new nodes its
@@ -142,10 +146,13 @@ export function Canvas() {
   const setMenu = useExplorer.getState().openMenu;
   const [tip, setTip] = useState<TipState | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  /** ⌘/Ctrl held: a click adds to the selection (the cursor says so). */
+  /** ⌘ / Ctrl / Shift held: a click adds to the selection (the cursor says so). */
   const [adding, setAdding] = useState(false);
+  /** Shift held: a drag on empty space draws a selection box (crosshair). */
+  const [boxing, setBoxing] = useState(false);
   /** The dragged element is over a frame that won't take it. */
   const [refusedDrop, setRefusedDrop] = useState(false);
+  const marquee = useMarquee();
 
   // Full ELK layout when the store asks for one.
   useEffect(() => {
@@ -423,7 +430,7 @@ export function Canvas() {
           className: look.className,
           data: { edge: e, ...laneOf.get(id) },
           zIndex: 1,
-          markerEnd: { type: MarkerType.ArrowClosed, color: look.color, width: 16, height: 16 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: look.color, width: 12, height: 12 },
         };
       });
   }, [graph, placed]);
@@ -470,8 +477,14 @@ export function Canvas() {
         s.hideNodes(s.selection);
       }
     };
-    const onModifier = (e: KeyboardEvent) => setAdding(e.metaKey || e.ctrlKey);
-    const onBlur = () => setAdding(false);
+    const onModifier = (e: KeyboardEvent) => {
+      setAdding(e.metaKey || e.ctrlKey || e.shiftKey);
+      setBoxing(e.shiftKey);
+    };
+    const onBlur = () => {
+      setAdding(false);
+      setBoxing(false);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keydown", onModifier);
     window.addEventListener("keyup", onModifier);
@@ -484,6 +497,7 @@ export function Canvas() {
     };
   }, [flow, setMenu]);
 
+  const colorMode = useColorMode();
   const menuNode = menu ? snapshot?.nodes[menu.id] : undefined;
   const menuEntries = useMemo(() => (menu ? (menu.mode === "contains" ? containsEntries(menu.id) : nodeMenuEntries(menu.id)) : []), [menu]);
 
@@ -494,7 +508,10 @@ export function Canvas() {
       data-selection={selection.length ? "" : undefined}
       data-dragging={dragging ? "" : undefined}
       data-adding={adding ? "" : undefined}
+      data-boxing={boxing ? "" : undefined}
       data-refused-drop={refusedDrop ? "" : undefined}
+      // Shift + drag on empty space: a selection box, before React Flow (or a frame's room) pans
+      onPointerDownCapture={marquee.onPointerDownCapture}
       // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
       onPointerDown={(e) => {
         const active = document.activeElement as HTMLElement | null;
@@ -502,6 +519,8 @@ export function Canvas() {
       }}
     >
       <ReactFlow<ElementFlowNode, Edge>
+        // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
+        colorMode={colorMode}
         // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
         proOptions={{ hideAttribution: true }}
         nodes={nodes}
@@ -526,7 +545,7 @@ export function Canvas() {
           const target = e.target as HTMLElement;
           if (target.closest(".rae-icon-btn, .rae-contains")) return;
           if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
-          select(n.id, e.metaKey || e.ctrlKey);
+          select(n.id, e.metaKey || e.ctrlKey || e.shiftKey);
         }}
         onNodeMouseEnter={(e, n) => {
           clearTimeout(tipTimer.current);
@@ -566,12 +585,17 @@ export function Canvas() {
         minZoom={0.05}
         maxZoom={2}
         fitView
+        fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
         onlyRenderVisibleElements
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={cssVar("canvas.dot")} />
-        <Controls position="bottom-left" showInteractive={false}>
+        <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={cssVar("canvas.grid")} />
+        <FlowPanel position="top-left" className="rae-filters">
+          <RelationFilters />
+        </FlowPanel>
+        <Controls position="bottom-left" showInteractive={false} />
+        <FlowPanel position="bottom-left" className="rae-history">
           <HistoryButtons />
-        </Controls>
+        </FlowPanel>
         <MiniMap
           pannable
           zoomable
@@ -586,6 +610,7 @@ export function Canvas() {
       </ReactFlow>
       {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
       {!dragging && !menu && <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} />}
+      {marquee.box && <div className="rae-marquee" style={marquee.box} />}
       <ExplorationPicker />
       <QuickAdd />
       <div className="rae-legend">
@@ -608,17 +633,123 @@ export function Canvas() {
   );
 }
 
+/** How far the pointer moves before a ⌘/Ctrl press becomes a selection box (px). */
+const MARQUEE_SLOP = 4;
+
+/**
+ * Shift + drag from empty space (the pane, or a frame's room) draws a selection box (React Flow's
+ * own default): what it touches joins the selection, live, on top of what was selected before.
+ * Cards count when touched; frames only when wholly inside (a box drawn in a frame's room isn't
+ * picking the frame). The selection on release is exactly what was highlighted. A press that
+ * doesn't move does nothing.
+ */
+function useMarquee() {
+  const flow = useReactFlow();
+  const [box, setBox] = useState<CSSProperties | null>(null);
+  const onPointerDownCapture = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !e.shiftKey) return;
+    const target = e.target as HTMLElement;
+    if (!target.closest(".react-flow__pane, .rae-frame__room") || target.closest(".react-flow__panel")) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const host = e.currentTarget.getBoundingClientRect();
+    const from = { x: e.clientX, y: e.clientY };
+    const base = useExplorer.getState().selection;
+    let frame = 0;
+    let last: PointerEvent | null = null;
+    let started = false;
+    const update = () => {
+      frame = 0;
+      if (!last) return;
+      const x0 = Math.min(from.x, last.clientX);
+      const y0 = Math.min(from.y, last.clientY);
+      const x1 = Math.max(from.x, last.clientX);
+      const y1 = Math.max(from.y, last.clientY);
+      setBox({ left: x0 - host.left, top: y0 - host.top, width: x1 - x0, height: y1 - y0 });
+      const a = flow.screenToFlowPosition({ x: x0, y: y0 });
+      const b = flow.screenToFlowPosition({ x: x1, y: y1 });
+      const rect = { x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y };
+      // frames only when wholly inside the box
+      const inside = (id: string) => {
+        const n = flow.getInternalNode(id);
+        if (!n) return false;
+        const { x, y } = n.internals.positionAbsolute;
+        const w = n.measured.width ?? 0;
+        const h = n.measured.height ?? 0;
+        return x >= rect.x && y >= rect.y && x + w <= rect.x + rect.width && y + h <= rect.y + rect.height;
+      };
+      const touched = flow.getIntersectingNodes(rect, true).filter((n) => n.type !== "frame" || inside(n.id));
+      const ids = [...base, ...touched.map((n) => n.id).filter((id) => !base.includes(id))];
+      const now = useExplorer.getState().selection;
+      if (ids.length !== now.length || ids.some((id, i) => id !== now[i])) useExplorer.getState().selectMany(ids);
+    };
+    const move = (ev: PointerEvent) => {
+      if (!started && Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < MARQUEE_SLOP) return;
+      started = true;
+      last = ev;
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const end = () => {
+      cancelAnimationFrame(frame);
+      if (started && last) update();
+      setBox(null);
+      // the release's click would land on the empty canvas and clear what the box just selected
+      if (started) {
+        const swallow = (ev: MouseEvent) => {
+          ev.stopPropagation();
+          ev.preventDefault();
+        };
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        // no click follows (released outside the window): don't eat the next real one
+        setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+      }
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+  return { box, onPointerDownCapture };
+}
+
+/** Each relation filter's swatch: the same colour as its edges, a shape as the second cue. */
+const GROUP_LOOK: Record<EdgeGroup, Pick<ToggleItem, "color" | "shape">> = {
+  imports: { color: "relation.imports" },
+  declares: { color: "relation.declares" },
+  renders: { color: "relation.renders" },
+  hooks: { color: "relation.usesHook", shape: "circle" },
+  invokes: { color: "relation.invokes" },
+  types: { color: "relation.usesType" },
+  navigation: { color: "relation.navigates" },
+  cache: { color: "relation.invalidates", shape: "diamond" },
+};
+
+/** Which relations the diagram draws, on the canvas's top-left corner. */
+function RelationFilters() {
+  const enabled = useExplorer((s) => s.enabled);
+  return (
+    <SegmentedToggles
+      label="Relations"
+      title="Relations"
+      items={EDGE_GROUPS.map(({ group, label }) => ({ value: group, label: label.toLowerCase(), ...GROUP_LOOK[group], on: enabled[group] }))}
+      onToggle={(g) => useExplorer.getState().toggleGroup(g as EdgeGroup)}
+    />
+  );
+}
+
 /** Back / Forward through the selected elements (the desktop app has no browser buttons). */
 function HistoryButtons() {
   const { canBack, canForward } = useSelectionHistory();
   return (
-    <>
+    <div className="react-flow__controls rae-history__group">
       <ControlButton onClick={goBack} disabled={!canBack} title="Back: the previously selected element (⌘ [)" aria-label="Back to the previously selected element">
         <IconBack size={14} />
       </ControlButton>
       <ControlButton onClick={goForward} disabled={!canForward} title="Forward (⌘ ])" aria-label="Forward to the next selected element">
         <IconForward size={14} />
       </ControlButton>
-    </>
+    </div>
   );
 }

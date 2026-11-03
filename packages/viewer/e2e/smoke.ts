@@ -22,14 +22,25 @@ const fail = (msg: string) => {
 
 await page.goto(url);
 await page.getByText("Empty diagram").waitFor({ timeout: 15000 });
-// Earlier runs' UI scans add react-app snapshots to the same folder: pick the newest next-app one.
-const select = page.locator("select").first();
-// options are grouped by scanned folder: "<project> — <path>"
-const nextApp = await select.evaluate((el: HTMLSelectElement) => [...el.options].find((o) => (o.parentElement as HTMLOptGroupElement | null)?.label?.startsWith("next-app"))?.value);
-if (!nextApp) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app` first");
-await select.selectOption(nextApp);
-// (the status text only shows on wide screens; it's always in the DOM)
-await page.getByText(/^next-app · \d+ files/).waitFor({ state: "attached" });
+// Earlier runs' UI scans add react-app snapshots to the same folder: pick the newest next-app one
+// from the toolbar's snapshot menu (grouped by scanned folder: "<project> — <path>", newest first).
+const store = <T,>(read: string) => page.evaluate((r) => new Function("s", `return ${r}`)((window as any).__rae.getState()), read) as Promise<T>;
+await page.getByRole("button", { name: /^Snapshots/ }).click();
+const nth = await page.locator("[role=menu]").first().evaluate((menu) => {
+  let inNextApp = false;
+  let item = -1;
+  for (const el of menu.querySelectorAll("[role=menuitem], p, div:not([role])")) {
+    if (el.getAttribute("role") === "menuitem") {
+      item++;
+      if (inNextApp) return item;
+    } else if (el.children.length === 0 && el.textContent) inNextApp = el.textContent.startsWith("next-app");
+  }
+  return -1;
+});
+if (nth < 0) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app` first");
+await page.getByRole("menuitem").nth(nth).click();
+await page.waitForFunction(() => (window as any).__rae.getState().snapshot?.rootDir.endsWith("next-app"));
+await page.getByRole("button", { name: /^Snapshots: next-app/ }).waitFor();
 await page.getByText("Empty diagram").waitFor();
 // Add the way noesis does: "Start exploration" opens the picker; filter, Enter picks the first match.
 await page.getByRole("button", { name: "Start exploration" }).click();
@@ -46,7 +57,7 @@ if ((await page.locator(".react-flow__node").count()) !== 1) fail("adding a comp
 await page.getByRole("button", { name: "Children down to leaves" }).first().click();
 await page.getByRole("button", { name: "Parents up to root" }).first().click();
 await page.waitForTimeout(600);
-const onCanvas = Number((await page.getByText(/ shown$/).first().textContent())?.match(/(\d+) shown/)?.[1]);
+const onCanvas = await store<number>("s.visible.length");
 if (!(onCanvas > 5)) fail(`expected expansion to add nodes, got ${onCanvas}`);
 if (outDir) await page.screenshot({ path: `${outDir}/smoke.png` });
 
@@ -132,7 +143,7 @@ await page.keyboard.press("Escape");
 await page.getByLabel("Filter elements").waitFor({ state: "detached" });
 
 // Right-click on the empty canvas: quick add right there.
-await page.locator(".react-flow__pane").click({ button: "right", position: { x: 30, y: 30 } });
+await page.locator(".react-flow__pane").click({ button: "right", position: { x: 30, y: 120 } });
 await page.getByPlaceholder(/Add here/).waitFor();
 await page.keyboard.press("Escape");
 await page.getByPlaceholder(/Add here/).waitFor({ state: "detached" });
@@ -168,27 +179,30 @@ await page.waitForTimeout(500);
 if ((await drawnIds()) !== stored) fail("diagram not restored after reload");
 
 // Libraries filter: showing react brings it back into relation lists.
-await page.getByRole("button", { name: /Libraries/ }).click();
+await page.getByRole("button", { name: "View options" }).click();
+await page.getByRole("button", { name: "Choose…" }).click();
 const dialog = page.getByRole("dialog");
 await dialog.getByText("react", { exact: true }).click();
 if (!(await dialog.getByRole("checkbox", { name: "react", exact: true }).isChecked())) fail("react checkbox did not toggle on");
 await page.keyboard.press("Escape");
-if ((await page.getByRole("button", { name: /^Libraries\s*1$/ }).count()) !== 1) fail("toolbar should report 1 hidden library");
+await page.getByRole("button", { name: "View options" }).click();
+if ((await page.getByText("1 hidden", { exact: true }).count()) !== 1) fail("view options should report 1 hidden library");
+await page.keyboard.press("Escape");
 
 // Scan from the UI: pick the react-app fixture via the folder browser + path input.
 const reactApp = new URL("../../fixtures/react-app", import.meta.url).pathname;
 await page.getByRole("button", { name: "Scan a project…" }).click();
 await page.getByPlaceholder(/path\/to\/app/).fill(reactApp);
 if (outDir) await page.screenshot({ path: `${outDir}/scan-modal.png` });
-await page.getByRole("button", { name: "Scan", exact: true }).click();
+await page.getByRole("dialog").getByRole("button", { name: "Scan", exact: true }).click();
 // The dialog closes right away; a progress panel over the canvas follows files, then types.
 await page.getByRole("dialog").waitFor({ state: "hidden", timeout: 30000 });
 await page.getByText("Scan finished").waitFor({ timeout: 30000 });
 if (outDir) await page.screenshot({ path: `${outDir}/scan-done.png` });
 const typed = await page.evaluate(() => (window as any).__rae.getState().snapshot.stats.types);
 if (!typed) fail("the typed snapshot should replace the structure-only one after the type pass");
-const status = await page.getByText(/files · \d+ shown/).first().textContent();
-if (!status?.startsWith("react ·")) fail(`expected scanned react-app snapshot to be loaded, got "${status}"`);
+const root = await store<string>("s.snapshot.rootDir");
+if (!root.endsWith("react-app")) fail(`expected scanned react-app snapshot to be loaded, got "${root}"`);
 if (errors.length) fail(`console errors:\n${errors.join("\n")}`);
 if (!process.exitCode) console.log(`✔ viewer smoke test passed (${onCanvas} nodes on canvas)`);
 await browser.close();

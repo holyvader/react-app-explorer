@@ -264,4 +264,19 @@ describe("routeChain: what renders a URL, root first", () => {
     expect(routeOf(snap, "app/(shop)/p/[id]/page.tsx")).toBe("route:/(shop)/p/[id]");
     expect(routeOf(snap, "app/(shop)/layout.tsx")).toBe("route:/(shop)");
   });
+  test("drawn routes nest like files hold declarations: in the nearest drawn parent route, nothing added", () => {
+    const g = drawnGraph(snap, ["route:/", "route:/(shop)/p/[id]", "app/(shop)/p/[id]/page.tsx", "app/(shop)/p/[id]/page.tsx#Product", "app/layout.tsx"], opts({ folders: false }));
+    const parent = Object.fromEntries(g.elements.map((e) => [e.id, e.parent]));
+    expect(parent).toEqual({
+      "route:/": null,
+      // (shop) isn't drawn: no frame for it, the page route sits straight in the root route
+      "route:/(shop)/p/[id]": "route:/",
+      "app/(shop)/p/[id]/page.tsx": "route:/(shop)/p/[id]",
+      "app/(shop)/p/[id]/page.tsx#Product": "app/(shop)/p/[id]/page.tsx",
+      "app/layout.tsx": "route:/",
+    });
+    // a route with no drawn parent, and a declaration whose file isn't drawn: in their route
+    const alone = drawnGraph(snap, ["route:/(shop)/p/[id]", "app/(shop)/p/[id]/page.tsx#Product"], opts({ folders: false }));
+    expect(Object.fromEntries(alone.elements.map((e) => [e.id, e.parent]))).toEqual({ "route:/(shop)/p/[id]": null, "app/(shop)/p/[id]/page.tsx#Product": "route:/(shop)/p/[id]" });
+  });
 });

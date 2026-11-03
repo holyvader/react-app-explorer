@@ -83,14 +83,14 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
       <div className={`rae-frame__header ${FRAME_HANDLE}`}>
         <span className="rae-icon">
-          <Icon size={15} />
+          <Icon size={13} />
         </span>
         <div className="rae-frame__title">
+          {/* a file by its path, a route by its URL, a folder by its name: one mono line */}
           <div className="rae-name" title={data.path ?? node?.filePath}>
-            {element.name}
+            {!folder && !route && node ? node.filePath : element.name}
           </div>
           {route && <div className="rae-sub">{routeCaption(route)}</div>}
-          {!folder && !route && node && <div className="rae-sub">{node.filePath}</div>}
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
         {route?.rendering && (
@@ -98,7 +98,7 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
             {renderingLabel(route.rendering)}
           </span>
         )}
-        {node?.nextRole && <span className="rae-badge rae-badge--outline">{node.nextRole}</span>}
+        {node?.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
         {node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
         <NodeActions data={data} frame />
       </div>

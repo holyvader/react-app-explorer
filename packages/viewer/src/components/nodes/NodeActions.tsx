@@ -1,4 +1,4 @@
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRemoveWithContents, IconRouteChain, IconUnwrap } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRouteChain, IconUnwrap } from "@rae/design-system/icons";
 import type { MouseEvent, ReactNode } from "react";
 import { useExplorer } from "../../store.ts";
 import type { ElementNodeData } from "./types.ts";
@@ -22,7 +22,7 @@ function IconBtn({ label, icon, onClick, disabled }: { label: string; icon: Reac
   );
 }
 
-const I = 13;
+const I = 12;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
@@ -61,7 +61,7 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       {frame && node?.kind === "module" && (
         <IconBtn label="Remove only this file, keep what it holds" icon={<IconUnwrap size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
       )}
-      <IconBtn label={frame ? "Remove with everything inside" : "Remove from the diagram"} icon={frame ? <IconRemoveWithContents size={I} /> : <IconRemove size={I} />} onClick={() => hideNode(id)} />
+      <IconBtn label={frame ? "Remove with everything inside" : "Remove from the diagram"} icon={<IconRemove size={I} />} onClick={() => hideNode(id)} />
     </span>
   );
 }

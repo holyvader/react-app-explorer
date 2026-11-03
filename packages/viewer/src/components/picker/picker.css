@@ -1,23 +1,43 @@
 /* Element tree (picker / quick add) — plain CSS: it can show hundreds of rows. */
 .rae-tree-search {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--chakra-colors-border);
+  border-bottom: 1px solid var(--chakra-colors-border-muted);
   display: flex;
   align-items: center;
   gap: 8px;
 }
+.rae-tree-search[hidden] { display: none; }
+.rae-tree-search { position: relative; }
+.rae-tree-search__clear {
+  all: unset;
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--chakra-colors-fg-subtle);
+  cursor: pointer;
+}
+.rae-tree-search__clear:hover { color: var(--chakra-colors-fg); background: var(--chakra-colors-bg-muted); }
+.rae-tree-search__clear:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); }
 .rae-tree-search input {
   flex: 1;
-  border: 1px solid var(--chakra-colors-border);
-  border-radius: 10px;
-  padding: 8px 12px;
-  font: 13px var(--chakra-fonts-body);
-  background: var(--chakra-colors-bg);
+  border: 1px solid var(--chakra-colors-card-border);
+  border-radius: 7px;
+  padding: 6px 28px 6px 10px;
+  font: 12.5px var(--chakra-fonts-body);
+  background: var(--chakra-colors-syntax-bg);
   color: var(--chakra-colors-fg);
   outline: none;
 }
-.rae-tree-search input:focus { border-color: var(--chakra-colors-blue-500); box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2); }
-.rae-tree { flex: 1; overflow-y: auto; padding: 4px 0; font: 13px/1.3 var(--chakra-fonts-body); color: var(--chakra-colors-fg); }
+.rae-tree-search input::placeholder { color: var(--chakra-colors-fg-subtle); }
+.rae-tree-search input:focus { border-color: var(--chakra-colors-selection-solid); box-shadow: 0 0 0 3px var(--chakra-colors-selection-ring); }
+.rae-tree { flex: 1; overflow-y: auto; padding: 6px 0; font: 12.5px/1.3 var(--chakra-fonts-body); color: var(--chakra-colors-kind-module-fg); }
 .rae-tree__row {
   all: unset;
   box-sizing: border-box;
@@ -26,26 +46,28 @@
   gap: 6px;
   width: calc(100% - 12px);
   margin: 0 6px;
-  height: 30px;
+  height: 28px;
   padding-right: 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background-color 180ms ease;
 }
-.rae-tree__row:hover { background: var(--chakra-colors-bg-subtle); }
-.rae-tree__row:focus-visible { background: var(--chakra-colors-bg-emphasized); outline: 2px solid var(--chakra-colors-blue-500); outline-offset: -2px; }
+.rae-tree__row:hover { background: var(--chakra-colors-bg-muted); }
+.rae-tree__row:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1.5px; }
 .rae-tree__row[data-inactive] { color: var(--chakra-colors-fg-subtle); cursor: default; }
-.rae-tree__chev { width: 16px; display: inline-flex; justify-content: center; color: var(--chakra-colors-fg-muted); flex-shrink: 0; }
-.rae-tree__icon { display: inline-flex; flex-shrink: 0; }
-.rae-tree__icon[data-kind="folder"], .rae-tree__icon[data-kind="libraries"] { color: var(--chakra-colors-fg-muted); }
-.rae-tree__icon[data-kind="module"] { color: var(--chakra-colors-kind-module-fg); }
-.rae-tree__icon[data-kind="component"] { color: var(--chakra-colors-kind-component-fg); }
-.rae-tree__icon[data-kind="hook"] { color: var(--chakra-colors-kind-hook-fg); }
-.rae-tree__icon[data-kind="function"] { color: var(--chakra-colors-kind-function-fg); }
-.rae-tree__icon[data-kind="serverAction"] { color: var(--chakra-colors-kind-server-action-fg); }
-.rae-tree__icon[data-kind="external"] { color: var(--chakra-colors-kind-external-fg); }
+.rae-tree__chev { width: 11px; display: inline-flex; justify-content: center; color: var(--chakra-colors-fg-subtle); flex-shrink: 0; }
+.rae-tree__icon { display: inline-flex; flex-shrink: 0; color: var(--chakra-colors-fg-subtle); }
+.rae-tree__icon svg { width: 13px; height: 13px; }
+.rae-tree__icon[data-kind="component"] { color: var(--chakra-colors-kind-component-solid); }
+.rae-tree__icon[data-kind="hook"] { color: var(--chakra-colors-kind-hook-solid); }
+.rae-tree__icon[data-kind="function"] { color: var(--chakra-colors-kind-function-solid); }
+.rae-tree__icon[data-kind="serverAction"] { color: var(--chakra-colors-kind-server-action-solid); }
+.rae-tree__icon[data-kind="type"] { color: var(--chakra-colors-kind-type-solid); }
+.rae-tree__icon[data-kind="route"] { color: var(--chakra-colors-kind-route-solid); }
+.rae-tree__icon[data-kind="external"] { color: var(--chakra-colors-kind-external-solid); }
+/* declarations (not files or folders) read in the full foreground */
+.rae-tree__row:has(.rae-tree__icon:is([data-kind="component"], [data-kind="hook"], [data-kind="function"], [data-kind="serverAction"], [data-kind="type"], [data-kind="route"])) { color: var(--chakra-colors-fg); }
 .rae-tree__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.rae-tree__note { margin-left: auto; padding-left: 8px; font-size: 11px; color: var(--chakra-colors-fg-subtle); white-space: nowrap; }
+.rae-tree__note { margin-left: auto; padding-left: 8px; font: 10px var(--chakra-fonts-mono); color: var(--chakra-colors-fg-subtle); white-space: nowrap; }
 .rae-tree__tick {
   width: 14px; height: 14px; flex-shrink: 0;
   border: 1.5px solid var(--chakra-colors-border-emphasized);
@@ -53,16 +75,17 @@
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 10px; line-height: 1; color: white;
 }
-.rae-tree__tick[data-state="on"], .rae-tree__tick[data-state="all"] { background: var(--chakra-colors-blue-500); border-color: var(--chakra-colors-blue-500); }
-.rae-tree__tick[data-state="file"], .rae-tree__tick[data-state="partial"] { background: color-mix(in srgb, var(--chakra-colors-blue-500) 45%, transparent); border-color: var(--chakra-colors-blue-500); }
+.rae-tree__tick[data-state="on"], .rae-tree__tick[data-state="all"] { background: var(--chakra-colors-selection-solid); border-color: var(--chakra-colors-selection-solid); color: var(--chakra-colors-accent-contrast); }
+.rae-tree__tick[data-state="file"], .rae-tree__tick[data-state="partial"] { background: color-mix(in srgb, var(--chakra-colors-selection-solid) 45%, transparent); border-color: var(--chakra-colors-selection-solid); }
 /* file tree panel (browse mode): elements on the diagram, the selected one, and the + to add */
-.rae-tree__row[data-drawn] .rae-tree__name { font-weight: 600; }
-.rae-tree__row[data-selected] { background: color-mix(in srgb, var(--chakra-colors-blue-500) 14%, transparent); }
+.rae-tree__row[data-drawn] .rae-tree__name { font-weight: 500; }
+.rae-tree__row[data-selected] { background: var(--chakra-colors-selection-tree-row); box-shadow: inset 2px 0 0 var(--chakra-colors-selection-solid); color: var(--chakra-colors-fg); }
+.rae-tree__row[data-selected] .rae-tree__note { color: var(--chakra-colors-fg-muted); }
 .rae-tree__add {
   margin-left: auto;
   flex-shrink: 0;
-  width: 22px; height: 22px;
-  border-radius: 6px;
+  width: 20px; height: 20px;
+  border-radius: 5px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--chakra-colors-fg-muted);
   opacity: 0.45;
@@ -75,7 +98,7 @@
 .rae-picker-foot {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px;
-  border-top: 1px solid var(--chakra-colors-border);
+  border-top: 1px solid var(--chakra-colors-border-muted);
   background: var(--chakra-colors-bg-subtle);
   font: 12px var(--chakra-fonts-body);
   color: var(--chakra-colors-fg-muted);
@@ -92,10 +115,10 @@
   transition: transform 120ms ease;
 }
 .rae-add-plus:hover { transform: scale(1.06); }
-.rae-add-plus:focus-visible { outline: 3px solid var(--chakra-colors-blue-500); outline-offset: 2px; }
+.rae-add-plus:focus-visible { outline: 3px solid var(--chakra-colors-selection-solid); outline-offset: 2px; }
 
-/* the file tree panel: a quieter filter box under its title, no divider */
-.rae-filetree .rae-tree-search { padding: 0 10px 8px; border-bottom: 0; }
-.rae-filetree .rae-tree-search input { background: var(--chakra-colors-bg-muted); border-color: transparent; border-radius: 9px; padding: 7px 11px; }
-.rae-filetree .rae-tree-search input:focus { background: var(--chakra-colors-bg-panel); border-color: var(--chakra-colors-component-400); box-shadow: 0 0 0 3px color-mix(in srgb, var(--chakra-colors-component-500) 18%, transparent); }
-.rae-filetree .rae-tree__row { height: 28px; }
+/* the file tree panel: flush 24px rows, folders by their chevron only, the filter box on demand */
+.rae-filetree .rae-tree-search { padding: 8px 10px; }
+.rae-filetree .rae-tree__row { height: 24px; width: 100%; margin: 0; border-radius: 0; gap: 7px; }
+.rae-filetree .rae-tree__icon[data-kind="folder"] { display: none; }
+.rae-filetree .rae-tree-search__clear { right: 16px; }
