@@ -502,6 +502,8 @@ export function Canvas() {
       }}
     >
       <ReactFlow<ElementFlowNode, Edge>
+        // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
+        proOptions={{ hideAttribution: true }}
         nodes={nodes}
         edges={edges as Edge[]}
         nodeTypes={nodeTypes}

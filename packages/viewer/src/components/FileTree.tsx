@@ -42,18 +42,18 @@ export function FileTree() {
   if (!snapshot) return null;
   if (!open) {
     return (
-      <Flex direction="column" align="center" py="2" w="9" flexShrink={0} bg="bg.panel" borderRightWidth="1px" borderColor="border.muted">
+      <Flex direction="column" align="center" py="2" w="10" flexShrink={0} bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel">
         <ActionIconButton label="Show the file tree" icon={<IconPanelOpen />} size="xs" onClick={() => setTreeOpen(true)} />
       </Flex>
     );
   }
   return (
     <Panel resize={{ width, onWidthChange: setTreeWidth, min: 200, max: 560, defaultWidth: TREE_WIDTH, side: "left" }} display="flex" flexDirection="column" overflowY="hidden">
-      <Flex align="center" gap="2" px="3" h="10" flexShrink={0} borderBottomWidth="1px" borderColor="border.muted">
+      <Flex align="center" gap="2" pl="4" pr="2" h="11" flexShrink={0}>
         <Box color="fg.muted" display="inline-flex">
           <IconFolderTree size={14} />
         </Box>
-        <Text fontSize="sm" fontWeight="semibold" flex="1">
+        <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="0.06em" color="fg.muted" flex="1">
           Files
         </Text>
         <ActionIconButton label="Hide the file tree" icon={<IconPanelClose />} size="2xs" variant="ghost" onClick={() => setTreeOpen(false)} />

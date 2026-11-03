@@ -93,3 +93,9 @@
 }
 .rae-add-plus:hover { transform: scale(1.06); }
 .rae-add-plus:focus-visible { outline: 3px solid var(--chakra-colors-blue-500); outline-offset: 2px; }
+
+/* the file tree panel: a quieter filter box under its title, no divider */
+.rae-filetree .rae-tree-search { padding: 0 10px 8px; border-bottom: 0; }
+.rae-filetree .rae-tree-search input { background: var(--chakra-colors-bg-muted); border-color: transparent; border-radius: 9px; padding: 7px 11px; }
+.rae-filetree .rae-tree-search input:focus { background: var(--chakra-colors-bg-panel); border-color: var(--chakra-colors-component-400); box-shadow: 0 0 0 3px color-mix(in srgb, var(--chakra-colors-component-500) 18%, transparent); }
+.rae-filetree .rae-tree__row { height: 28px; }

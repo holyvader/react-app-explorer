@@ -23,7 +23,7 @@ export interface PanelResize {
 export function Panel({ children, resize, ...rest }: BoxProps & { resize?: PanelResize }) {
   if (!resize) {
     return (
-      <Box bg="bg.panel" borderLeftWidth="1px" borderColor="border.muted" h="full" overflowY="auto" {...rest}>
+      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflowY="auto" {...rest}>
         {children}
       </Box>
     );
@@ -31,7 +31,6 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
   const { width, onWidthChange, min = 320, max = 900, defaultWidth, side = "right" } = resize;
   // dragging towards the window's middle widens the panel
   const dir = side === "right" ? -1 : 1;
-  const border = side === "right" ? { borderLeftWidth: "1px" } : { borderRightWidth: "1px" };
   const clamp = (w: number) => Math.round(Math.min(Math.max(w, min), Math.min(max, window.innerWidth - 360)));
   return (
     <Box position="relative" h="full" flexShrink={0} style={{ width }}>
@@ -42,10 +41,11 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
         aria-valuenow={width}
         tabIndex={0}
         position="absolute"
-        {...(side === "right" ? { left: "-3px" } : { right: "-3px" })}
+        {...(side === "right" ? { left: "-7px" } : { right: "-7px" })}
         top="0"
         bottom="0"
         w="6px"
+        rounded="full"
         zIndex="2"
         cursor="col-resize"
         css={{ "&:hover, &[data-dragging]": { background: "color-mix(in srgb, var(--chakra-colors-component-500) 45%, transparent)" }, transition: "background 0.15s" }}
@@ -73,7 +73,7 @@ export function Panel({ children, resize, ...rest }: BoxProps & { resize?: Panel
           else if (e.key === "ArrowRight") onWidthChange(clamp(width + dir * 24));
         }}
       />
-      <Box bg="bg.panel" {...border} borderColor="border.muted" h="full" overflowY="auto" {...rest}>
+      <Box bg="bg.panel" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" h="full" overflowY="auto" {...rest}>
         {children}
       </Box>
     </Box>

@@ -21,3 +21,4 @@ export { CodeToken, type CodeTokenKind, Eyebrow, KindTile, TagChip } from "./com
 export { tokenVar } from "./tokens.ts";
 export { SegmentedToggles, type ToggleItem, ToolGroup } from "./components/Toggles.tsx";
 export { ProgressBar, type ProgressBarProps } from "./components/ProgressBar.tsx";
+export { BrandMark } from "./components/BrandMark.tsx";

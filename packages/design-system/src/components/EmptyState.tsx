@@ -15,7 +15,7 @@ export function EmptyState({ icon, title, description, children }: EmptyStatePro
         {icon && <ChakraEmptyState.Indicator>{icon}</ChakraEmptyState.Indicator>}
         <VStack textAlign="center">
           <ChakraEmptyState.Title>{title}</ChakraEmptyState.Title>
-          {description && <ChakraEmptyState.Description>{description}</ChakraEmptyState.Description>}
+          {description && <ChakraEmptyState.Description maxW="440px">{description}</ChakraEmptyState.Description>}
         </VStack>
         {children}
       </ChakraEmptyState.Content>

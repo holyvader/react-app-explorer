@@ -16,6 +16,8 @@ const kind = (base: string) => ({
 const config = defineConfig({
   globalCss: {
     "html, body, #root": { height: "100%", margin: 0 },
+    // crisper type on macOS (both apps), Inter's single-storey a / open digits
+    body: { fontFeatureSettings: "'cv11', 'ss01'", ...({ WebkitFontSmoothing: "antialiased", MozOsxFontSmoothing: "grayscale" } as object) },
   },
   theme: {
     tokens: {
@@ -40,11 +42,18 @@ const config = defineConfig({
         l1: { value: "6px" },
         l2: { value: "8px" },
         l3: { value: "12px" },
+        // the app shell's floating surfaces (file tree, canvas, details)
+        panel: { value: "14px" },
+      },
+      shadows: {
+        panel: { value: "0 1px 2px rgb(15 23 42 / 0.05), 0 10px 30px -16px rgb(15 23 42 / 0.18)" },
+        control: { value: "0 1px 2px rgb(15 23 42 / 0.06)" },
       },
       fonts: {
-        body: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
-        heading: { value: "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
-        mono: { value: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" },
+        // bundled (@fontsource-variable, imported by the provider): the same in the browser and the app
+        body: { value: "'Inter Variable', Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
+        heading: { value: "'Inter Variable', Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" },
+        mono: { value: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" },
       },
     },
     semanticTokens: {
@@ -104,8 +113,13 @@ const config = defineConfig({
           bg: { value: { _light: "{colors.gray.50}", _dark: "{colors.gray.900}" } },
         },
         canvas: {
-          bg: { value: { _light: "{colors.gray.50}", _dark: "{colors.gray.950}" } },
-          dot: { value: { _light: "{colors.gray.300}", _dark: "{colors.gray.700}" } },
+          bg: { value: { _light: "#FBFCFD", _dark: "{colors.gray.950}" } },
+          dot: { value: { _light: "#D5DBE3", _dark: "{colors.gray.700}" } },
+        },
+        // the app shell: a cool grey backdrop the panels float on
+        shell: {
+          bg: { value: { _light: "#ECEFF3", _dark: "#0A0D12" } },
+          border: { value: { _light: "#DDE2E8", _dark: "{colors.gray.800}" } },
         },
       },
     },

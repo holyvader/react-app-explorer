@@ -13,7 +13,7 @@ export interface ToggleItem {
 /** A segmented row of on/off toggles (e.g. relation filters), each with an optional colour dot. */
 export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem[]; onToggle: (value: string) => void; label: string }) {
   return (
-    <Flex role="group" aria-label={label} bg="bg.muted" rounded="l3" p="0.5" gap="0.5">
+    <Flex role="group" aria-label={label} bg="bg.panel" borderWidth="1px" borderColor="shell.border" shadow="control" rounded="l3" p="0.5" gap="0.5">
       {items.map((it) => (
         <chakra.button
           key={it.value}
@@ -30,9 +30,8 @@ export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem
           fontWeight="medium"
           cursor="pointer"
           color={it.on ? "fg" : "fg.subtle"}
-          bg={it.on ? "bg.panel" : "transparent"}
-          boxShadow={it.on ? "xs" : "none"}
-          transition="background 200ms ease, color 200ms ease, box-shadow 200ms ease"
+          bg={it.on ? "bg.muted" : "transparent"}
+          transition="background 200ms ease, color 200ms ease"
           _hover={{ color: "fg" }}
         >
           {it.color && (
@@ -55,7 +54,7 @@ export function SegmentedToggles({ items, onToggle, label }: { items: ToggleItem
 /** A soft container grouping related toolbar controls. */
 export function ToolGroup({ children, ...rest }: FlexProps) {
   return (
-    <Flex align="center" gap="0.5" bg="bg.muted" rounded="l3" p="0.5" {...rest}>
+    <Flex align="center" gap="0.5" bg="bg.panel" borderWidth="1px" borderColor="shell.border" shadow="control" rounded="l3" p="0.5" {...rest}>
       {children}
     </Flex>
   );

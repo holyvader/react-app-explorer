@@ -1,5 +1,5 @@
-import { Box, Button, EmptyState, Flex, Spinner, Text } from "@rae/design-system";
-import { IconHistory, IconPlus, IconScan } from "@rae/design-system/icons";
+import { Box, BrandMark, Button, EmptyState, Flex, Spinner, Text } from "@rae/design-system";
+import { IconPlus, IconScan } from "@rae/design-system/icons";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useState } from "react";
 import { Canvas } from "./components/Canvas.tsx";
@@ -106,16 +106,17 @@ export function App() {
 
   return (
     <ReactFlowProvider>
-      <Flex direction="column" h="100vh" bg="canvas.bg">
+      <Flex direction="column" h="100vh" bg="shell.bg">
         <Toolbar list={list} current={snapshotName} onPickSnapshot={load} onLoadFile={onLoadFile} onScan={() => setScanOpen(true)} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
         {error && (
           <Box px="4" py="2" bg="red.subtle" color="red.fg" fontSize="sm">
             {error}
           </Box>
         )}
-        <Flex flex="1" minH="0">
+        {/* floating surfaces on the shell: file tree, canvas, details */}
+        <Flex flex="1" minH="0" gap="2" px="2" pb="2">
           <FileTree />
-          <Box flex="1" position="relative" minW="0">
+          <Box flex="1" position="relative" minW="0" bg="canvas.bg" borderWidth="1px" borderColor="shell.border" rounded="panel" shadow="panel" overflow="hidden">
             <ScanProgress />
             <Notice />
             {loading ? (
@@ -125,9 +126,9 @@ export function App() {
             ) : !snapshot ? (
               <Flex h="full" align="center" justify="center">
                 <EmptyState
-                  icon={<IconHistory />}
-                  title="No snapshot loaded"
-                  description="Scan a project from here, run `bun run scan <path>` in a terminal, or load a snapshot JSON file."
+                  icon={<BrandMark size={64} />}
+                  title="Explore a React or Next.js app"
+                  description="Scan a project folder to map its components, hooks, routes and how they connect. You can also run `bun run scan <path>` in a terminal, or load a snapshot file."
                 >
                   <Button onClick={() => setScanOpen(true)}>
                     <IconScan size={16} /> Scan a project

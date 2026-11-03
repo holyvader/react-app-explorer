@@ -79,6 +79,7 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   packaged server; drive it with clicks instead.
 
 ## Run / build
+- App icon and branding: see the `design-system` skill ("Brand & shell"). `loading/index.html` shows the mark (inline SVG) while the sidecar starts.
 - `bun run desktop:build` → `packages/desktop/src-tauri/target/release/bundle/` (`.app` + `.dmg` on
   macOS, `.deb`/`.AppImage`/`.rpm` on Linux, `.msi`/NSIS on Windows). `bun run desktop:dev` for a dev
   window. Quick macOS-only bundle: `bunx tauri build --bundles app` in packages/desktop.

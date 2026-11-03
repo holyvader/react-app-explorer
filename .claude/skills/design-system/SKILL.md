@@ -23,6 +23,12 @@ src/components/       composed components: Modal, Tooltip, ActionIconButton, Sea
 src/tokens.ts         tokenVar(token) → CSS variable of any colour token
 ```
 
+## Brand & shell (the "modern" look)
+- **BrandMark** (`components/BrandMark.tsx`): the logo as inline SVG (gradient ids per instance via `useId`): a component (teal square), hook (violet circle) and server action (amber tile) around the explored node, on a deep teal→ink tile. Used in the toolbar and the welcome empty state. The same artwork is `packages/viewer/public/favicon.svg`, the desktop loading page and the app icon.
+- App icon: render the 1024 artwork (icon-grid margin: 824px body, rx 186, drop shadow) to PNG, then `bunx tauri icon <png>` in packages/desktop and delete the generated `android/`, `ios/`, `Square*Logo.png` and `StoreLogo.png` (unused).
+- Fonts are bundled: `@fontsource-variable/inter` and `@fontsource-variable/jetbrains-mono`, imported by `DesignSystemProvider` (same type in the browser and the desktop app, offline). Families `'Inter Variable'` / `'JetBrains Mono Variable'`.
+- The shell: `shell.bg` (cool grey backdrop) and `shell.border`. The file tree, canvas and details panel are floating surfaces on it (`rounded="panel"` 14px, `shadow="panel"`, 8px gaps). `Panel` draws itself that way; its resize handle sits in the gap. `ToolGroup` / `SegmentedToggles` are white pills (`shell.border`, `shadow="control"`) on the shell, the active toggle `bg.muted`.
+
 ## Tokens
 - `kind.<module|component|hook|serverAction|function|external>.{solid,subtle,muted,fg}`
 - `boundary.<server|client|shared>.{solid,subtle,muted,fg}` (server gray, client cyan, shared pink)

@@ -2,12 +2,25 @@
   "name": "@rae/design-system",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./icons": "./src/icons.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./icons": "./src/icons.ts"
+  },
   "dependencies": {
     "@chakra-ui/react": "^3.37.0",
     "@emotion/react": "^11.14.0",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "lucide-react": "^1.66.0"
   },
-  "peerDependencies": { "react": ">=19", "react-dom": ">=19" },
-  "devDependencies": { "@types/react": "^19.3.0", "@types/react-dom": "^19.3.0", "react": "^19.3.1", "react-dom": "^19.3.1" }
+  "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
 }

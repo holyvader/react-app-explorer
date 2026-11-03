@@ -1,7 +1,7 @@
-import { ActionIconButton, Box, Button, Flex, SegmentedToggles, Select, type SelectOption, Text, ToolGroup, Tooltip } from "@rae/design-system";
+import { ActionIconButton, Box, BrandMark, Button, Flex, SegmentedToggles, Select, type SelectOption, Text, ToolGroup, Tooltip } from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
-import { IconAsset, IconBrand, IconClear, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
-import { useRef } from "react";
+import { IconAsset, IconClear, IconHistory, IconLayout, IconLibrary, IconPlus, IconRedo, IconScan, IconUndo, IconUpload } from "@rae/design-system/icons";
+import { type ReactNode, useEffect, useRef } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../graph/relations.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
@@ -60,50 +60,47 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
   if (current && !options.some((o) => o.value === current)) options.unshift({ value: current, label: current });
 
   return (
-    <Flex align="center" gap="2.5" px="4" h="14" borderBottomWidth="1px" borderColor="border.muted" bg="bg.panel" flexShrink={0} minW="0">
+    <Flex align="center" gap="2.5" px="3" h="14" flexShrink={0} minW="0">
       {/* brand */}
-      <Flex align="center" gap="2" flexShrink={0} title="React App Explorer">
-        <Box
-          w="8"
-          h="8"
-          rounded="l3"
-          display="inline-flex"
-          alignItems="center"
-          justifyContent="center"
-          color="white"
-          style={{ background: "linear-gradient(135deg, var(--chakra-colors-component-400), var(--chakra-colors-component-700))", boxShadow: "0 2px 8px color-mix(in srgb, var(--chakra-colors-component-500) 40%, transparent)" }}
-        >
-          <IconBrand size={17} strokeWidth={2.2} />
+      <Flex align="center" gap="2.5" flexShrink={0} pl="1" pr="1">
+        <BrandMark size={30} />
+        <Box lineHeight="1.1" display="none" css={{ "@media (min-width: 1800px)": { display: "block" } }}>
+          <Text fontSize="sm" fontWeight="bold" letterSpacing="-0.02em">
+            App Explorer
+          </Text>
+          <Text fontSize="2xs" color="fg.subtle" fontWeight="medium">
+            React · Next.js
+          </Text>
         </Box>
-        <Text fontWeight="semibold" fontSize="sm" letterSpacing="-0.01em" display="none" css={{ "@media (min-width: 2240px)": { display: "block" } }}>
-          App Explorer
-        </Text>
       </Flex>
 
-      {/* where we are: the scanned project */}
-      {snapshot && (
-        <Tooltip content={`Scanned folder: ${snapshot.rootDir}`}>
-          <Box minW="0" maxW="220px" flexShrink={0} lineHeight="1.2">
-            <Text fontSize="sm" fontWeight="semibold" truncate>
-              {projectName(snapshot.rootDir)}
-            </Text>
-            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate>
-              {shortPath(snapshot.rootDir)}
-            </Text>
-          </Box>
-        </Tooltip>
-      )}
-
-      {/* snapshot */}
-      <ToolGroup>
-        <Tooltip content={list ? `From ${list.dir}` : "Snapshots"}>
-          <Box>
+      {/* workspace: the scanned project, its snapshot, scanning */}
+      <ToolGroup pl="3" gap="2" flexShrink={0}>
+        {snapshot ? (
+          <Tooltip content={`Scanned folder: ${snapshot.rootDir}`}>
+            <Box minW="0" maxW="140px" flexShrink={0} lineHeight="1.15" css={{ "@media (min-width: 1600px)": { maxWidth: "220px" } }}>
+              <Text fontSize="sm" fontWeight="semibold" truncate letterSpacing="-0.01em">
+                {projectName(snapshot.rootDir)}
+              </Text>
+              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate>
+                {shortPath(snapshot.rootDir)}
+              </Text>
+            </Box>
+          </Tooltip>
+        ) : (
+          <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
+            No project
+          </Text>
+        )}
+        <Box w="1px" h="6" bg="shell.border" flexShrink={0} />
+        <Tooltip content={list ? `Snapshots in ${list.dir}` : "Snapshots"}>
+          <Box flexShrink={0}>
             <Select
               value={current ?? ""}
               onValueChange={onPickSnapshot}
               options={options}
               placeholder={options.length ? "Select snapshot" : "No snapshots found"}
-              width="196px"
+              width="168px"
               size="xs"
             />
           </Box>
@@ -119,9 +116,11 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
             e.target.value = "";
           }}
         />
-        <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} size="xs" onClick={() => fileRef.current?.click()} />
-        <ActionIconButton label="Scan a project…" icon={<IconScan />} size="xs" onClick={onScan} />
-        <ActionIconButton label="Manage snapshots…" icon={<IconHistory />} size="xs" onClick={onManageSnapshots} disabled={!list?.snapshots.length} />
+        <Flex gap="0.5" flexShrink={0}>
+          <ActionIconButton label="Scan a project…" icon={<IconScan />} size="xs" onClick={onScan} />
+          <ActionIconButton label="Manage snapshots…" icon={<IconHistory />} size="xs" onClick={onManageSnapshots} disabled={!list?.snapshots.length} />
+          <ActionIconButton label="Load snapshot file…" icon={<IconUpload />} size="xs" onClick={() => fileRef.current?.click()} />
+        </Flex>
       </ToolGroup>
       {snapshot && (
         <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap" display="none" css={{ "@media (min-width: 2400px)": { display: "block" } }}>
@@ -133,13 +132,13 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
 
       {/* relation filters, with their canvas colours */}
       {/* the relation toggles shrink (scrolling sideways) rather than push the toolbar off-screen */}
-      <Box minW="0" flexShrink={1} overflowX="auto" css={{ scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
+      <FadingRow>
       <SegmentedToggles
         label="Relations"
         items={EDGE_GROUPS.map(({ group, label }) => ({ value: group, label, color: GROUP_COLOR[group], on: enabled[group] }))}
         onToggle={(g) => toggleGroup(g as EdgeGroup)}
       />
-      </Box>
+      </FadingRow>
 
       {/* view options */}
       <ToolGroup>
@@ -169,9 +168,42 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         <ActionIconButton label="Clear canvas" icon={<IconClear />} size="xs" onClick={clear} disabled={!visible.length} />
       </ToolGroup>
 
-      <Button size="sm" rounded="l3" onClick={() => setSearchOpen(true)} disabled={!snapshot} px="4">
+      <Button size="sm" rounded="l3" onClick={() => setSearchOpen(true)} disabled={!snapshot} px="4" shadow="0 1px 2px rgb(15 23 42 / 0.2), inset 0 1px 0 rgb(255 255 255 / 0.12)">
         <IconPlus size={16} /> Add
       </Button>
     </Flex>
+  );
+}
+
+/** A row that scrolls sideways when it doesn't fit (the relation filters), fading out at its end while more is hidden there. */
+function FadingRow({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const mark = () => el.toggleAttribute("data-overflow", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    mark();
+    el.addEventListener("scroll", mark, { passive: true });
+    const ro = new ResizeObserver(mark);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", mark);
+      ro.disconnect();
+    };
+  }, []);
+  return (
+    <Box
+      ref={ref}
+      minW="0"
+      flexShrink={1}
+      overflowX="auto"
+      css={{
+        scrollbarWidth: "none",
+        "&::-webkit-scrollbar": { display: "none" },
+        "&[data-overflow]": { maskImage: "linear-gradient(to right, black calc(100% - 40px), transparent)" },
+      }}
+    >
+      {children}
+    </Box>
   );
 }
