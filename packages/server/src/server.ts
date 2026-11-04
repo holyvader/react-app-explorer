@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { gitOverview, gitRequests, parseDiffRequest } from "@rae/scanner/git";
+import { gitOverview, gitPath, gitRequests, parseDiffRequest } from "@rae/scanner/git";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -58,6 +58,7 @@ const STORAGE_MAX = 32 * 1024 * 1024;
   log(`start: bun ${Bun.version}, ${process.platform} ${release()} ${arch()}, tmp ${tmpdir()}`);
   log(`snapshots: ${snapshotsDir}`);
   log(`tsgo: ${tsgo ? `${tsgo} (${existsSync(tsgo) ? "found" : "MISSING"}, lib.d.ts ${existsSync(join(dirname(tsgo), "lib.d.ts")) ? "found" : "MISSING"})` : "from the typescript package"}`);
+  log(`git: ${gitPath() ?? "not found (diff mode off)"}`);
 }
 
 // The viewer: embedded into the executable at build time, or a dist folder (development).

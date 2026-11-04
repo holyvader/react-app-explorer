@@ -129,6 +129,16 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
   desktop server and the Vite dev plugin; `parseDiffRequest` checks a scan body's `diff` (refs never
   start with `-`: the dev plugin passes them to the CLI as `--base=<ref>`). Types: `GitOverview`,
   `GitRepo`, `GitBranch`, `GitRequest` in @rae/schema.
+- Finding git (`gitPath`): `RAE_GIT`, Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`), PATH, then
+  `/usr/bin/git` — on macOS only when the Command Line Tools / Xcode are installed (else that shim
+  pops up their installer). Missing → `GIT_MISSING` (what to install), shown in the scan dialog; the
+  desktop server logs `git: <path>`. Finder-started apps get PATH=/usr/bin:/bin:…, hence the list.
+- `worktree: true` (`--worktree`): the head is the checkout with uncommitted changes, scanned in place;
+  `changedFiles(root, base)` diffs against the working tree and adds untracked (not ignored) files.
+- Exported commits are pruned on each new export (`pruneTrees`): unused for 7 days, past the 12 most
+  recently used, or half-done for over an hour; reuse touches a tree's mtime.
+- GitLab: verified on gitlab.com (ls-remote ~0.7s for 1.6k MRs; fetching one ~4s). Request refs list
+  open **and** closed requests (git can't tell); the dialog says so.
 - Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
   refs, a monorepo with a workspace link).
 

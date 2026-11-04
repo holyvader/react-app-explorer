@@ -327,6 +327,8 @@ export interface DiffSide {
   ref: string;
   sha: string;
   subject?: string;
+  /** The head is the working tree: the checkout at `sha` plus its uncommitted changes. */
+  worktree?: boolean;
 }
 
 /**

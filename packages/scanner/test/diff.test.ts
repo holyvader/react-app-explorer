@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Snapshot } from "@rae/schema";
 import { scanDiff } from "../src/diffScan.ts";
 import { gitOverview, gitRequests, parseDiffRequest } from "../src/gitApi.ts";
 import { runScanJob, type ScanEvent } from "../src/job.ts";
-import { changedFiles, exportCommit, fetchRequest, git, listBranches, listRequests, mergeBase, repoOf, resolveRef } from "../src/git.ts";
+import { changedFiles, exportCommit, fetchRequest, git, gitPath, listBranches, listRequests, mergeBase, pruneTrees, repoOf, resetGitPath, resolveRef } from "../src/git.ts";
 
 // A small React repo with history: main, a feature branch off it, and main moving on after the branch.
 const ENV = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
@@ -269,5 +269,62 @@ describe("scanDiff: a pull request fetched from origin", () => {
   test("the checkout is named by its branch", async () => {
     const s = await scanDiff(repo, { base: "main", types: false, cache: false, treesDir: trees });
     expect(s.diff!.head.ref).toBe("feature");
+  });
+});
+
+describe("phase 4: finding git, the working tree, pruning exports", () => {
+  test("RAE_GIT picks the git to run", async () => {
+    const real = gitPath()!;
+    expect(existsSync(real)).toBe(true);
+    const was = process.env.RAE_GIT;
+    process.env.RAE_GIT = real;
+    resetGitPath();
+    expect(gitPath()).toBe(real);
+    process.env.RAE_GIT = join(tmp, "no-git-here");
+    resetGitPath();
+    expect(gitPath()).not.toBe(join(tmp, "no-git-here")); // missing: the next place is used
+    if (was === undefined) delete process.env.RAE_GIT;
+    else process.env.RAE_GIT = was;
+    resetGitPath();
+  });
+
+  test("the checkout with uncommitted changes: edits and untracked files count", async () => {
+    writeFileSync(join(repo, "src/Header.tsx"), "export function Header() {\n  return <h2>edited</h2>;\n}\n");
+    writeFileSync(join(repo, "src/Draft.tsx"), "export function Draft() {\n  return null;\n}\n");
+    try {
+      const files = await changedFiles(repo, baseSha);
+      const by = Object.fromEntries(files.map((f) => [f.path, f]));
+      expect(by["src/Draft.tsx"]).toMatchObject({ status: "added", additions: 3 });
+      expect(by["src/Header.tsx"]!.status).toBe("modified");
+      const s = await scanDiff(repo, { base: "main", worktree: true, types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+      expect(s.diff!.head).toMatchObject({ ref: "feature", sha: featureSha, worktree: true });
+      expect(s.diff!.nodes["src/Draft.tsx#Draft"]).toBe("added");
+      expect(s.diff!.nodes["src/Header.tsx#Header"]).toBe("changed");
+      // scanned in place: files open from the checkout
+      expect(s.nodes["src/Draft.tsx#Draft"]!.absPath).toBe(join(repo, "src/Draft.tsx"));
+    } finally {
+      rmSync(join(repo, "src/Draft.tsx"));
+      await sh(["checkout", "-q", "--", "src/Header.tsx"]);
+    }
+  });
+
+  test("pruning: unused for a week, past the most recent N, half-done exports; nothing else", () => {
+    const dir = join(tmp, "prune");
+    mkdirSync(dir);
+    const now = Date.now();
+    const make = (name: string, ageMs: number) => {
+      mkdirSync(join(dir, name));
+      const t = new Date(now - ageMs);
+      utimesSync(join(dir, name), t, t);
+    };
+    const sha = (i: number) => i.toString(16).padStart(40, "a");
+    for (let i = 0; i < 5; i++) make(sha(i), i * 60_000); // 0 newest … 4 oldest
+    make(sha(9), 8 * 24 * 3600_000); // a week+ unused
+    make("aaaaaaaaaaaa-old", 2 * 3600_000); // half-done, 2h old
+    make("aaaaaaaaaaaa-new", 60_000); // half-done, in progress
+    make("not-a-tree", 9 * 24 * 3600_000); // someone else's
+    const removed = pruneTrees(dir, 3, 7 * 24 * 3600_000, now).map((p) => p.slice(dir.length + 1)).sort();
+    expect(removed).toEqual([sha(3), sha(4), sha(9), "aaaaaaaaaaaa-old"].sort());
+    expect(readdirSync(dir).sort()).toEqual([sha(0), sha(1), sha(2), "aaaaaaaaaaaa-new", "not-a-tree"].sort());
   });
 });

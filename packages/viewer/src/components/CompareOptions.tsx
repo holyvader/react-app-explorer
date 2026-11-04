@@ -14,6 +14,7 @@ export interface CompareOptionsProps {
 }
 
 const HEAD = "head:HEAD";
+const WORKTREE = "worktree";
 
 type RequestsState = { path: string; list?: GitRequest[]; loading?: boolean; error?: string };
 
@@ -62,27 +63,35 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
     if (!on || !repo || !base) return undefined;
     const against = fromMergeBase ? "merge-base" : "base";
     if (head.startsWith("req:")) return { base, request: head.slice(4), against };
+    if (head === WORKTREE) return { base, worktree: true, against };
     return { base, head: head.slice(head.indexOf(":") + 1), against };
   }, [on, repo, base, head, fromMergeBase]);
   useEffect(() => onChange(choice), [choice, onChange]);
 
-  if (!repo) return null;
+  // no repo: nothing to compare; no git at all: say what to install
+  if (!repo)
+    return git?.error ? (
+      <Text fontSize="xs" color="fg.muted" px="1">
+        Compare (diff mode) needs git: {git.error}
+      </Text>
+    ) : null;
 
   const branchOptions: SelectOption[] = git!.branches.map((b) => ({ value: b.name, label: `${b.name} — ${b.subject.slice(0, 60)}`, group: b.remote ? "Remote branches" : "Branches" }));
   const headOptions: SelectOption[] = [
     { value: HEAD, label: `The checkout${repo.branch ? ` (${repo.branch})` : ""} — ${repo.head.slice(0, 7)}`, group: "Checked out" },
+    { value: WORKTREE, label: `The checkout with uncommitted changes${repo.dirty ? "" : " (none now)"}`, group: "Checked out" },
     ...git!.branches.map((b) => ({ value: `branch:${b.name}`, label: `${b.name} — ${b.subject.slice(0, 60)}`, group: b.remote ? "Remote branches" : "Branches" })),
     ...(requests ?? []).map((r) => ({
       value: `req:${r.ref}`,
       label: `${r.provider === "github" ? "#" : "!"}${r.number} — ${r.sha.slice(0, 7)}`,
-      group: r.provider === "github" ? "Pull requests" : "Merge requests",
+      group: `${r.provider === "github" ? "Pull requests" : "Merge requests"} (newest first, open and closed)`,
     })),
   ];
   const loadRequests = () => {
     const at = target;
     setRequestsFor({ path: at, loading: true });
     fetchGitRequests(at)
-      .then((r) => setRequestsFor({ path: at, list: r.requests, error: r.error ?? (r.requests.length ? undefined : "No open pull / merge requests on origin") }))
+      .then((r) => setRequestsFor({ path: at, list: r.requests, error: r.error ?? (r.requests.length ? undefined : "No pull / merge requests on origin") }))
       .catch((e: Error) => setRequestsFor({ path: at, error: e.message }));
   };
 
@@ -112,7 +121,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
               Compare
             </Text>
             <Select label="What to compare" value={head} onValueChange={setHead} options={headOptions} width="full" size="sm" />
-            <Button size="xs" variant="outline" rounded="l2" flexShrink={0} onClick={loadRequests} disabled={requestsState.loading || !repo.remote} title={repo.remote ? `List open pull / merge requests on ${repo.remote.url}` : "No origin remote"}>
+            <Button size="xs" variant="outline" rounded="l2" flexShrink={0} onClick={loadRequests} disabled={requestsState.loading || !repo.remote} title={repo.remote ? `List pull / merge requests on ${repo.remote.url} (newest first; git can't tell open from closed ones)` : "No origin remote"}>
               {requestsState.loading ? <Spinner size="xs" /> : null} PRs / MRs
             </Button>
           </Flex>
@@ -128,7 +137,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
           </Flex>
           {head === HEAD && repo.dirty && (
             <Text fontSize="xs" color="diff.changed.fg" pl="80px">
-              The checkout has uncommitted changes: a diff compares commits, so they aren't in it.
+              The checkout has uncommitted changes: they aren't in a diff of its commit. Pick “with uncommitted changes” to include them.
             </Text>
           )}
         </Stack>

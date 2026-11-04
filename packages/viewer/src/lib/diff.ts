@@ -66,8 +66,9 @@ export function changesToShow(s: Snapshot, limit = CHANGES_ON_OPEN): string[] {
   return [...picked, ...[...around, ...rest].slice(0, Math.max(0, limit - picked.length))];
 }
 
-/** A side of the diff in short: `main 1a2b3c4`, a request ref as `#12`. */
-export function sideLabel(ref: string, sha: string): string {
+/** A side of the diff in short: `main 1a2b3c4`, a request ref as `#12`, the working tree as `main + uncommitted`. */
+export function sideLabel(ref: string, sha: string, worktree?: boolean): string {
+  if (worktree) return `${ref.startsWith(sha.slice(0, 4)) ? sha.slice(0, 7) : ref} + uncommitted`;
   if (sha.startsWith(ref)) return sha.slice(0, 7);
   const m = ref.match(/^refs\/(pull|merge-requests)\/(\d+)\/head$/);
   const name = m ? `${m[1] === "pull" ? "#" : "!"}${m[2]}` : ref;

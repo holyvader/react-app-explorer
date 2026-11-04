@@ -1,7 +1,7 @@
-import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative } from "node:path";
+import { delimiter, dirname, join, relative } from "node:path";
 import type { GitBranch, GitRepo, GitRequest } from "@rae/schema";
 
 export type RepoInfo = Omit<GitRepo, "dirty">;
@@ -17,16 +17,67 @@ export type RequestRef = GitRequest;
 
 export class GitError extends Error {}
 
+/** Why git can't run here, for people: what to install. */
+export const GIT_MISSING =
+  process.platform === "darwin"
+    ? "git isn't installed: install the Xcode Command Line Tools (xcode-select --install) or git from Homebrew"
+    : "git isn't installed (or not on PATH): install it from git-scm.com";
+
+let found: string | null | undefined;
+
+/**
+ * The git to run. Apps started from the Finder get a bare PATH (/usr/bin:/bin:…), so the usual
+ * install places are looked at too. On macOS, /usr/bin/git is only a shim: without the Command Line
+ * Tools, running it pops up their installer, so it's used only when they (or Xcode) are there.
+ * `RAE_GIT` overrides. Null when there's no git.
+ */
+export function gitPath(): string | null {
+  if (found !== undefined) return found;
+  const exe = process.platform === "win32" ? "git.exe" : "git";
+  const fromEnv = process.env.RAE_GIT;
+  const pathDirs = (process.env.PATH ?? "").split(delimiter).filter(Boolean);
+  const candidates = [
+    ...(fromEnv ? [fromEnv] : []),
+    ...(process.platform === "darwin" ? ["/opt/homebrew/bin/git", "/usr/local/bin/git"] : []),
+    ...(process.platform === "win32" ? ["C:\\Program Files\\Git\\cmd\\git.exe"] : []),
+    ...pathDirs.map((d) => join(d, exe)),
+    ...(process.platform === "darwin" ? [] : ["/usr/bin/git", "/usr/local/bin/git"]),
+  ];
+  const usable = (p: string) => {
+    if (!existsSync(p)) return false;
+    if (process.platform === "darwin" && p === "/usr/bin/git") return hasDeveloperTools();
+    return true;
+  };
+  found = candidates.find(usable) ?? null;
+  return found;
+}
+
+/** macOS: whether the Command Line Tools or Xcode are installed (so /usr/bin/git runs git, not an installer). */
+function hasDeveloperTools(): boolean {
+  if (existsSync("/Library/Developer/CommandLineTools/usr/bin/git")) return true;
+  try {
+    const dir = execFileSync("/usr/bin/xcode-select", ["-p"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 3000 }).trim();
+    return !!dir && existsSync(join(dir, "usr/bin/git"));
+  } catch {
+    return false;
+  }
+}
+
+/** Forgets the git found (tests, or after the user installed one). */
+export const resetGitPath = () => void (found = undefined);
+
 /** Runs git in `cwd`; resolves to stdout, rejects with git's message. Arguments are passed as a list, never through a shell. Works under Node and Bun. */
 export function git(cwd: string, args: string[], env?: Record<string, string>, timeoutMs = 120_000): Promise<string> {
+  const bin = gitPath();
+  if (!bin) return Promise.reject(new GitError(GIT_MISSING));
   return new Promise((ok, fail) => {
     execFile(
-      "git",
+      bin,
       args,
       { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env }, maxBuffer: 512 * 1024 * 1024, timeout: timeoutMs, windowsHide: true },
       (err, stdout, stderr) => {
         if (!err) return ok(stdout);
-        const why = (err as NodeJS.ErrnoException).code === "ENOENT" ? "git isn't installed (or not on PATH)" : err.killed ? `git ${args[0]} timed out` : String(stderr).trim() || `git ${args[0]} failed`;
+        const why = (err as NodeJS.ErrnoException).code === "ENOENT" ? GIT_MISSING : err.killed ? `git ${args[0]} timed out` : String(stderr).trim() || `git ${args[0]} failed`;
         fail(new GitError(why));
       },
     );
@@ -126,11 +177,16 @@ export interface FileChange {
   deletions: number;
 }
 
-/** Files changed between two commits, renames detected (`-M`), with line counts. */
-export async function changedFiles(root: string, base: string, head: string): Promise<FileChange[]> {
-  const [names, nums] = await Promise.all([
-    git(root, ["diff", "-z", "-M", "--name-status", base, head]),
-    git(root, ["diff", "-z", "-M", "--numstat", base, head]),
+/**
+ * Files changed between two commits, renames detected (`-M`), with line counts. Without `head`:
+ * between `base` and the working tree (uncommitted changes included), untracked files (not ignored) as added.
+ */
+export async function changedFiles(root: string, base: string, head?: string): Promise<FileChange[]> {
+  const range = head ? [base, head] : [base];
+  const [names, nums, untracked] = await Promise.all([
+    git(root, ["diff", "-z", "-M", "--name-status", ...range, "--"]),
+    git(root, ["diff", "-z", "-M", "--numstat", ...range, "--"]),
+    head ? Promise.resolve("") : git(root, ["ls-files", "-z", "--others", "--exclude-standard"]),
   ]);
   const files: FileChange[] = [];
   const parts = names.split("\0");
@@ -157,6 +213,16 @@ export async function changedFiles(root: string, base: string, head: string): Pr
       f.deletions = Number(del) || 0;
     }
   }
+  for (const path of untracked.split("\0").filter(Boolean)) {
+    let additions = 0;
+    try {
+      const text = readFileSync(join(root, path), "utf8");
+      additions = text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0;
+    } catch {
+      /* unreadable (or binary): no line count */
+    }
+    files.push({ path, status: "added", additions, deletions: 0 });
+  }
   return files;
 }
 
@@ -168,8 +234,13 @@ export async function changedFiles(root: string, base: string, head: string): Pr
 export async function exportCommit(root: string, sha: string, cacheDir = join(tmpdir(), "rae-trees")): Promise<string> {
   if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new GitError(`Not a commit sha: ${sha}`);
   const dir = join(cacheDir, sha);
-  if (existsSync(join(dir, ".rae-tree"))) return realpathSync(dir);
+  if (existsSync(join(dir, ".rae-tree"))) {
+    const now = new Date();
+    utimesSync(dir, now, now); // recently used: kept by pruneTrees
+    return realpathSync(dir);
+  }
   mkdirSync(cacheDir, { recursive: true });
+  pruneTrees(cacheDir);
   const work = mkdtempSync(join(cacheDir, `${sha.slice(0, 12)}-`));
   try {
     const files = join(work, "files");
@@ -184,6 +255,40 @@ export async function exportCommit(root: string, sha: string, cacheDir = join(tm
     rmSync(work, { recursive: true, force: true });
   }
   return realpathSync(dir);
+}
+
+/** How many exported commits are kept, and for how long since last used. */
+export const TREES_KEPT = 12;
+export const TREES_MAX_AGE_MS = 7 * 24 * 3600_000;
+
+/**
+ * Removes exported commits not used for a week, the oldest past the most recent `keep`, and
+ * exports left half-done (a temporary folder older than an hour). Never touches anything else.
+ */
+export function pruneTrees(cacheDir: string, keep = TREES_KEPT, maxAgeMs = TREES_MAX_AGE_MS, now = Date.now()): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(cacheDir);
+  } catch {
+    return [];
+  }
+  const removed: string[] = [];
+  const trees: { path: string; used: number }[] = [];
+  for (const name of entries) {
+    const path = join(cacheDir, name);
+    let used: number;
+    try {
+      used = statSync(path).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (/^[0-9a-f]{40,64}$/.test(name)) trees.push({ path, used });
+    else if (/^[0-9a-f]{12}-/.test(name) && now - used > 3600_000) removed.push(path); // an export that never finished
+  }
+  trees.sort((a, b) => b.used - a.used);
+  trees.forEach((t, i) => (i >= keep || now - t.used > maxAgeMs) && removed.push(t.path));
+  for (const path of removed) rmSync(path, { recursive: true, force: true });
+  return removed;
 }
 
 /**

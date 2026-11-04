@@ -73,7 +73,7 @@ export interface ScanSettings {
   types: boolean;
   merge: boolean;
   /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
-  diff?: { base?: string; head?: string; request?: string; against?: "merge-base" | "base" };
+  diff?: { base?: string; head?: string; request?: string; worktree?: boolean; against?: "merge-base" | "base" };
 }
 
 /** The git repo a folder is in, with its branches. */

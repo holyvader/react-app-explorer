@@ -162,7 +162,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         // streamed to the viewer line by line. The scan finishes even if the page goes away.
         const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"]), ...(body.merge !== false ? [] : ["--no-merge"]),
           // refs checked by parseDiffRequest (never an option); passed as `--flag=value`, one argument each
-          ...(diff ? [...(diff.base ? [`--base=${diff.base}`] : []), ...(diff.head ? [`--head=${diff.head}`] : []), ...(diff.request ? [`--request=${diff.request}`] : []), ...(diff.against === "base" ? ["--against-tip"] : []), ...(!diff.base && !diff.head && !diff.request ? ["--head=HEAD"] : [])] : [])];
+          ...(diff ? [...(diff.base ? [`--base=${diff.base}`] : []), ...(diff.head ? [`--head=${diff.head}`] : []), ...(diff.request ? [`--request=${diff.request}`] : []), ...(diff.worktree ? ["--worktree"] : []), ...(diff.against === "base" ? ["--against-tip"] : []), ...(!diff.base && !diff.head && !diff.request && !diff.worktree ? ["--head=HEAD"] : [])] : [])];
         const child = spawn(bun, args, { cwd: repoRoot });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/x-ndjson");

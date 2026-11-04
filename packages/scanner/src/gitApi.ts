@@ -1,7 +1,9 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import type { GitOverview, GitRequest } from "@rae/schema";
-import { git, listBranches, listRequests, repoOf } from "./git.ts";
+import { git, GIT_MISSING, gitPath, listBranches, listRequests, repoOf } from "./git.ts";
+
+export { gitPath };
 
 /*
  * What the viewer's scan dialog asks about git (GET /api/git, /api/git/requests), shared by the
@@ -12,6 +14,7 @@ import { git, listBranches, listRequests, repoOf } from "./git.ts";
 const folderOf = (path: string) => (existsSync(path) && statSync(path).isFile() ? dirname(path) : path);
 
 export async function gitOverview(path: string): Promise<GitOverview> {
+  if (!gitPath()) return { repo: null, branches: [], error: GIT_MISSING };
   try {
     const info = await repoOf(folderOf(path));
     if (!info) return { repo: null, branches: [] };
@@ -50,7 +53,7 @@ function isSafeRef(v: string): boolean {
 }
 
 /** The `diff` of a scan request body, checked: undefined when absent; throws on anything malformed. */
-export function parseDiffRequest(raw: unknown): { base?: string; head?: string; request?: string; against?: "merge-base" | "base" } | undefined {
+export function parseDiffRequest(raw: unknown): { base?: string; head?: string; request?: string; worktree?: boolean; against?: "merge-base" | "base" } | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== "object") throw new Error("diff must be an object");
   const d = raw as Record<string, unknown>;
@@ -63,5 +66,5 @@ export function parseDiffRequest(raw: unknown): { base?: string; head?: string; 
   const request = ref("request");
   if (request && !/^refs\/(pull|merge-requests)\/\d+\/head$/.test(request)) throw new Error("Invalid request ref");
   const against = d.against === "base" ? "base" : "merge-base";
-  return { base: ref("base"), head: ref("head"), request, against };
+  return { base: ref("base"), head: ref("head"), request, ...(d.worktree === true ? { worktree: true } : {}), against };
 }

@@ -25,6 +25,8 @@ export interface ScanDiffRequest {
   base?: string;
   head?: string;
   request?: string;
+  /** The checkout with its uncommitted changes. */
+  worktree?: boolean;
   against?: "merge-base" | "base";
 }
 

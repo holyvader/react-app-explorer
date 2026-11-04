@@ -144,7 +144,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" flexShrink={1} minW="0" fontFamily="mono" fontSize="11px" color="diff.changed.fg" bg="diff.changed.subtle">
             <IconBranch size={12} />
             <Text as="span" truncate>
-              {sideLabel(snapshot.diff.base.ref, snapshot.diff.compared).split(" ")[0]} ← {sideLabel(snapshot.diff.head.ref, snapshot.diff.head.sha)}
+              {sideLabel(snapshot.diff.base.ref, snapshot.diff.compared).split(" ")[0]} ← {sideLabel(snapshot.diff.head.ref, snapshot.diff.head.sha, snapshot.diff.head.worktree)}
             </Text>
           </Flex>
         </Tooltip>

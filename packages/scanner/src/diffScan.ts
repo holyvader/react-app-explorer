@@ -10,6 +10,8 @@ export interface DiffScanOptions extends ScanOptions {
   base?: string;
   /** What's compared: a branch or sha. Default: `HEAD`. */
   head?: string;
+  /** Compare the working tree (the checkout with its uncommitted changes, untracked files included) instead of a commit. */
+  worktree?: boolean;
   /** Or a pull / merge request's ref (`refs/pull/12/head`, `refs/merge-requests/3/head`): fetched from origin first. */
   request?: string;
   /** Compare against the merge-base of base and head (default, what a pull / merge request shows), or the base's tip. */
@@ -34,7 +36,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   const baseRef = opts.base ?? repo.defaultBranch;
   if (!baseRef) throw new GitError("No base branch: pass one (no origin/HEAD, main or master)");
   // the checkout is named by its branch (when it's on one)
-  const asked = opts.request ?? opts.head ?? "HEAD";
+  const asked = opts.worktree ? "HEAD" : (opts.request ?? opts.head ?? "HEAD");
   const headRef = asked === "HEAD" && repo.branch ? repo.branch : asked;
   opts.onProgress?.(opts.request ? `fetching ${opts.request}` : `resolving ${headRef}`);
   const headSha = opts.request ? await fetchRequest(repo.root, { ref: opts.request }) : await resolveRef(repo.root, asked);
@@ -47,16 +49,17 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   // the scanned folder inside the repo ("" for the repo itself)
   const sub = relative(repo.root, dir).split(sep).join("/");
   const at = (tree: string) => (sub ? join(tree, sub) : tree);
+  // the working tree is scanned where it is (it's the checkout); commits from their exported copies
   const [baseTree, headTree, changes, baseInfo, headInfo] = await Promise.all([
     exportCommit(repo.root, compared, opts.treesDir),
-    exportCommit(repo.root, headSha, opts.treesDir),
-    changedFiles(repo.root, compared, headSha),
+    opts.worktree ? Promise.resolve(repo.root) : exportCommit(repo.root, headSha, opts.treesDir),
+    changedFiles(repo.root, compared, opts.worktree ? undefined : headSha),
     commitInfo(repo.root, baseTip),
     commitInfo(repo.root, headSha),
   ]);
   opts.signal?.throwIfAborted();
 
-  const { base: _b, head: _h, request: _r, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
+  const { base: _b, head: _h, request: _r, worktree: _w, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
   // progress counts follow the head's scan (the one the UI waits on)
   const baseSnap = await scan(at(baseTree), { ...scanOpts, types: false, onCount: undefined });
   const head = await scanStructure(at(headTree), { ...scanOpts, types: false });
@@ -70,7 +73,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
 
   const diff = diffSnapshots(baseSnap, head.snapshot, files, {
     base: { ref: baseRef, sha: baseTip, subject: baseInfo.subject },
-    head: { ref: headRef, sha: headSha, subject: headInfo.subject },
+    head: { ref: headRef, sha: headSha, subject: opts.worktree ? "uncommitted changes" : headInfo.subject, ...(opts.worktree ? { worktree: true } : {}) },
     against,
     compared,
   });
@@ -78,7 +81,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   // the project's paths: the checkout when it is the head, else the exported copy (what the head has)
   const headRoot = at(headTree);
   const finish = (s: Snapshot): Snapshot => {
-    if (headSha === repo.head) for (const n of Object.values(s.nodes)) if (n.absPath?.startsWith(headRoot)) n.absPath = dir + n.absPath.slice(headRoot.length);
+    if (headSha === repo.head && !opts.worktree) for (const n of Object.values(s.nodes)) if (n.absPath?.startsWith(headRoot)) n.absPath = dir + n.absPath.slice(headRoot.length);
     return { ...s, rootDir: dir, diff };
   };
   const structure = finish(head.snapshot);

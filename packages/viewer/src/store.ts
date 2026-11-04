@@ -575,7 +575,7 @@ useExplorer.subscribe((s, prev) => {
 // ---- storing the current diagram (per project) -------------------------------------------
 
 /** Per project; a diff (base → head) keeps a diagram of its own. */
-const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}` : ""}`;
+const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}${s.diff.head.worktree ? "+wt" : ""}` : ""}`;
 
 function loadDiagram(key: string): DiagramState | undefined {
   const saved = readJson<DiagramState | null>(key, null);
