@@ -10,6 +10,8 @@ export interface DiffScanOptions extends ScanOptions {
   base?: string;
   /** What's compared: a branch or sha. Default: `HEAD`. */
   head?: string;
+  /** What the host CLI said about `request`: kept on the diff's head side. */
+  requestInfo?: { title?: string; author?: string; url?: string };
   /** Compare the working tree (the checkout with its uncommitted changes, untracked files included) instead of a commit. */
   worktree?: boolean;
   /** Or a pull / merge request's ref (`refs/pull/12/head`, `refs/merge-requests/3/head`): fetched from origin first. */
@@ -59,7 +61,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   ]);
   opts.signal?.throwIfAborted();
 
-  const { base: _b, head: _h, request: _r, worktree: _w, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
+  const { base: _b, head: _h, request: _r, requestInfo, worktree: _w, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
   // progress counts follow the head's scan (the one the UI waits on)
   const baseSnap = await scan(at(baseTree), { ...scanOpts, types: false, onCount: undefined });
   const head = await scanStructure(at(headTree), { ...scanOpts, types: false });
@@ -73,7 +75,13 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
 
   const diff = diffSnapshots(baseSnap, head.snapshot, files, {
     base: { ref: baseRef, sha: baseTip, subject: baseInfo.subject },
-    head: { ref: headRef, sha: headSha, subject: opts.worktree ? "uncommitted changes" : headInfo.subject, ...(opts.worktree ? { worktree: true } : {}) },
+    head: {
+      ref: headRef,
+      sha: headSha,
+      subject: opts.worktree ? "uncommitted changes" : headInfo.subject,
+      ...(opts.worktree ? { worktree: true } : {}),
+      ...(requestOf(opts.request, requestInfo) ?? {}),
+    },
     against,
     compared,
   });
@@ -88,4 +96,11 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   onStructure?.(structure);
   if (opts.types === false) return structure;
   return finish(await addTypes(head, scanOpts));
+}
+
+/** A request ref as the diff's `head.request`: its number and host, with the CLI's title, author, link. */
+function requestOf(ref: string | undefined, info: DiffScanOptions["requestInfo"]): { request: NonNullable<SnapshotDiff["head"]["request"]> } | undefined {
+  const m = ref?.match(/^refs\/(pull|merge-requests)\/(\d+)\/head$/);
+  if (!m) return undefined;
+  return { request: { number: Number(m[2]), provider: m[1] === "pull" ? "github" : "gitlab", ...info } };
 }

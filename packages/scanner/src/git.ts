@@ -97,7 +97,8 @@ export async function repoOf(dir: string): Promise<RepoInfo | undefined> {
     git(root, ["rev-parse", "HEAD"]).then((s) => s.trim(), () => ""),
     git(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]).then((s) => s.trim() || undefined, () => undefined),
     git(root, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).then((s) => s.trim() || undefined, () => undefined),
-    git(root, ["remote", "get-url", "origin"]).then((s) => s.trim() || undefined, () => undefined),
+    // as configured (not rewritten by url.*.insteadOf): it names the host the user works with
+    git(root, ["config", "--get", "remote.origin.url"]).then((s) => s.trim() || undefined, () => undefined),
   ]);
   let defaultBranch = originHead?.replace(/^origin\//, "");
   if (!defaultBranch) {

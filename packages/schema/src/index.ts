@@ -329,6 +329,8 @@ export interface DiffSide {
   subject?: string;
   /** The head is the working tree: the checkout at `sha` plus its uncommitted changes. */
   worktree?: boolean;
+  /** The head is a pull / merge request: what the CLI said about it (when it was listed by one). */
+  request?: { number: number; provider: "github" | "gitlab"; title?: string; author?: string; url?: string };
 }
 
 /**
@@ -424,4 +426,47 @@ export interface GitRequest {
   provider: "github" | "gitlab";
   ref: string;
   sha: string;
+  /** Listed by the GitHub / GitLab CLI (git's refs don't carry these): */
+  title?: string;
+  author?: string;
+  headBranch?: string;
+  /** The branch it merges into: the diff's natural base. */
+  baseBranch?: string;
+  draft?: boolean;
+  /** Git can't tell; the CLIs list open ones. */
+  state?: "open";
+  url?: string;
+  updatedAt?: string;
+  /** Who listed it: git (`ls-remote`), `gh` or `glab`. */
+  source?: Exclude<RequestSource, "auto">;
+}
+
+/** Where pull / merge requests are listed from. `auto`: the host's CLI when installed and logged in, else git. */
+export type RequestSource = "auto" | "git" | "gh" | "glab";
+
+/** A host CLI here: installed (where, which version), and logged in to the repo's host. */
+export interface GitToolStatus {
+  installed: boolean;
+  path?: string;
+  version?: string;
+  authed?: boolean;
+  /** Why it can't be used (what to run). */
+  error?: string;
+}
+
+/** GET /api/git/tools?path=…: the CLIs, and what `auto` picks for the repo. */
+export interface GitTools {
+  host?: string;
+  gh: GitToolStatus;
+  glab: GitToolStatus;
+  auto: Exclude<RequestSource, "auto">;
+}
+
+/** GET /api/git/requests?path=…&source=…: the requests, and the source that listed them. */
+export interface GitRequestList {
+  requests: GitRequest[];
+  source: Exclude<RequestSource, "auto">;
+  error?: string;
+  /** Auto fell back to git: why (not installed, not logged in, the CLI failed). */
+  fallback?: string;
 }

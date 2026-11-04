@@ -1,4 +1,4 @@
-import type { GitOverview, GitRequest, ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import type { GitOverview, GitRequestList, GitTools, RequestSource, ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
 import { applyDiff } from "./diff.ts";
 
 export interface SnapshotList {
@@ -73,7 +73,7 @@ export interface ScanSettings {
   types: boolean;
   merge: boolean;
   /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
-  diff?: { base?: string; head?: string; request?: string; worktree?: boolean; against?: "merge-base" | "base" };
+  diff?: { base?: string; head?: string; request?: string; requestInfo?: { title?: string; author?: string; url?: string }; worktree?: boolean; against?: "merge-base" | "base" };
 }
 
 /** The git repo a folder is in, with its branches. */
@@ -84,9 +84,17 @@ export async function fetchGit(path: string): Promise<GitOverview> {
   return data;
 }
 
-/** Open pull / merge requests on origin (from the refs GitHub / GitLab publish; a network call). */
-export async function fetchGitRequests(path: string): Promise<{ requests: GitRequest[]; error?: string }> {
-  const res = await fetch(`/api/git/requests?path=${encodeURIComponent(path)}`);
+/** The GitHub / GitLab CLIs here (installed, logged in) and what Auto picks; `refresh` re-checks them. */
+export async function fetchGitTools(path: string, refresh = false): Promise<GitTools> {
+  const res = await fetch(`/api/git/tools?path=${encodeURIComponent(path)}${refresh ? "&refresh=1" : ""}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "checking the CLIs failed");
+  return data;
+}
+
+/** Pull / merge requests on origin, from `source` (a network call): git's refs, or the host's CLI. */
+export async function fetchGitRequests(path: string, source: RequestSource = "auto"): Promise<GitRequestList> {
+  const res = await fetch(`/api/git/requests?path=${encodeURIComponent(path)}&source=${source}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "listing requests failed");
   return data;

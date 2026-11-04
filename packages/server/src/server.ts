@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { gitOverview, gitPath, gitRequests, parseDiffRequest } from "@rae/scanner/git";
+import { gitOverview, gitPath, gitRequests, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -210,8 +210,8 @@ async function api(req: Request, url: URL): Promise<Response> {
     } catch {
       return json({ error: "Invalid URL" }, 400);
     }
-    // editors only: never hand arbitrary URLs (file:, http:, other apps) to the OS
-    if (!EDITOR_SCHEMES.has(url.protocol)) return json({ error: `Not an editor link: ${url.protocol}` }, 400);
+    // editors, and pull / merge request pages: never hand arbitrary URLs (file:, http:, other apps) to the OS
+    if (!EDITOR_SCHEMES.has(url.protocol) && !isRequestUrl(url.href)) return json({ error: `Not an editor or pull / merge request link: ${url.protocol}` }, 400);
     // no control characters or quotes in what goes to the OS (the URL is otherwise percent-encoded)
     // oxlint-disable-next-line no-control-regex -- deliberately matching control characters
     if (/[\u0000-\u001f\u007f"]/.test(url.href)) return json({ error: "Invalid characters in the editor link" }, 400);
@@ -238,10 +238,15 @@ async function api(req: Request, url: URL): Promise<Response> {
   }
 
   // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)
-  if (path === "/api/git" || path === "/api/git/requests") {
+  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools") {
     const q = url.searchParams.get("path");
     if (!q) return json({ error: "path is required" }, 400);
-    return json(path === "/api/git" ? await gitOverview(resolve(q)) : await gitRequests(resolve(q)));
+    if (path === "/api/git") return json(await gitOverview(resolve(q)));
+    if (path === "/api/git/tools") {
+      if (url.searchParams.get("refresh")) refreshTools();
+      return json(await gitTools(resolve(q)));
+    }
+    return json(await gitRequests(resolve(q), (url.searchParams.get("source") ?? "auto") as Parameters<typeof gitRequests>[1]));
   }
 
   if (path === "/api/fs") {

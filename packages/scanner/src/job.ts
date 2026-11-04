@@ -27,6 +27,8 @@ export interface ScanDiffRequest {
   request?: string;
   /** The checkout with its uncommitted changes. */
   worktree?: boolean;
+  /** What the host CLI said about `request` (shown in the viewer). */
+  requestInfo?: { title?: string; author?: string; url?: string };
   against?: "merge-base" | "base";
 }
 

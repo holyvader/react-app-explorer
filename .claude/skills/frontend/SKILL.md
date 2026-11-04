@@ -155,5 +155,8 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 - Scan dialog: `CompareOptions` (shown when the folder is in a git repo): base branch, what to compare
   (the checkout, a branch, or a PR / MR listed on demand by "PRs / MRs"), from the merge-base or the
   base's tip; warns when the checkout is dirty. It sends `diff` with the scan (`ScanSettings.diff`).
+  "PRs / MRs" picks the source (Auto — default —, git, GitHub CLI, GitLab CLI; remembered per repo in
+  `rae.requestSource:<root>`); listed requests pre-select the newest and set Base to its target branch.
+  The toolbar's `DiffChip` shows `#12 title` and an open-on-GitHub/GitLab button (`openRequestPage`).
 - Try it: `bun run scan packages/viewer --base <ref> --head <ref> --out <dir>` and a dev server with
   `RAE_SNAPSHOTS=<dir>`; swap base and head (`--against-tip`) for removals to look at.

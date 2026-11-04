@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "vite";
-import { gitOverview, gitRequests, parseDiffRequest } from "../scanner/src/gitApi.ts";
+import { gitOverview, gitRequests, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
 
 const SOURCE_FILE = /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", "out", "coverage", ".turbo", ".explorer"]);
@@ -128,7 +128,16 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         const url = new URL(req.url ?? "/", "http://localhost");
         const q = url.searchParams.get("path");
         if (!q) return json(res, 400, { error: "path is required" });
-        json(res, 200, url.pathname === "/requests" ? await gitRequests(resolve(q)) : await gitOverview(resolve(q)));
+        if (url.pathname === "/tools" && url.searchParams.get("refresh")) refreshTools();
+        json(
+          res,
+          200,
+          url.pathname === "/requests"
+            ? await gitRequests(resolve(q), (url.searchParams.get("source") ?? "auto") as Parameters<typeof gitRequests>[1])
+            : url.pathname === "/tools"
+              ? await gitTools(resolve(q))
+              : await gitOverview(resolve(q)),
+        );
       });
 
       server.middlewares.use("/api/fs", (req, res) => {
@@ -162,7 +171,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         // streamed to the viewer line by line. The scan finishes even if the page goes away.
         const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"]), ...(body.merge !== false ? [] : ["--no-merge"]),
           // refs checked by parseDiffRequest (never an option); passed as `--flag=value`, one argument each
-          ...(diff ? [...(diff.base ? [`--base=${diff.base}`] : []), ...(diff.head ? [`--head=${diff.head}`] : []), ...(diff.request ? [`--request=${diff.request}`] : []), ...(diff.worktree ? ["--worktree"] : []), ...(diff.against === "base" ? ["--against-tip"] : []), ...(!diff.base && !diff.head && !diff.request && !diff.worktree ? ["--head=HEAD"] : [])] : [])];
+          ...(diff ? [...(diff.base ? [`--base=${diff.base}`] : []), ...(diff.head ? [`--head=${diff.head}`] : []), ...(diff.request ? [`--request=${diff.request}`] : []), ...(diff.requestInfo ? [`--request-info=${JSON.stringify(diff.requestInfo)}`] : []), ...(diff.worktree ? ["--worktree"] : []), ...(diff.against === "base" ? ["--against-tip"] : []), ...(!diff.base && !diff.head && !diff.request && !diff.worktree ? ["--head=HEAD"] : [])] : [])];
         const child = spawn(bun, args, { cwd: repoRoot });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/x-ndjson");

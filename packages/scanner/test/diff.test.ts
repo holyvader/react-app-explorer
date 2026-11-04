@@ -216,7 +216,7 @@ describe("the scan dialog's git API", () => {
   });
 
   test("requests: none without a remote (an explanation instead)", async () => {
-    expect(await gitRequests(repo)).toEqual({ requests: [], error: "No origin remote" });
+    expect(await gitRequests(repo)).toMatchObject({ requests: [], source: "git", error: "No origin remote" });
   });
 
   test("diff requests are checked: refs are never options, request refs only of their form", () => {
@@ -326,5 +326,121 @@ describe("phase 4: finding git, the working tree, pruning exports", () => {
     const removed = pruneTrees(dir, 3, 7 * 24 * 3600_000, now).map((p) => p.slice(dir.length + 1)).sort();
     expect(removed).toEqual([sha(3), sha(4), sha(9), "aaaaaaaaaaaa-old"].sort());
     expect(readdirSync(dir).sort()).toEqual([sha(0), sha(1), sha(2), "aaaaaaaaaaaa-new", "not-a-tree"].sort());
+  });
+});
+
+describe("phase 5: pull / merge requests from the GitHub / GitLab CLIs", () => {
+  // fake CLIs: they log their arguments and answer like gh / glab do
+  const fake = (name: string, script: string) => {
+    const path = join(tmp, `fake-${name}`);
+    writeFileSync(path, `#!/bin/sh\necho "$@" >> ${join(tmp, `${name}.log`)}\n${script}\n`, { mode: 0o755 });
+    return path;
+  };
+  const ghJson = () => JSON.stringify([
+    { number: 12, title: "Footer, and a title on Header", author: { login: "alice" }, headRefOid: featureSha, headRefName: "feature", baseRefName: "main", isDraft: false, url: "https://github.com/acme/demo/pull/12", updatedAt: "2026-11-01T10:00:00Z" },
+    { number: 11, title: "Draft thing", author: { login: "bob" }, headRefOid: baseSha, headRefName: "draft", baseRefName: "develop", isDraft: true, url: "https://github.com/acme/demo/pull/11", updatedAt: "2026-10-30T10:00:00Z" },
+  ]);
+  const env = { gh: process.env.RAE_GH, glab: process.env.RAE_GLAB };
+  const use = async (gh?: string, glab?: string) => {
+    process.env.RAE_GH = gh ?? join(tmp, "no-gh");
+    process.env.RAE_GLAB = glab ?? join(tmp, "no-glab");
+    const { refreshTools } = await import("../src/gitApi.ts");
+    refreshTools();
+  };
+  afterAll(async () => {
+    for (const [k, v] of [["RAE_GH", env.gh], ["RAE_GLAB", env.glab]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    (await import("../src/gitApi.ts")).refreshTools();
+  });
+
+  test("remote URLs → host and project path", async () => {
+    const { remoteRepo } = await import("../src/hostCli.ts");
+    expect(remoteRepo("https://github.com/acme/demo.git")).toEqual({ host: "github.com", path: "acme/demo" });
+    expect(remoteRepo("git@gitlab.com:group/sub/proj.git")).toEqual({ host: "gitlab.com", path: "group/sub/proj" });
+    expect(remoteRepo("ssh://git@git.example.com:2222/team/app")).toEqual({ host: "git.example.com", path: "team/app" });
+    expect(remoteRepo("not a url")).toBeUndefined();
+  });
+
+  test("Auto: gh when it's logged in; titles, authors, target branches; the repo named explicitly", async () => {
+    const { gitRequests, gitTools } = await import("../src/gitApi.ts");
+    await use(fake("gh", `case "$1" in --version) echo "gh version 2.101.0";; auth) exit 0;; pr) echo '${ghJson()}';; esac`));
+    await sh(["remote", "add", "origin", "https://github.com/acme/demo.git"]);
+    try {
+      const tools = await gitTools(repo);
+      expect(tools).toMatchObject({ host: "github.com", auto: "gh", gh: { installed: true, authed: true, version: "2.101.0" }, glab: { installed: false } });
+      const list = await gitRequests(repo); // auto
+      expect(list.source).toBe("gh");
+      expect(list.requests[0]).toMatchObject({ number: 12, ref: "refs/pull/12/head", sha: featureSha, title: "Footer, and a title on Header", author: "alice", baseBranch: "main", draft: false, state: "open", source: "gh" });
+      expect(list.requests[1]!.draft).toBe(true);
+      const log = readFileSync(join(tmp, "gh.log"), "utf8");
+      expect(log).toContain("auth status --hostname github.com");
+      expect(log).toContain("pr list -R github.com/acme/demo --state open");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("Auto falls back to git when the CLI isn't logged in (and says why); an explicit CLI reports the error", async () => {
+    const { gitRequests, gitTools } = await import("../src/gitApi.ts");
+    await use(undefined, fake("glab", `case "$1" in --version) echo "glab 1.50.0";; auth) echo "not logged in" >&2; exit 1;; esac`));
+    const host = join(tmp, "host-gl.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, `${featureSha}:refs/merge-requests/5/head`]);
+    // a GitLab-looking remote that is the local bare repo underneath (git's insteadOf), so ls-remote works offline
+    await sh(["remote", "add", "origin", "https://gitlab.example.com/team/app.git"]);
+    await sh(["config", `url.${host}.insteadOf`, "https://gitlab.example.com/team/app.git"]);
+    try {
+      expect((await gitTools(repo)).auto).toBe("git");
+      const list = await gitRequests(repo, "auto");
+      expect(list.source).toBe("git");
+      expect(list.fallback).toContain("isn't logged in to gitlab.example.com");
+      expect(list.requests.map((r) => r.ref)).toEqual(["refs/merge-requests/5/head"]);
+      const explicit = await gitRequests(repo, "glab");
+      expect(explicit).toMatchObject({ source: "glab", requests: [] });
+      expect(explicit.error).toBeDefined();
+      expect((await gitRequests(repo, "nope" as never)).error).toContain("Unknown source");
+    } finally {
+      await sh(["config", "--unset", `url.${host}.insteadOf`]);
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("glab: merge requests of a self-hosted GitLab, named by the project's URL", async () => {
+    const { gitRequests } = await import("../src/gitApi.ts");
+    const MRS = JSON.stringify([{ iid: 7, title: "Ship it", author: { username: "carol" }, sha: featureSha, source_branch: "feature", target_branch: "main", draft: false, web_url: "https://gitlab.example.com/team/app/-/merge_requests/7", updated_at: "2026-11-02T08:00:00Z" }]);
+    await use(undefined, fake("glab", `case "$1" in --version) echo "glab 1.50.0";; auth) exit 0;; mr) echo '${MRS}';; esac`));
+    await sh(["remote", "add", "origin", "git@gitlab.example.com:team/app.git"]);
+    try {
+      const list = await gitRequests(repo, "auto"); // unknown host: whichever CLI is logged in there
+      expect(list.source).toBe("glab");
+      expect(list.requests[0]).toMatchObject({ number: 7, provider: "gitlab", ref: "refs/merge-requests/7/head", title: "Ship it", author: "carol", baseBranch: "main" });
+      expect(readFileSync(join(tmp, "glab.log"), "utf8")).toContain("mr list -R https://gitlab.example.com/team/app --per-page 100 --output json");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("request links: PR / MR pages only; request info cleaned up", async () => {
+    const { isRequestUrl } = await import("../src/gitApi.ts");
+    expect(isRequestUrl("https://github.com/acme/demo/pull/12")).toBe(true);
+    expect(isRequestUrl("https://gitlab.example.com/team/app/-/merge_requests/7")).toBe(true);
+    for (const bad of ["http://github.com/acme/demo/pull/12", "https://github.com/acme/demo", "file:///etc/passwd", "https://u:p@github.com/a/b/pull/1", "javascript:alert(1)"]) expect(isRequestUrl(bad)).toBe(false);
+    const d = parseDiffRequest({ request: "refs/pull/12/head", requestInfo: { title: "a\u0007b", author: "x", url: "https://evil.example/steal" } })!;
+    expect(d.requestInfo).toEqual({ title: "a b", author: "x", url: undefined });
+  });
+
+  test("the diff keeps what the CLI said about its request", async () => {
+    const host = join(tmp, "host-pr5.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, `${featureSha}:refs/pull/12/head`]);
+    await sh(["remote", "add", "origin", host]);
+    try {
+      const s = await scanDiff(repo, { base: "main", request: "refs/pull/12/head", requestInfo: { title: "Footer", author: "alice", url: "https://github.com/acme/demo/pull/12" }, types: false, cache: false, treesDir: trees });
+      expect(s.diff!.head.request).toEqual({ number: 12, provider: "github", title: "Footer", author: "alice", url: "https://github.com/acme/demo/pull/12" });
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
   });
 });

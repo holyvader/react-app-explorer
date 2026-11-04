@@ -1,6 +1,8 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
-import type { GitOverview, GitRequest } from "@rae/schema";
+import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
+import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
+import type { ScanDiffRequest } from "./job.ts";
 import { git, GIT_MISSING, gitPath, listBranches, listRequests, repoOf } from "./git.ts";
 
 export { gitPath };
@@ -25,15 +27,84 @@ export async function gitOverview(path: string): Promise<GitOverview> {
   }
 }
 
-/** Open pull / merge requests on origin (a network call: asked for separately, it may be slow or fail offline). */
-export async function gitRequests(path: string): Promise<{ requests: GitRequest[]; error?: string }> {
+/** Tool statuses, briefly remembered (`auth status` may ask the host): per tool and host. */
+const statusCache = new Map<string, { at: number; status: GitToolStatus }>();
+const STATUS_TTL = 60_000;
+async function cachedStatus(tool: HostTool, host: string | undefined, cwd: string): Promise<GitToolStatus> {
+  const key = `${tool}@${host ?? ""}`;
+  const hit = statusCache.get(key);
+  if (hit && Date.now() - hit.at < STATUS_TTL) return hit.status;
+  const status = await toolStatus(tool, host, cwd);
+  statusCache.set(key, { at: Date.now(), status });
+  return status;
+}
+/** Forgets tool statuses and paths (after installing or logging in to one). */
+export function refreshTools() {
+  statusCache.clear();
+  resetToolPaths();
+}
+
+/** The host CLIs for the folder's repo, and what Auto picks: the host's CLI when installed and logged in, else git. */
+export async function gitTools(path: string): Promise<GitTools> {
+  const info = await repoOf(folderOf(path)).catch(() => undefined);
+  const remote = info?.remote ? remoteRepo(info.remote.url) : undefined;
+  const cwd = info?.root ?? folderOf(path);
+  const [ghStatus, glabStatus] = await Promise.all([cachedStatus("gh", remote?.host, cwd), cachedStatus("glab", remote?.host, cwd)]);
+  const statuses = { gh: ghStatus, glab: glabStatus };
+  const auto = toolFor(info?.remote?.provider).find((t) => statuses[t].installed && statuses[t].authed) ?? "git";
+  return { host: remote?.host, gh: ghStatus, glab: glabStatus, auto };
+}
+
+/**
+ * Pull / merge requests on origin. `git`: the refs the host publishes (`ls-remote`: open and closed,
+ * no titles). `gh` / `glab`: open ones with title, author, target branch. `auto` (default): the
+ * host's CLI when installed and logged in, else git — and git when the CLI fails (`fallback` says why).
+ */
+export async function gitRequests(path: string, source: RequestSource = "auto"): Promise<GitRequestList> {
+  if (!SOURCES.includes(source)) return { requests: [], source: "git", error: `Unknown source: ${source}` };
+  const viaGit = async (fallback?: string): Promise<GitRequestList> => {
+    try {
+      const info = await repoOf(folderOf(path));
+      if (!info) return { requests: [], source: "git", error: "Not in a git repository", fallback };
+      if (!info.remote) return { requests: [], source: "git", error: "No origin remote", fallback };
+      return { requests: (await listRequests(info.root)).slice(0, 200).map((r) => ({ ...r, source: "git" as const })), source: "git", ...(fallback ? { fallback } : {}) };
+    } catch (e) {
+      return { requests: [], source: "git", error: (e as Error).message, fallback };
+    }
+  };
+  if (source === "git") return viaGit();
+  const info = await repoOf(folderOf(path)).catch(() => undefined);
+  if (!info) return { requests: [], source: source === "auto" ? "git" : source, error: "Not in a git repository" };
+  const remote = info.remote ? remoteRepo(info.remote.url) : undefined;
+  if (!remote) return source === "auto" ? viaGit() : { requests: [], source, error: "No origin remote" };
+
+  let tool: HostTool;
+  if (source === "auto") {
+    const tools = await gitTools(path);
+    if (tools.auto === "git") {
+      const wanted = toolFor(info.remote?.provider)[0]!;
+      const why = tools[wanted].installed ? tools[wanted].error : `${wanted} isn't installed`;
+      return viaGit(why);
+    }
+    tool = tools.auto;
+  } else tool = source;
+
   try {
-    const info = await repoOf(folderOf(path));
-    if (!info) return { requests: [], error: "Not in a git repository" };
-    if (!info.remote) return { requests: [], error: "No origin remote" };
-    return { requests: (await listRequests(info.root)).slice(0, 200) };
+    const requests = tool === "gh" ? await listViaGh(info.root, remote) : await listViaGlab(info.root, remote);
+    return { requests, source: tool };
   } catch (e) {
-    return { requests: [], error: (e as Error).message };
+    const why = `${tool}: ${(e as Error).message}`;
+    return source === "auto" ? viaGit(why) : { requests: [], source: tool, error: why };
+  }
+}
+
+/** A pull / merge request's page (what the CLIs link to): https, and a PR / MR path — nothing else is opened. */
+export function isRequestUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && !u.username && !u.password && /^\/[^?#]+\/(pull|-\/merge_requests)\/\d+\/?$/.test(u.pathname);
+  } catch {
+    return false;
   }
 }
 
@@ -53,7 +124,7 @@ function isSafeRef(v: string): boolean {
 }
 
 /** The `diff` of a scan request body, checked: undefined when absent; throws on anything malformed. */
-export function parseDiffRequest(raw: unknown): { base?: string; head?: string; request?: string; worktree?: boolean; against?: "merge-base" | "base" } | undefined {
+export function parseDiffRequest(raw: unknown): ScanDiffRequest | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== "object") throw new Error("diff must be an object");
   const d = raw as Record<string, unknown>;
@@ -66,5 +137,14 @@ export function parseDiffRequest(raw: unknown): { base?: string; head?: string; 
   const request = ref("request");
   if (request && !/^refs\/(pull|merge-requests)\/\d+\/head$/.test(request)) throw new Error("Invalid request ref");
   const against = d.against === "base" ? "base" : "merge-base";
-  return { base: ref("base"), head: ref("head"), request, ...(d.worktree === true ? { worktree: true } : {}), against };
+  // what the CLI said about the request (shown, linked): plain strings, a request page link only
+  let requestInfo: { title?: string; author?: string; url?: string } | undefined;
+  if (request && d.requestInfo && typeof d.requestInfo === "object") {
+    const r = d.requestInfo as Record<string, unknown>;
+    // control characters become spaces
+    const text = (v: unknown, max: number) => (typeof v === "string" && v ? [...v].map((c) => (c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f ? " " : c)).join("").slice(0, max) : undefined);
+    const url = typeof r.url === "string" && isRequestUrl(r.url) ? r.url : undefined;
+    requestInfo = { title: text(r.title, 300), author: text(r.author, 100), url };
+  }
+  return { base: ref("base"), head: ref("head"), request, ...(requestInfo ? { requestInfo } : {}), ...(d.worktree === true ? { worktree: true } : {}), against };
 }

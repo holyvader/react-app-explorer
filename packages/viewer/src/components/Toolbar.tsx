@@ -24,6 +24,7 @@ import {
   IconHistory,
   IconLayout,
   IconLibrary,
+  IconOpen,
   IconPlus,
   IconRedo,
   IconScan,
@@ -34,7 +35,8 @@ import {
 } from "@rae/design-system/icons";
 import { useRef, useState } from "react";
 import { sideLabel } from "../lib/diff.ts";
-import { EDITORS, type EditorKind } from "../lib/editor.ts";
+import type { SnapshotDiff } from "@rae/schema";
+import { EDITORS, type EditorKind, openRequestPage } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { useExplorer } from "../store.ts";
 
@@ -137,18 +139,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           </Box>
         </Flex>
       </Tooltip>
-      {snapshot?.diff && (
-        <Tooltip
-          content={`Comparing ${snapshot.diff.head.ref} (${snapshot.diff.head.sha.slice(0, 7)}${snapshot.diff.head.subject ? `: ${snapshot.diff.head.subject}` : ""})\nwith ${snapshot.diff.against === "merge-base" ? `its merge-base with ${snapshot.diff.base.ref}` : snapshot.diff.base.ref} (${snapshot.diff.compared.slice(0, 7)})`}
-        >
-          <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" flexShrink={1} minW="0" fontFamily="mono" fontSize="11px" color="diff.changed.fg" bg="diff.changed.subtle">
-            <IconBranch size={12} />
-            <Text as="span" truncate>
-              {sideLabel(snapshot.diff.base.ref, snapshot.diff.compared).split(" ")[0]} ← {sideLabel(snapshot.diff.head.ref, snapshot.diff.head.sha, snapshot.diff.head.worktree)}
-            </Text>
-          </Flex>
-        </Tooltip>
-      )}
+      {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
         ref={fileRef}
@@ -309,6 +300,40 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
         )}
       </Box>
       {children}
+    </Flex>
+  );
+}
+
+/** What a diff compares: `main ← #12 Fix footer` (a PR / MR, with a link to its page), `main ← feature 1a2b3c4`. */
+function DiffChip({ diff }: { diff: SnapshotDiff }) {
+  const req = diff.head.request;
+  const head = req ? `${req.provider === "github" ? "#" : "!"}${req.number}${req.title ? ` ${req.title}` : ""}` : sideLabel(diff.head.ref, diff.head.sha, diff.head.worktree);
+  const tip = [
+    req?.title ? `${req.provider === "github" ? "Pull" : "Merge"} request ${req.provider === "github" ? "#" : "!"}${req.number}: ${req.title}${req.author ? ` (${req.author})` : ""}` : undefined,
+    `Comparing ${diff.head.ref} (${diff.head.sha.slice(0, 7)}${diff.head.subject ? `: ${diff.head.subject}` : ""})`,
+    `with ${diff.against === "merge-base" ? `its merge-base with ${diff.base.ref}` : diff.base.ref} (${diff.compared.slice(0, 7)})`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return (
+    <Flex align="center" gap="0.5" flexShrink={1} minW="0">
+      <Tooltip content={tip}>
+        <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" minW="0" fontFamily="mono" fontSize="11px" color="diff.changed.fg" bg="diff.changed.subtle">
+          <IconBranch size={12} />
+          <Text as="span" truncate maxW="360px">
+            {sideLabel(diff.base.ref, diff.compared).split(" ")[0]} ← {head}
+          </Text>
+        </Flex>
+      </Tooltip>
+      {req?.url && (
+        <ActionIconButton
+          label={`Open ${req.provider === "github" ? "the pull request on GitHub" : "the merge request on GitLab"}`}
+          icon={<IconOpen />}
+          size="2xs"
+          color="diff.changed.fg"
+          onClick={() => void openRequestPage(req.url!).catch((e: Error) => useExplorer.getState().notify(e.message))}
+        />
+      )}
     </Flex>
   );
 }

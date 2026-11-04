@@ -4,6 +4,7 @@ import { parseArgs } from "node:util";
 import { discoverProject } from "./project.ts";
 import { runScanJob } from "./job.ts";
 import { scanDiff } from "./diffScan.ts";
+import { parseDiffRequest } from "./gitApi.ts";
 import { scan, writeSnapshot } from "./scan.ts";
 
 const { values, positionals } = parseArgs({
@@ -19,6 +20,7 @@ const { values, positionals } = parseArgs({
     base: { type: "string" },
     head: { type: "string" },
     request: { type: "string" },
+    "request-info": { type: "string" },
     worktree: { type: "boolean", default: false },
     "against-tip": { type: "boolean", default: false },
     workers: { type: "string" },
@@ -42,6 +44,7 @@ Options:
   --no-merge          keep files that declare one exported thing as file + declaration
   --base <ref>        diff mode: compare against this branch / sha (default: the repo's default branch)
   --head <ref>        diff mode: what to compare (default: HEAD); either flag turns diff mode on
+  --request-info <j>  diff mode: the request's title / author / url as JSON (shown in the viewer)
   --request <ref>     diff mode: a pull / merge request (refs/pull/N/head, refs/merge-requests/N/head), fetched from origin
   --worktree          diff mode: compare the checkout with its uncommitted changes (untracked files too)
   --against-tip       diff mode: compare with the base's tip instead of the merge-base
@@ -74,7 +77,14 @@ if (values.events) {
       signal: controller.signal,
       diff:
         values.base || values.head || values.request || values.worktree
-          ? { base: values.base, head: values.head, request: values.request, worktree: values.worktree, against: values["against-tip"] ? "base" : "merge-base" }
+          ? (parseDiffRequest({
+              base: values.base,
+              head: values.head,
+              request: values.request,
+              requestInfo: values["request-info"] ? JSON.parse(values["request-info"]) : undefined,
+              worktree: values.worktree,
+              against: values["against-tip"] ? "base" : "merge-base",
+            }) ?? undefined)
           : undefined,
     },
     (e) => process.stdout.write(JSON.stringify(e) + "\n"),

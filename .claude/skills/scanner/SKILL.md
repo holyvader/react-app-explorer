@@ -139,6 +139,17 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
   recently used, or half-done for over an hour; reuse touches a tree's mtime.
 - GitLab: verified on gitlab.com (ls-remote ~0.7s for 1.6k MRs; fetching one ~4s). Request refs list
   open **and** closed requests (git can't tell); the dialog says so.
+- **Host CLIs** (`hostCli.ts`, optional): `gh` / `glab` list **open** PRs / MRs with title, author,
+  draft, target branch, link (`gh pr list -R host/owner/repo --json …`, `glab mr list -R https://host/path
+  --output json`); commits are still fetched with git. Found like git (`RAE_GH` / `RAE_GLAB`, Homebrew,
+  PATH); `toolStatus` = installed + `auth status --hostname <host>` (cached 60s; `refreshTools()`).
+  `gitRequests(path, source)`: `auto` (default) = the host's CLI (github → gh, gitlab → glab, other hosts:
+  whichever is logged in) when installed and logged in, else git with `fallback` saying why; `git`;
+  or an explicit CLI (errors reported, no fallback). `GET /api/git/tools`, `/api/git/requests?source=`.
+  The host comes from `remote.origin.url` as configured (not `insteadOf`-rewritten). The request's
+  title / author / link travel as `diff.requestInfo` (cleaned by `parseDiffRequest`; links must pass
+  `isRequestUrl`: https PR / MR pages) → `diff.head.request`. The desktop `/api/open` also opens
+  `isRequestUrl` links. Verified with real gh on pmndrs/zustand (3 PRs listed in ~0.9s, a PR diffed in ~1.8s).
 - Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
   refs, a monorepo with a workspace link).
 

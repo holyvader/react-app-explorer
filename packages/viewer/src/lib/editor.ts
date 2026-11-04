@@ -27,6 +27,16 @@ export function editorUrl(editor: EditorKind, absPath: string, line = 1, col = 1
  * Opens a file in the editor. In a browser the editor's URL scheme (idea://, vscode://…) is simply
  * followed; the desktop app's web view won't open other apps' schemes, so its server asks the OS.
  */
+/** A pull / merge request's page: a new browser tab; in the desktop app, the default browser (the server opens it). */
+export async function openRequestPage(url: string): Promise<void> {
+  if (!serverIsDesktop) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const res = await fetch("/api/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Couldn't open the page (${res.status})`);
+}
+
 export async function openInEditor(url: string): Promise<void> {
   if (!serverIsDesktop) {
     window.location.href = url;
