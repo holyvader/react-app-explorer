@@ -49,6 +49,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
   const out: FileExtract = {
     absPath,
     stamp,
+    hash: Bun.hash(text).toString(36),
     directives: [],
     serverOnly: false,
     clientOnly: false,
@@ -402,6 +403,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       isAsync: false,
       loc: src.loc(decl.id.start),
       pos: decl.id.start,
+      ...src.extent(decl.start, decl.end),
       params: [],
       hooks: [],
       functions: [],
@@ -499,6 +501,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       isAsync,
       loc: src.loc((c.nameNode ?? node).start),
       pos: (c.nameNode ?? node).start,
+      ...src.extent(Math.min((c.nameNode ?? node).start, node.start), node.end),
       params,
       returnType: c.fn?.returnType ? src.slice(c.fn.returnType.typeAnnotation, 160) : undefined,
       hooks: [],

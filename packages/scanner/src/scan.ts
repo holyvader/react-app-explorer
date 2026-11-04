@@ -184,6 +184,9 @@ export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
     nodeCount: Object.keys(snapshot.nodes).length,
     edgeCount: snapshot.edges.length,
     durationMs: snapshot.stats.durationMs,
+    ...(snapshot.diff
+      ? { diff: { base: `${snapshot.diff.base.ref} ${snapshot.diff.compared.slice(0, 7)}`, head: `${snapshot.diff.head.ref} ${snapshot.diff.head.sha.slice(0, 7)}`, changes: Object.keys(snapshot.diff.nodes).length } }
+      : {}),
   });
   writeFileSync(indexPath, JSON.stringify(index, null, 2));
   return path;

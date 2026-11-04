@@ -38,6 +38,7 @@ export function mergeSingleExportModules(nodes: Record<NodeId, GraphNode>, edges
       dynamicApis: union(m.dynamicApis, d.dynamicApis),
       navigations: m.navigations || d.navigations ? [...(m.navigations ?? []), ...(d.navigations ?? [])] : undefined,
       invalidates: m.invalidates || d.invalidates ? [...(m.invalidates ?? []), ...(d.invalidates ?? [])] : undefined,
+      hash: m.hash ?? d.hash, // the whole file: imports and module-level code count as changes too
       cache: d.cache ?? m.cache,
       middleware: m.middleware ?? d.middleware,
     };

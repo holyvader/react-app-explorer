@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { discoverProject } from "./project.ts";
 import { runScanJob } from "./job.ts";
+import { scanDiff } from "./diffScan.ts";
 import { scan, writeSnapshot } from "./scan.ts";
 
 const { values, positionals } = parseArgs({
@@ -15,6 +16,9 @@ const { values, positionals } = parseArgs({
     "no-types": { type: "boolean", default: false },
     "no-cache": { type: "boolean", default: false },
     "no-merge": { type: "boolean", default: false },
+    base: { type: "string" },
+    head: { type: "string" },
+    "against-tip": { type: "boolean", default: false },
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
     stdout: { type: "boolean", default: false },
@@ -34,6 +38,9 @@ Options:
   --no-types          skip the tsgo type pass (syntactic types only)
   --no-cache          ignore and don't write the incremental cache
   --no-merge          keep files that declare one exported thing as file + declaration
+  --base <ref>        diff mode: compare against this branch / sha (default: the repo's default branch)
+  --head <ref>        diff mode: what to compare (default: HEAD); either flag turns diff mode on
+  --against-tip       diff mode: compare with the base's tip instead of the merge-base
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
   --stdout            print the snapshot JSON to stdout instead of writing a file
@@ -68,7 +75,8 @@ if (values.events) {
 }
 
 const warnings: string[] = [];
-const snapshot = await scan(input, {
+const diffMode = !!(values.base || values.head);
+const snapshot = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(input, o))({
   tsconfig: values.tsconfig,
   include: values.include,
   exclude: values.exclude,
@@ -90,6 +98,11 @@ if (values.stdout) {
     `✔ ${snapshot.stats.files} files → ${nodes.length} nodes (${count("component")} components, ${count("hook")} hooks, ${count("serverAction")} actions, ${count("external")} external), ${snapshot.edges.length} edges in ${snapshot.stats.durationMs}ms`,
   );
   console.log(`  ${path}`);
+  if (snapshot.diff) {
+    const d = snapshot.diff;
+    const tally = (k: string) => Object.values(d.nodes).filter((c) => c === k).length;
+    console.log(`  diff ${d.base.ref} ${d.compared.slice(0, 7)} → ${d.head.ref} ${d.head.sha.slice(0, 7)}: ${d.files.length} files, +${tally("added")} ~${tally("changed")} -${tally("removed")} nodes, +${d.edges.added.length} -${d.edges.removed.length} edges`);
+  }
 }
 if (values.stats) console.error("phases (ms):", snapshot.stats.phases, "cache hits:", snapshot.stats.cacheHits);
 for (const w of warnings.slice(0, 20)) console.error(`⚠ ${w}`);

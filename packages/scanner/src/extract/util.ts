@@ -62,6 +62,10 @@ export class SourceText {
     }
     return { line: lo + 1, col: offset - this.lineStarts[lo]! + 1 };
   }
+  /** Where a declaration ends (line) and a hash of its source text: a diff tells changed declarations by it. */
+  extent(start: number, end: number): { endLine: number; hash: string } {
+    return { endLine: this.loc(Math.max(start, end - 1)).line, hash: Bun.hash(this.text.slice(start, end)).toString(36) };
+  }
   /** Source text as written (line breaks kept, common indentation removed), truncated. For previews. */
   raw(n: N, max = 4000): string {
     if (!n) return "";

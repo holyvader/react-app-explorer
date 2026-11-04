@@ -103,6 +103,26 @@ The viewer treats `file: true` nodes as files (`isFileNode` / `fileIdOf` in grap
 frames, route frames, the tree (a decl row where the file was) and the card's role / boundary badges.
 Tests that check file → declaration structure pass `mergeSingleExport: false`.
 
+## Diff mode (`git.ts`, `diff.ts`, `diffScan.ts`)
+`rae-scan <dir> --base main [--head feature] [--against-tip]` / `scanDiff(dir, { base, head })`:
+the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
+- **Plain git only** (no gh / glab): `for-each-ref` (branches), `ls-remote origin refs/pull/*/head
+  refs/merge-requests/*/head` (GitHub PRs / GitLab MRs, no titles), `fetch origin <that ref>` (into
+  FETCH_HEAD only), `merge-base`, `diff -z -M --name-status/--numstat`. Arguments as a list, refs
+  checked with `rev-parse --verify --end-of-options`. **Never change the user's repo**: no checkout,
+  worktree, branch or ref.
+- Each commit is exported with a temporary index (`read-tree` + `checkout-index --prefix`) into
+  `$TMPDIR/rae-trees/<sha>` (reused). Its node_modules are the checkout's, linked package by package;
+  workspace links (into the repo, outside node_modules) become **relative** links into the exported
+  tree, so a monorepo's own packages are read at that commit and get the same ids as a normal scan.
+- Compared against the merge-base by default (what the PR / MR shows). The base is scanned without
+  types. When the head is the checked-out commit, `absPath`s point at the checkout.
+- Changes: ids match (after git's renames map `old#X` → `new#X`); `changed` = different `hash`
+  (declaration source; for files and merged nodes the whole file) or kind / boundary / role / route
+  rendering. Edges compare by kind + ends + importType. Removed nodes are kept in `diff.removed`.
+- Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
+  refs, a monorepo with a workspace link).
+
 ## Adding things
 - **New condition kind**: add to `ConditionKind` (schema) → push in `JsxAnalyzer` → `formatCondition` / `CONDITION_LABEL` in `packages/viewer/src/lib/conditions.ts` → test.
 - Relations: `imports`, `declares`, `renders`, `usesHook`, `invokes` (calls, `new`, handler references, module-level calls), `invokesAction` (invokes a server action). Schema v1 called the last two `calls`/`callsAction`; the viewer upgrades old snapshots in `normalizeSnapshot`.

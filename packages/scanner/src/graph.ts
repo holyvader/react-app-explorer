@@ -34,6 +34,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       filePath: rel(f.absPath),
       absPath: f.absPath,
       loc: { line: 1, col: 1 },
+      hash: f.hash,
       nextRole: nextRoleOf(f.absPath, info),
       directives: f.directives.length ? f.directives : undefined,
     };
@@ -57,6 +58,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         filePath: rel(f.absPath),
         absPath: f.absPath,
         loc: d.loc,
+        endLine: d.endLine,
+        hash: d.hash,
         moduleId: id,
         exported: !!exportNames,
         exportNames,

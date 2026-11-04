@@ -223,6 +223,9 @@ export interface GraphNode {
   specifier?: string;
   absPath?: string;
   loc?: Loc;
+  /** Declarations: their last line. Files and declarations: a hash of their source text (diffs tell changed ones by it). */
+  endLine?: number;
+  hash?: string;
   moduleType?: ModuleType;
   nextRole?: NextRole;
   /**
@@ -309,10 +312,43 @@ export interface Snapshot {
   /** Next.js settings that change how routes render (`cacheComponents` in next.config). */
   next?: { cacheComponents?: boolean };
   stats: ScanStats;
+  /** A diff snapshot: the head's graph, and what changed against the base. */
+  diff?: SnapshotDiff;
   /** How it was scanned: `mergeSingleExport` — files declaring one exported thing became that declaration. */
   options?: { mergeSingleExport?: boolean };
   nodes: Record<NodeId, GraphNode>;
   edges: Edge[];
+}
+
+export type ChangeKind = "added" | "removed" | "changed";
+
+/** A commit a diff compares: the ref as asked for (`main`, `refs/pull/12/head`), its sha and subject. */
+export interface DiffSide {
+  ref: string;
+  sha: string;
+  subject?: string;
+}
+
+/**
+ * What changed between two commits (a branch or pull / merge request against its base). The snapshot
+ * holding it is the head's; `removed` keeps what only the base had, so UIs can draw it as ghosts.
+ */
+export interface SnapshotDiff {
+  base: DiffSide;
+  head: DiffSide;
+  /** The commit compared against: the merge-base of base and head (what the request's own diff shows), or base itself. */
+  against: "merge-base" | "base";
+  compared: string;
+  /** Node id (the head's) → how it changed. Unchanged nodes aren't listed. */
+  nodes: Record<NodeId, ChangeKind>;
+  /** Nodes only the base had, as they were (ids as in the base). */
+  removed: Record<NodeId, GraphNode>;
+  /** Base id → head id, for nodes in renamed files. */
+  renamed: Record<NodeId, NodeId>;
+  /** Edges only the head has, and edges only the base had (base edges use head ids where renamed). */
+  edges: { added: Edge[]; removed: Edge[] };
+  /** Changed files under the scanned folder (paths relative to it). */
+  files: { path: string; status: "added" | "modified" | "deleted" | "renamed"; from?: string; additions: number; deletions: number }[];
 }
 
 export interface SnapshotIndexEntry {
@@ -323,6 +359,8 @@ export interface SnapshotIndexEntry {
   nodeCount: number;
   edgeCount: number;
   durationMs: number;
+  /** Diff snapshots: what they compare (refs and short shas), and how many nodes changed. */
+  diff?: { base: string; head: string; changes: number };
 }
 
 /**

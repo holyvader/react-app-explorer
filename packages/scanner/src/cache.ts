@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { FileExtract } from "./extract/types.ts";
 
 /** Bump when extract output changes shape/semantics to invalidate caches. */
-export const EXTRACT_VERSION = 13; // 13: "use cache", cacheLife / cacheTag, revalidateTag / updateTag, plain fetch()
+export const EXTRACT_VERSION = 14; // 14: declarations' endLine + source hash (diffs). 13: 13: "use cache", cacheLife / cacheTag, revalidateTag / updateTag, plain fetch()
 
 export function cachePath(rootDir: string) {
   return join(rootDir, ".explorer", "cache", `extract-v${EXTRACT_VERSION}.json`);
