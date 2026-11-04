@@ -125,7 +125,8 @@ interface ExplorerState {
    * `direction`: new elements go below (children) / above (parents) the anchor, fitted in beside
    * the diagram (up to EXPANSION_LIMIT of them) instead of a full re-layout.
    */
-  addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; anchor?: Anchor; direction?: "up" | "down" }) => void;
+  /** `fit`: the view fits the ids (or only `fitTo`) once placed; `focus`: centres on one. */
+  addNodes: (ids: string[], opts?: { select?: string; focus?: string; fit?: boolean; fitTo?: string[]; anchor?: Anchor; direction?: "up" | "down" }) => void;
   hideNode: (id: string, opts?: { keepContents?: boolean }) => void;
   /** Removes several elements in one undoable step. */
   hideNodes: (ids: string[], opts?: { keepContents?: boolean }) => void;
@@ -170,7 +171,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -244,7 +245,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     menu: null,
     past: [],
     future: [],
-    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true },
+    // the relation filter, kept (groups added since default to on)
+    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true, ...readJson<Partial<EnabledGroups>>(KEYS.enabled, {}) },
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),
@@ -323,7 +325,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         selectedId: opts?.select ?? s.selectedId,
         selection: opts?.select ? [opts.select] : s.selection,
         focusId: opts?.focus ?? s.focusId,
-        fitIds: opts?.fit ? known : s.fitIds,
+        fitIds: opts?.fit ? (opts.fitTo ?? known) : s.fitIds,
       };
       if (!added.length) return set(patch);
       record();
@@ -423,6 +425,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       }
       // direct parents / children are fitted in beside the diagram (a grid when there are several);
       // everything up to the root / down to the leaves gets a full layout
+      if (dir === "parents" && !deep && fresh.length) {
+        // the view goes to what was added: one parent is selected and centred, several are fitted
+        const only = fresh.length === 1 ? fresh[0] : undefined;
+        return get().addNodes([id, ...ids], only ? { select: only, focus: only, anchor: id, direction: "up" } : { fit: true, fitTo: fresh, anchor: id, direction: "up" });
+      }
       get().addNodes([id, ...ids], { fit: ids.length > 0, anchor: id, direction: deep ? undefined : dir === "parents" ? "up" : "down" });
     },
 
@@ -454,7 +461,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
     cancelPending: () => set({ pending: undefined }),
 
-    toggleGroup: (g) => redraw({ enabled: { ...get().enabled, [g]: !get().enabled[g] } }, null),
+    toggleGroup: (g) => {
+      const enabled = { ...get().enabled, [g]: !get().enabled[g] };
+      localStorage.setItem(KEYS.enabled, JSON.stringify(enabled));
+      redraw({ enabled }, null);
+    },
 
     notify: (message) => {
       clearTimeout(noticeTimer);

@@ -45,6 +45,9 @@ export function unwrap(n: N): N {
   return n;
 }
 
+/** A hash of code ignoring its whitespace (like `git diff -w`): re-indenting isn't a change. */
+export const codeHash = (code: string) => Bun.hash(code.replace(/\s+/g, "")).toString(36);
+
 export class SourceText {
   private lineStarts: number[];
   constructor(readonly text: string) {
@@ -64,7 +67,7 @@ export class SourceText {
   }
   /** Where a declaration ends (line) and a hash of its source text: a diff tells changed declarations by it. */
   extent(start: number, end: number): { endLine: number; hash: string } {
-    return { endLine: this.loc(Math.max(start, end - 1)).line, hash: Bun.hash(this.text.slice(start, end)).toString(36) };
+    return { endLine: this.loc(Math.max(start, end - 1)).line, hash: codeHash(this.text.slice(start, end)) };
   }
   /** Source text as written (line breaks kept, common indentation removed), truncated. For previews. */
   raw(n: N, max = 4000): string {

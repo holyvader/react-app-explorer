@@ -1,8 +1,9 @@
-import { Box, Button, Flex, Select, type SelectOption, Spinner, Stack, Switch, Text } from "@rae/design-system";
+import { Button, Flex, SearchSelect, Select, type SelectOption, Spinner, Stack, Switch, SwitchField, Text } from "@rae/design-system";
 import { IconBranch } from "@rae/design-system/icons";
 import type { GitOverview, GitRequest, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
 import { useEffect, useMemo, useState } from "react";
 import { fetchGit, fetchGitRequests, fetchGitTools, type ScanSettings } from "../lib/api.ts";
+import { branchOptions, branchPrefix } from "../lib/branches.ts";
 
 /** What "Compare" sends: undefined while off (a plain scan). */
 export type CompareChoice = ScanSettings["diff"];
@@ -106,9 +107,18 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
     ) : null;
 
   const branchNames = new Set(git!.branches.map((b) => b.name));
-  const branchOptions: SelectOption[] = git!.branches.map((b) => ({ value: b.name, label: `${b.name} — ${b.subject.slice(0, 60)}`, group: b.remote ? "Remote branches" : "Branches" }));
+  const baseOptions = branchOptions(git!.branches, (name) => name);
   const listed = requests?.list;
   const viaCli = !!listed && listed.source !== "git";
+  // requests keep their order (newest first) within each group; groups in order of first appearance
+  const requestOptions = (list: GitRequest[], groupOf: (r: GitRequest) => string): SelectOption[] => {
+    const groups = new Map<string, SelectOption[]>();
+    for (const r of list) {
+      const g = groupOf(r);
+      groups.set(g, [...(groups.get(g) ?? []), { value: `req:${r.ref}`, label: requestLabel(r), group: g }]);
+    }
+    return [...groups.values()].flat();
+  };
   const requestLabel = (r: GitRequest) => {
     const num = `${r.provider === "github" ? "#" : "!"}${r.number}`;
     if (!r.title) return `${num} — ${r.sha.slice(0, 7)}`;
@@ -117,14 +127,13 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
   const headOptions: SelectOption[] = [
     { value: HEAD, label: `The checkout${repo.branch ? ` (${repo.branch})` : ""} — ${repo.head.slice(0, 7)}`, group: "Checked out" },
     { value: WORKTREE, label: `The checkout with uncommitted changes${repo.dirty ? "" : " (none now)"}`, group: "Checked out" },
-    ...git!.branches.map((b) => ({ value: `branch:${b.name}`, label: `${b.name} — ${b.subject.slice(0, 60)}`, group: b.remote ? "Remote branches" : "Branches" })),
-    ...(listed?.requests ?? []).map((r) => ({
-      value: `req:${r.ref}`,
-      label: requestLabel(r),
-      group: viaCli
-        ? `Open ${r.provider === "github" ? "pull" : "merge"} requests (${TOOL_NAME[listed!.source]})`
-        : `${r.provider === "github" ? "Pull" : "Merge"} requests (git: newest first, open and closed)`,
-    })),
+    // requests first once listed (what "List" was pressed for), grouped by their branch's prefix
+    ...requestOptions(listed?.requests ?? [], (r) => {
+      const what = viaCli ? `Open ${r.provider === "github" ? "pull" : "merge"} requests` : `${r.provider === "github" ? "Pull" : "Merge"} requests (git, open and closed)`;
+      const prefix = r.headBranch ? branchPrefix(r.headBranch) : undefined;
+      return prefix ? `${what} · ${prefix}` : what;
+    }),
+    ...branchOptions(git!.branches, (name) => `branch:${name}`),
   ];
 
   // Auto's pick, in words: "GitHub CLI", or "git (no CLI logged in)"
@@ -166,30 +175,31 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
 
   return (
     <Stack gap="2.5" borderWidth="1px" borderColor={on ? "diff.changed.solid" : "border"} rounded="md" px="3" py="2.5">
-      <Flex align="center" gap="3">
-        <Box flex="1" minW="0">
+      <SwitchField
+        size="sm"
+        ariaLabel="Compare (diff mode)"
+        label={
           <Flex align="center" gap="1.5" fontSize="sm">
             <IconBranch size={14} /> Compare (diff mode)
           </Flex>
-          <Text fontSize="xs" color="fg.muted">
-            Scan two commits of {repo.root.split("/").pop()} and show what changed: a branch or pull / merge request against its base.
-          </Text>
-        </Box>
-        <Switch size="sm" label="Compare (diff mode)" checked={on} onCheckedChange={setOn} />
-      </Flex>
+        }
+        hint={`Scan two commits of ${repo.root.split("/").pop()} and show what changed: a branch or pull / merge request against its base.`}
+        checked={on}
+        onCheckedChange={setOn}
+      />
       {on && (
         <Stack gap="2" fontSize="sm">
           <Flex align="center" gap="2">
             <Text w="72px" color="fg.muted" flexShrink={0}>
               Base
             </Text>
-            <Select label="Base branch" value={base} onValueChange={setBase} options={branchOptions} width="full" size="sm" />
+            <SearchSelect label="Base branch" value={base} onValueChange={setBase} options={baseOptions} width="full" size="sm" placeholder="Search branches…" emptyText="No branch matches" />
           </Flex>
           <Flex align="center" gap="2">
             <Text w="72px" color="fg.muted" flexShrink={0}>
               Compare
             </Text>
-            <Select
+            <SearchSelect
               label="What to compare"
               value={head}
               onValueChange={(v) => {
@@ -200,6 +210,8 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
               options={headOptions}
               width="full"
               size="sm"
+              placeholder="Search branches, PRs / MRs…"
+              emptyText="No branch or request matches"
             />
           </Flex>
           <Flex align="center" gap="2">

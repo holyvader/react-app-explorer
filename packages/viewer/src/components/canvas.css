@@ -30,9 +30,19 @@
   transition: transform 220ms var(--ease), width 220ms var(--ease), height 220ms var(--ease);
 }
 
-/* Selection: everything not selected or related fades. */
-.rae-canvas[data-selection] .react-flow__node:not(.selected):not(.rae-related) {
-  opacity: 0.32;
+/* Selection: everything not selected or related fades — under a veil of canvas colour, never
+   `opacity`. A translucent node gets a compositing layer of its own in WebKit (the desktop app),
+   rasterised at 1× and scaled by the diagram's zoom: every faded node went blurry. A veil is
+   plain paint, sharp at any zoom, and looks the same (68% canvas ≈ opacity 0.32). */
+.rae-canvas[data-selection] .react-flow__node:not(.selected):not(.rae-related) > :is(.rae-card, .rae-frame)::after,
+.rae-canvas[data-selection] .rae-edge-label:not([data-related])::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--canvas) 68%, transparent);
+  pointer-events: none;
+  z-index: 20;
 }
 .rae-canvas[data-selection] .react-flow__edge:not(.rae-edge--related) {
   opacity: 0.18;
@@ -295,7 +305,7 @@
 .rae-edge-label[data-kind="invokesAction"] { --e: var(--chakra-colors-relation-invokes-action); }
 .rae-edge-label[data-kind="declares"] { --e: var(--chakra-colors-relation-declares); }
 .rae-edge-label[data-related] b { font-weight: 500; }
-.rae-canvas[data-selection] .rae-edge-label:not([data-related]) { opacity: 0.18; }
+.rae-canvas[data-selection] .rae-edge-label:not([data-related])::after { inset: 0; background: color-mix(in srgb, var(--canvas) 82%, transparent); }
 
 /* ---- canvas chrome: relation filters, zoom, history, legend, minimap ------------------- */
 .rae-canvas .react-flow__panel { margin: 12px; }
@@ -482,7 +492,16 @@
 /* removed: a ghost of what the base had */
 .react-flow__node:not(.selected) .rae-card[data-change="removed"],
 .react-flow__node:not(.selected) .rae-frame[data-change="removed"] { border-style: dashed; }
-.rae-card[data-change="removed"] > :not(.rae-change), .rae-frame[data-change="removed"] > :not(.rae-change) { opacity: 0.55; }
+/* its contents dimmed under a veil (not `opacity`: WebKit would rasterise it blurry, see the selection fade) */
+.rae-card[data-change="removed"]::before, .rae-frame[data-change="removed"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--chakra-colors-card-bg) 45%, transparent);
+  pointer-events: none;
+  z-index: 2; /* over the body (1), under the letter and actions (2, later in the box) */
+}
 .rae-card[data-change="removed"] .rae-name { text-decoration: line-through; text-decoration-color: var(--d); text-decoration-thickness: 2px; }
 /* the A / M / D letter on the top-left corner */
 .rae-change {

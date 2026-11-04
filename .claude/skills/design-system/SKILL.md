@@ -15,7 +15,7 @@ src/theme.ts          createSystem(defaultConfig, config): fonts + semantic toke
 src/provider.tsx      DesignSystemProvider (wrap the app root once)
 src/colorMode.ts      dark / light: useColorMode, setColorMode, applyStoredColorMode
 src/icons.ts          curated lucide icons, renamed Icon<Name> (IconPlus, IconComponent…)
-src/components/       composed components: Modal, Tooltip, ActionIconButton, SearchInput, Select,
+src/components/       composed components: Modal, Tooltip, ActionIconButton, SearchInput, Select, SearchSelect (filterable grouped dropdown, not portalled so it works in dialogs), SwitchField (a setting row whose label and hint toggle the switch),
                       Panel/PanelBar/PanelHeader/PanelSection, EmptyState, PropertyList, DataTable, KindChip/BoundaryChip/CodeChip,
                       Switch, Checkbox, Alert, ContextMenu (point-anchored, nested submenus),
                       ShortcutLegend, Popover (anchored to a trigger or a point),

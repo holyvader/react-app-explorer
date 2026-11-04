@@ -2,11 +2,13 @@
  * Line diffs for the code diff dialog: what's the same, removed and added between two texts, with
  * each line's number on its side. Common lines at the start and end are matched first, then the
  * middle by longest common subsequence — capped, so a huge rewrite can't stall the page (past the
- * cap the middle is shown as removed, then added).
+ * cap the middle is shown as removed, then added). Whitespace is ignored (like `git diff -w`): lines
+ * differing only in spaces, tabs or indentation are the same line.
  */
 
 export type DiffLine =
-  | { type: "same"; a: number; b: number; text: string }
+  /** `text` is the head's line, `was` the base's when it differs (in whitespace only). */
+  | { type: "same"; a: number; b: number; text: string; was?: string }
   | { type: "del"; a: number; text: string }
   | { type: "add"; b: number; text: string };
 
@@ -15,20 +17,24 @@ const LCS_CELLS = 4_000_000;
 
 /** `aStart` / `bStart`: the first line's number on each side (a declaration starts mid-file). */
 export function diffLines(a: string[], b: string[], aStart = 1, bStart = 1): DiffLine[] {
+  // lines compared without their whitespace
+  const ak = a.map(squash);
+  const bk = b.map(squash);
+  const same = (i: number, j: number, ai: number, bj: number): DiffLine => (a[i] === b[j] ? { type: "same", a: ai, b: bj, text: b[j]! } : { type: "same", a: ai, b: bj, text: b[j]!, was: a[i]! });
   let pre = 0;
-  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  while (pre < a.length && pre < b.length && ak[pre] === bk[pre]) pre++;
   let post = 0;
-  while (post < a.length - pre && post < b.length - pre && a[a.length - 1 - post] === b[b.length - 1 - post]) post++;
+  while (post < a.length - pre && post < b.length - pre && ak[a.length - 1 - post] === bk[b.length - 1 - post]) post++;
   const out: DiffLine[] = [];
-  for (let i = 0; i < pre; i++) out.push({ type: "same", a: aStart + i, b: bStart + i, text: a[i]! });
+  for (let i = 0; i < pre; i++) out.push(same(i, i, aStart + i, bStart + i));
 
-  const am = a.slice(pre, a.length - post);
-  const bm = b.slice(pre, b.length - post);
+  const am = ak.slice(pre, a.length - post);
+  const bm = bk.slice(pre, b.length - post);
   const n = am.length;
   const m = bm.length;
   if (n * m > LCS_CELLS) {
-    am.forEach((text, i) => out.push({ type: "del", a: aStart + pre + i, text }));
-    bm.forEach((text, j) => out.push({ type: "add", b: bStart + pre + j, text }));
+    am.forEach((_, i) => out.push({ type: "del", a: aStart + pre + i, text: a[pre + i]! }));
+    bm.forEach((_, j) => out.push({ type: "add", b: bStart + pre + j, text: b[pre + j]! }));
   } else if (n || m) {
     // lengths of the longest common subsequence of am[i..] and bm[j..]
     const w = m + 1;
@@ -39,23 +45,26 @@ export function diffLines(a: string[], b: string[], aStart = 1, bStart = 1): Dif
     let j = 0;
     while (i < n || j < m) {
       if (i < n && j < m && am[i] === bm[j]) {
-        out.push({ type: "same", a: aStart + pre + i, b: bStart + pre + j, text: am[i]! });
+        out.push(same(pre + i, pre + j, aStart + pre + i, bStart + pre + j));
         i++;
         j++;
       } else if (j < m && (i === n || lcs[i * w + j + 1]! >= lcs[(i + 1) * w + j]!)) {
-        out.push({ type: "add", b: bStart + pre + j, text: bm[j]! });
+        out.push({ type: "add", b: bStart + pre + j, text: b[pre + j]! });
         j++;
       } else {
-        out.push({ type: "del", a: aStart + pre + i, text: am[i]! });
+        out.push({ type: "del", a: aStart + pre + i, text: a[pre + i]! });
         i++;
       }
     }
     // removals before additions within each changed run (reads like a review tool)
     reorderRuns(out);
   }
-  for (let k = 0; k < post; k++) out.push({ type: "same", a: aStart + a.length - post + k, b: bStart + b.length - post + k, text: a[a.length - post + k]! });
+  for (let k = 0; k < post; k++) out.push(same(a.length - post + k, b.length - post + k, aStart + a.length - post + k, bStart + b.length - post + k));
   return out;
 }
+
+/** A line without its whitespace: what lines are compared by. */
+const squash = (line: string) => line.replace(/\s+/g, "");
 
 function reorderRuns(lines: DiffLine[]) {
   let k = 0;

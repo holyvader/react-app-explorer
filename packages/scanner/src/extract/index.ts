@@ -13,7 +13,7 @@ import type {
   RawRef,
   Resolved,
 } from "./types.ts";
-import { containsJsx, HOOK_RE, isFunction, memberName, type N, SourceText, unwrap, walk } from "./util.ts";
+import { codeHash, containsJsx, HOOK_RE, isFunction, memberName, type N, SourceText, unwrap, walk } from "./util.ts";
 
 export type ResolveFn = (fromFile: string, specifier: string) => Resolved;
 
@@ -49,7 +49,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
   const out: FileExtract = {
     absPath,
     stamp,
-    hash: Bun.hash(text).toString(36),
+    hash: codeHash(text),
     directives: [],
     serverOnly: false,
     clientOnly: false,
@@ -559,13 +559,13 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
    * expression body. Changes when the returned code does, even if the return type stays the same.
    */
   function returnHashOf(fn: N): string | undefined {
-    if (fn.body && fn.body.type !== "BlockStatement") return Bun.hash(src.text.slice(fn.body.start, fn.body.end)).toString(36);
+    if (fn.body && fn.body.type !== "BlockStatement") return codeHash(src.text.slice(fn.body.start, fn.body.end));
     const parts: string[] = [];
     walk(fn.body, (n) => {
       if (isFunction(n)) return false;
       if (n.type === "ReturnStatement") parts.push(src.text.slice(n.start, n.end));
     });
-    return parts.length ? Bun.hash(parts.join("\n")).toString(36) : undefined;
+    return parts.length ? codeHash(parts.join("\n")) : undefined;
   }
 
   function propsOf(param: N): PropDef[] | undefined {

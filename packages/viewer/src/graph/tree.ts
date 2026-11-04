@@ -1,12 +1,14 @@
 import type { Snapshot } from "@rae/schema";
-import { isFiltered, type LibraryFilter } from "./packages.ts";
+import { isFiltered, type LibraryFilter, packageOf } from "./packages.ts";
 
 /*
  * The scanned model as a tree, for the picker: folders → files → their declarations, then the
- * libraries. Folder chains holding a single folder are one row (`src/components`), as on the canvas.
+ * libraries, nested by package (`next` → `link`, `navigation`). Folder chains holding a single folder
+ * are one row (`src/components`), as on the canvas.
  */
 
-export type TreeKind = "folder" | "file" | "decl" | "libraries" | "library" | "routes" | "route";
+/** `package`: a package's group of imported paths (`next` → `next/link`…) when the bare package isn't imported itself. */
+export type TreeKind = "folder" | "file" | "decl" | "libraries" | "package" | "library" | "routes" | "route";
 
 export interface TreeNode {
   key: string;
@@ -82,9 +84,65 @@ export function buildTree(s: Snapshot, filter: LibraryFilter): TreeNode[] {
     top.unshift({ key: "routes", kind: "routes", name: "Routes", path: "", children: roots });
   }
   if (libraries.length) {
-    top.push({ key: "libraries", kind: "libraries", name: "Libraries", path: "", children: libraries.sort((a, b) => a.name.localeCompare(b.name)) });
+    top.push({ key: "libraries", kind: "libraries", name: "Libraries", path: "", children: nestLibraries(libraries) });
   }
   return top;
+}
+
+/**
+ * Libraries by package: a package imported by one path is a row of its own; several paths
+ * (`next/link`, `next/navigation`) go under the package's row — the bare import's own node when
+ * it's imported too, else a `package` group — named by what follows the package (`link`).
+ */
+function nestLibraries(libraries: TreeNode[]): TreeNode[] {
+  const byPackage = new Map<string, TreeNode[]>();
+  for (const l of libraries) {
+    const pkg = packageOf(l.path);
+    byPackage.set(pkg, [...(byPackage.get(pkg) ?? []), l]);
+  }
+  const rows: TreeNode[] = [];
+  for (const [pkg, list] of byPackage) {
+    if (list.length === 1) {
+      rows.push(list[0]!);
+      continue;
+    }
+    const own = list.find((l) => l.path === pkg);
+    const sub = list
+      .filter((l) => l !== own)
+      .map((l) => ({ ...l, name: l.path.startsWith(`${pkg}/`) ? l.path.slice(pkg.length + 1) : l.path.startsWith(`${pkg}:`) ? l.path.slice(pkg.length + 1) : l.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    rows.push(own ? { ...own, children: sub } : { key: `pkg:${pkg}`, kind: "package", name: pkg, path: pkg, children: sub });
+  }
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Only what a diff touched (`changed`: an element, or a file git lists), with the folders and files
+ * down to it; folder chains left with a single folder are merged again (`src/lib`).
+ */
+export function changesTree(roots: TreeNode[], changed: (n: TreeNode) => boolean): TreeNode[] {
+  const walk = (list: TreeNode[]): TreeNode[] =>
+    list.flatMap((n) => {
+      const children = walk(n.children);
+      if (!children.length && !changed(n)) return [];
+      if (n.kind === "folder" && children.length === 1 && children[0]!.kind === "folder") return [{ ...children[0]!, name: `${n.name}/${children[0]!.name}` }];
+      return [{ ...n, children }];
+    });
+  return walk(roots);
+}
+
+/** Every row key in a tree that has children (to open it all). */
+export function openKeys(roots: TreeNode[]): Set<string> {
+  const keys = new Set<string>();
+  const walk = (list: TreeNode[]) => {
+    for (const n of list)
+      if (n.children.length) {
+        keys.add(n.key);
+        walk(n.children);
+      }
+  };
+  walk(roots);
+  return keys;
 }
 
 export interface TreeRow {

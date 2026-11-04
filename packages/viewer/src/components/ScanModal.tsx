@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Button, Flex, HStack, Input, Modal, Spinner, Stack, Switch, Text } from "@rae/design-system";
+import { Alert, Badge, Box, Button, Flex, HStack, Input, Modal, Spinner, Stack, SwitchField, Text } from "@rae/design-system";
 import { IconFile, IconFolder, IconParentDir, IconScan } from "@rae/design-system/icons";
 import { useEffect, useState } from "react";
 import { type FsListing, listDir } from "../lib/api.ts";
@@ -168,14 +168,6 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
 
 function Option({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
   return (
-    <Flex align="center" gap="3">
-      <Box flex="1" minW="0">
-        <Text fontSize="sm">{label}</Text>
-        <Text fontSize="xs" color="fg.muted">
-          {hint}
-        </Text>
-      </Box>
-      <Switch size="sm" label={label} checked={checked} onCheckedChange={onChange} />
-    </Flex>
+    <SwitchField size="sm" label={<Text fontSize="sm">{label}</Text>} ariaLabel={label} hint={hint} checked={checked} onCheckedChange={onChange} />
   );
 }

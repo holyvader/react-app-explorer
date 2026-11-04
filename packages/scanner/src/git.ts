@@ -179,14 +179,16 @@ export interface FileChange {
 }
 
 /**
- * Files changed between two commits, renames detected (`-M`), with line counts. Without `head`:
+ * Files changed between two commits, renames detected (`-M`), with line counts. Whitespace is
+ * ignored (`-w --ignore-blank-lines`): a file whose only changes are spaces, indentation or blank
+ * lines isn't listed (declarations are compared the same way: `codeHash`). Without `head`:
  * between `base` and the working tree (uncommitted changes included), untracked files (not ignored) as added.
  */
 export async function changedFiles(root: string, base: string, head?: string): Promise<FileChange[]> {
   const range = head ? [base, head] : [base];
   const [names, nums, untracked] = await Promise.all([
-    git(root, ["diff", "-z", "-M", "--name-status", ...range, "--"]),
-    git(root, ["diff", "-z", "-M", "--numstat", ...range, "--"]),
+    git(root, ["diff", "-z", "-M", "-w", "--ignore-blank-lines", "--name-status", ...range, "--"]),
+    git(root, ["diff", "-z", "-M", "-w", "--ignore-blank-lines", "--numstat", ...range, "--"]),
     head ? Promise.resolve("") : git(root, ["ls-files", "-z", "--others", "--exclude-standard"]),
   ]);
   const files: FileChange[] = [];

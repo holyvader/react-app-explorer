@@ -38,6 +38,9 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 - No `setState` in effects. Derive during render, or update from the event handler.
 
 ## Data
+- Relation filter: `enabled` groups persist (`rae.relationGroups`, merged over the defaults so new groups start on).
+- Switch rows: a label beside a switch is a `SwitchField` (design system) — the whole row is the switch's
+  label, so clicking the text or hint toggles it. Never a plain `<Text>` next to a bare `Switch`.
 - 3rd-party filter: `excluded` packages (default `react`, `react-dom`) and `hideAllLibraries` live in the store and persist in localStorage. Anything listing nodes or relations must respect it: use `relationFilterOf(state)` or `isFiltered(node, …)`.
 - Types come from `@rae/schema`. The snapshot is read-only in the UI.
 - Conditions are displayed through `formatCondition`/`summarize` (`src/lib/conditions.ts`). Early-return and ternary-false conditions are negated for display ("rendered when …").
@@ -48,6 +51,8 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 
 ## Toolbar
 - Left: the scanned project (`projectName(rootDir)` + `shortPath(rootDir)`, `lib/paths.ts`), then the snapshot select. Its options are grouped by scanned folder (`SelectOption.group` → `<optgroup>`), each option its date and node count. The Snapshots modal groups the same way (a header per folder with select-all).
+- No search box and no Add button in the bar: adding goes through ⌘K, Space and the canvas "+". The bar ends with Scan.
+- A diff shows a "Diff overlay" switch (labelled; the text toggles it) beside its chip.
 - It must fit from 1280px up. The view buttons (Folders, Routes, Assets, Libraries) show text only
   from 2080px (`Label`; `aria-label` keeps their names). The brand text shows from 2240px and the
   stats from 2400px. The relation toggles may shrink and scroll sideways. Re-measure after adding
@@ -141,23 +146,29 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 ## Diff snapshots (`snapshot.diff`, lib/diff.ts)
 - `normalizeSnapshot` → `applyDiff`: the diff's removed nodes and edges go into the graph as **ghosts**
   (`isGhost`, `edgeChange` via WeakSets/WeakMaps — no extra fields on schema objects); added edges are marked.
-- The **diff overlay** (`diffOverlay` in the store, View options) shows changes; off, `LibraryFilter.hideRemoved`
+- The **diff overlay** (`diffOverlay` in the store; its switch sits on the toolbar beside the diff chip) shows changes; off, `LibraryFilter.hideRemoved`
   hides ghosts everywhere (canvas, tree, relations) through `isFiltered` / `drawnGraph` / `isChildEdge`.
-  Pass `diffOverlay` to every `relationFilterOf` call.
+  Pass `diffOverlay` to every `relationFilterOf` call. Assets the diff touched (`isChangedAsset`) show with
+  the overlay on even while the Assets toggle is off, and `changesToShow` includes them.
 - Canvas: node data `change` → `data-change` on `.rae-card` / `.rae-frame` + the A/M/D `.rae-change` corner
   badge; edges get `rae-edge--added|removed`. Colours: `diff.{added,changed,removed}.{solid,subtle,fg}` tokens
   (green / amber / red; blue stays selection's).
 - A diff opens with `changesToShow` (declarations first, then their files) unless its diagram was saved;
   diagrams are stored per diff (`rae.diagram:<root>@<base>..<head>`).
-- Files panel: the Changes view (`ChangesList`, file by file as git lists them, plus elements whose file didn't
-  change); the tree marks rows A/M/D and folders holding changes. Details: "In this diff" (`describeChange`
+- Files panel: the Changes view (`ChangesList`: counts + "Show on canvas" over `ElementTree changesOnly` — the
+  tree pruned by `changesTree` to changed elements and files git lists, with their folders, all opened at
+  first; files show git's `+a −d`, unchanged files holding changes a dot; `+` adds a row not on the diagram).
+  The full tree marks rows A/M/D and folders holding changes. Details: "In this diff" (`describeChange`
   over `diff.before`; the first 5 changes, then "Show more"; type changes only when both sides have a
   type — the base is compared untyped). Its code-diff button opens `NodeDiffModal`: both versions from
   `GET /api/git/source?path&sha&file` (`git show`, or the working tree; paths must stay in the repo),
   a declaration's lines (loc → endLine) or the whole file (modules, merged files), `lib/lineDiff.ts`
-  (prefix/suffix + capped LCS), split or inline (remembered: `rae.codeDiffMode`), unchanged runs folded.
+  (prefix/suffix + capped LCS; lines compared without whitespace, same lines shown as the head has them,
+  the base's text in `was`), split or inline (remembered: `rae.codeDiffMode`), unchanged runs folded.
   Toolbar: the `base ← head` chip.
-- Scan dialog: `CompareOptions` (shown when the folder is in a git repo): base branch, what to compare
+- Scan dialog: `CompareOptions` (shown when the folder is in a git repo): base branch, what to compare — both
+  `SearchSelect`s (design system: a filterable, grouped Combobox), branches grouped by prefix (`lib/branches.ts`:
+  plain names, then `feat/`, `fix/`…, then remotes), listed requests by their branch's prefix
   (the checkout, a branch, or a PR / MR listed on demand by "PRs / MRs"), from the merge-base or the
   base's tip; warns when the checkout is dirty. It sends `diff` with the scan (`ScanSettings.diff`).
   "PRs / MRs" picks the source (Auto — default —, git, GitHub CLI, GitLab CLI; remembered per repo in

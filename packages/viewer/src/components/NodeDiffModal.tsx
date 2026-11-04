@@ -152,7 +152,7 @@ function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[];
                     <td className="rae-cdiff__num">{l.type !== "del" ? l.b : ""}</td>
                     <td className="rae-cdiff__sign">{l.type === "add" ? "+" : l.type === "del" ? "−" : ""}</td>
                     <td className="rae-cdiff__code">
-                      <Code tokens={l.type === "add" ? coloured.after?.[l.b - 1] : coloured.before?.[l.a - 1]} text={l.text} />
+                      <Code tokens={l.type === "del" ? coloured.before?.[l.a - 1] : coloured.after?.[l.b - 1]} text={l.text} />
                     </td>
                   </tr>
                 ))}
@@ -189,7 +189,7 @@ function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; 
                       {r.left?.a ?? ""}
                     </td>
                     <td className="rae-cdiff__code" data-type={r.left?.type ?? "empty"}>
-                      {r.left ? <Code tokens={coloured.before?.[r.left.a - 1]} text={r.left.text} /> : ""}
+                      {r.left ? <Code tokens={coloured.before?.[r.left.a - 1]} text={(r.left.type === "same" && r.left.was) || r.left.text} /> : ""}
                     </td>
                     <td className="rae-cdiff__num" data-type={r.right?.type ?? "empty"}>
                       {r.right?.b ?? ""}

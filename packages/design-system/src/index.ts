@@ -11,9 +11,10 @@ export { PANEL_STRIP, Panel, PanelBar, PanelHeader, PanelSection, type PanelColl
 export { PropertyList, type PropertyItem } from "./components/PropertyList.tsx";
 export { SearchInput, type SearchInputProps } from "./components/SearchInput.tsx";
 export { Select, type SelectOption, type SelectProps } from "./components/Select.tsx";
+export { SearchSelect, type SearchSelectProps } from "./components/SearchSelect.tsx";
 export { Tooltip, type TooltipProps } from "./components/Tooltip.tsx";
 export { Alert, type AlertProps } from "./components/Alert.tsx";
-export { Switch, type SwitchProps } from "./components/Switch.tsx";
+export { Switch, SwitchField, type SwitchFieldProps, type SwitchProps } from "./components/Switch.tsx";
 export { Checkbox, type CheckboxProps } from "./components/Checkbox.tsx";
 export { ContextMenu, type ContextMenuProps, type MenuEntry } from "./components/ContextMenu.tsx";
 export { ShortcutLegend, type Shortcut } from "./components/ShortcutLegend.tsx";

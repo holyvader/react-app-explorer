@@ -9,6 +9,7 @@ import { typeLines } from "./syntax.ts";
  */
 
 const ghostNodes = new WeakSet<GraphNode>();
+const changedAssets = new WeakSet<GraphNode>();
 const edgeChanges = new WeakMap<Edge, "added" | "removed">();
 
 const edgeKey = (e: Edge) => `${e.kind}|${e.from}|${e.to}|${e.importType ?? ""}`;
@@ -21,6 +22,11 @@ export function applyDiff(s: Snapshot): Snapshot {
     if (s.nodes[id]) continue; // a head node took its id (a new file where a renamed one was)
     s.nodes[id] = n;
     ghostNodes.add(n);
+  }
+  // assets the diff touched are shown with the overlay even while the Assets toggle is off
+  for (const id of Object.keys(d.nodes)) {
+    const n = s.nodes[id];
+    if (n && (n.asset || n.id.startsWith("asset:"))) changedAssets.add(n);
   }
   const added = new Set(d.edges.added.map(edgeKey));
   for (const e of s.edges) if (added.has(edgeKey(e))) edgeChanges.set(e, "added");
@@ -35,6 +41,8 @@ export function applyDiff(s: Snapshot): Snapshot {
 
 /** A node only the base had: drawn as a ghost (dashed, faded) while the diff overlay is on. */
 export const isGhost = (n: GraphNode | undefined) => !!n && ghostNodes.has(n);
+/** An asset (CSS, image…) the diff added, changed or removed. */
+export const isChangedAsset = (n: GraphNode | undefined) => !!n && changedAssets.has(n);
 /** Whether a relation is new in the head, or gone from it. */
 export const edgeChange = (e: Edge): "added" | "removed" | undefined => edgeChanges.get(e);
 /** How a node changed in the snapshot's diff. */
@@ -57,7 +65,7 @@ export function changesToShow(s: Snapshot, limit = CHANGES_ON_OPEN): string[] {
   const files: string[] = [];
   for (const id of Object.keys(d.nodes)) {
     const n = s.nodes[id];
-    if (!n || n.kind === "external" || n.kind === "route" || n.asset) continue;
+    if (!n || n.kind === "external" || n.kind === "route") continue;
     (n.kind === "module" ? files : decls).push(id);
   }
   const picked = decls.slice(0, limit);

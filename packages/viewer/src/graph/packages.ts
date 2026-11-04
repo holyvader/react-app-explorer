@@ -1,5 +1,5 @@
 import type { GraphNode } from "@rae/schema";
-import { isGhost } from "../lib/diff.ts";
+import { isChangedAsset, isGhost } from "../lib/diff.ts";
 
 /** Libraries hidden until the user opts in. */
 export const DEFAULT_EXCLUDED = ["react", "react-dom"];
@@ -15,7 +15,7 @@ export interface LibraryFilter {
   excluded: ReadonlySet<string>;
   /** Hide every 3rd-party package. */
   hideAll: boolean;
-  /** Show the project's asset files (CSS, images, JSON); hidden by default. */
+  /** Show the project's asset files (CSS, images, JSON); hidden by default (a diff's changed ones show with its overlay). */
   showAssets?: boolean;
   /** Diff overlay off: what only the base had (removed nodes) is hidden. */
   hideRemoved?: boolean;
@@ -28,7 +28,8 @@ export const isAsset = (node: GraphNode | undefined) => !!node && (node.asset ==
 export function isFiltered(node: GraphNode | undefined, filter: LibraryFilter): boolean {
   if (!node) return false;
   if (filter.hideRemoved && isGhost(node)) return true;
-  if (isAsset(node)) return !filter.showAssets;
+  // with the diff overlay on, the assets the diff touched show (and connect) like code does
+  if (isAsset(node)) return !filter.showAssets && !(!filter.hideRemoved && isChangedAsset(node));
   if (node.kind !== "external") return false;
   return filter.hideAll || filter.excluded.has(packageOf(node.filePath));
 }

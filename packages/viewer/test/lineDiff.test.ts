@@ -50,3 +50,17 @@ describe("line diffs", () => {
     expect(d.filter((l) => l.type === "del")).toHaveLength(3000);
   });
 });
+
+describe("whitespace", () => {
+  test("lines differing only in whitespace are the same line, shown as the head has them", () => {
+    const d = diffLines(["function a() {", "  return 1;", "}"], ["function a() {", "\treturn   1;", "}"]);
+    expect(d.map((l) => l.type)).toEqual(["same", "same", "same"]);
+    expect(d[1]).toMatchObject({ text: "\treturn   1;", was: "  return 1;" });
+    expect(d[0]).not.toHaveProperty("was");
+  });
+
+  test("a real change next to a re-indented line", () => {
+    const d = diffLines(["if (x) {", "f();", "}"], ["if (x) {", "  g();", "}"]);
+    expect(d.map((l) => l.type)).toEqual(["same", "del", "add", "same"]);
+  });
+});

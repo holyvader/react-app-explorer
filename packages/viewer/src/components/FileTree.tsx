@@ -51,9 +51,6 @@ export function FileTree() {
     [onDiagram],
   );
 
-  const activateId = useCallback((id: string) => activate({ key: id, id, kind: "decl", name: id, path: id, children: [] }), [activate]);
-  const drawnId = useCallback((id: string) => onDiagram.has(id), [onDiagram]);
-
   if (!snapshot) return null;
   return (
     <Panel
@@ -114,7 +111,7 @@ export function FileTree() {
         }}
       >
         {showChanges ? (
-          <ChangesList onActivate={activateId} drawn={drawnId} selectedId={selectedId} />
+          <ChangesList onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} />
         ) : (
           <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
         )}

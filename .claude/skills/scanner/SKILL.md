@@ -126,6 +126,9 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
 - Changes: ids match (after git's renames map `old#X` → `new#X`); `changed` = different `hash`
   (declaration source; for files and merged nodes the whole file) or kind / boundary / role / route
   rendering. Edges compare by kind + ends + importType. Removed nodes are kept in `diff.removed`.
+- **Whitespace never counts**: hashes are `codeHash` (extract/util.ts: the text without whitespace) and
+  `changedFiles` runs `git diff -w --ignore-blank-lines`, so re-indented files aren't listed. Assets
+  (CSS, images: no hash) are `changed` when git lists their file as modified / renamed.
 - With types on, **both sides are typed** (the base's type pass runs beside the head's): inferred
   types (return types without an annotation) can be compared; the diff is rebuilt from both typed sides.
 - UIs: `runScanJob(dir, { diff: { base, head | request, against } })` streams it like a scan (the untyped

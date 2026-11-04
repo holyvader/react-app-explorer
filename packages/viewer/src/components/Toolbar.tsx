@@ -10,6 +10,7 @@ import {
   Select,
   Stack,
   Switch,
+  SwitchField,
   Text,
   ToolGroup,
   Tooltip,
@@ -25,10 +26,8 @@ import {
   IconLayout,
   IconLibrary,
   IconOpen,
-  IconPlus,
   IconRedo,
   IconScan,
-  IconSearch,
   IconUndo,
   IconUpload,
   IconViewOptions,
@@ -58,13 +57,13 @@ const when = (iso: string) => {
   return `${isToday(d) ? "today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
 };
 
-/** The app bar: mark, project and snapshot, search (adds to the diagram), history, view options, Scan and Add. */
+/** The app bar: mark, project and snapshot (a diff's chip and overlay switch), history, view options and Scan. */
 export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onManageSnapshots, onLibraries }: ToolbarProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
   const canUndo = useExplorer((s) => s.past.length > 0);
   const canRedo = useExplorer((s) => s.future.length > 0);
-  const { setSearchOpen, relayout, undo, redo } = useExplorer.getState();
+  const { relayout, undo, redo } = useExplorer.getState();
   const fileRef = useRef<HTMLInputElement>(null);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
@@ -140,6 +139,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         </Flex>
       </Tooltip>
       {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
+      {snapshot?.diff && <DiffOverlaySwitch />}
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
         ref={fileRef}
@@ -153,39 +153,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         }}
       />
 
-      {/* search: finds an element and adds it to the diagram (⌘K, Space on the canvas) */}
-      <Flex flex="1" justify="center" minW="0">
-        <Flex
-          as="button"
-          align="center"
-          gap="2.5"
-          w="440px"
-          maxW="full"
-          h="30px"
-          pl="11px"
-          pr="2"
-          bg="syntax.bg"
-          borderWidth="1px"
-          borderColor="card.border"
-          rounded="7px"
-          color="fg.subtle"
-          fontSize="12.5px"
-          cursor={snapshot ? "text" : "default"}
-          opacity={snapshot ? 1 : 0.5}
-          aria-disabled={!snapshot}
-          _hover={snapshot ? { borderColor: "border.emphasized" } : undefined}
-          onClick={() => snapshot && setSearchOpen(true)}
-          aria-label="Add an element (⌘K)"
-        >
-          <IconSearch size={14} />
-          <Text as="span" flex="1" textAlign="left" truncate>
-            Add an element…
-          </Text>
-          <Text as="span" fontFamily="mono" fontSize="10.5px" px="1.5" borderWidth="1px" borderColor="border.emphasized" rounded="l1" lineHeight="16px">
-            ⌘K
-          </Text>
-        </Flex>
-      </Flex>
+      <Box flex="1" minW="0" />
 
       <ToolGroup>
         <BarIcon label="Undo (⌘Z)" icon={<IconUndo />} onClick={undo} disabled={!canUndo} />
@@ -196,9 +164,6 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
       <Divider />
       <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize="12.5px" fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Scan a project…">
         <IconScan size={14} /> Scan
-      </Button>
-      <Button size="xs" h="30px" px="11px" colorPalette="accent" fontSize="12.5px" fontWeight="semibold" gap="6px" rounded="l2" onClick={() => setSearchOpen(true)} disabled={!snapshot}>
-        <IconPlus size={14} /> Add
       </Button>
     </Flex>
   );
@@ -219,9 +184,7 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const visible = useExplorer((s) => s.visible);
-  const isDiff = useExplorer((s) => !!s.snapshot?.diff);
-  const diffOverlay = useExplorer((s) => s.diffOverlay);
-  const { setEditor, setShowAssets, setDiffOverlay, clear } = useExplorer.getState();
+  const { setEditor, setShowAssets, clear } = useExplorer.getState();
   return (
     <Popover
       open={open}
@@ -239,17 +202,8 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
         <Text textStyle="panelLabel" color="fg.subtle" px="3.5" pt="3" pb="2">
           View
         </Text>
-        <Row label="Dark mode">
-          <Switch size="xs" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
-        </Row>
-        {isDiff && (
-          <Row label="Diff overlay" hint="What changed: colours, removed elements">
-            <Switch size="xs" label="Diff overlay" checked={diffOverlay} onCheckedChange={setDiffOverlay} />
-          </Row>
-        )}
-        <Row label="Asset files" hint="CSS, images, JSON">
-          <Switch size="xs" label="Asset files" checked={showAssets} onCheckedChange={setShowAssets} />
-        </Row>
+        <SwitchField size="xs" px="3.5" minH="36px" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
+        <SwitchField size="xs" px="3.5" minH="36px" label="Asset files" hint="CSS, images, JSON" checked={showAssets} onCheckedChange={setShowAssets} />
         <Row label="Libraries" hint={hideAllLibraries ? "all hidden" : excluded.length ? `${excluded.length} hidden` : "all shown"}>
           <Button
             size="2xs"
@@ -301,6 +255,20 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
       </Box>
       {children}
     </Flex>
+  );
+}
+
+/** The diff overlay (colours, removed elements as ghosts), on the bar while a diff is open. */
+function DiffOverlaySwitch() {
+  const diffOverlay = useExplorer((s) => s.diffOverlay);
+  return (
+    <Tooltip content="Diff overlay: what changed in colour, removed elements as ghosts">
+      <Flex align="center" gap="1.5" flexShrink={0} fontSize="12px" color="fg.muted">
+        <Switch size="xs" checked={diffOverlay} onCheckedChange={useExplorer.getState().setDiffOverlay}>
+          Diff overlay
+        </Switch>
+      </Flex>
+    </Tooltip>
   );
 }
 

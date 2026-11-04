@@ -7,7 +7,8 @@ type Files = SnapshotDiff["files"];
  * match by id; files git saw renamed map their nodes (`old.tsx#X` → `new.tsx#X`) first.
  * - added / removed: the node is only in the head / only in the base.
  * - changed: its source differs (the `hash` of the declaration or file), or what it is does
- *   (server ↔ client, Next.js role, a route's kind, methods or rendering).
+ *   (server ↔ client, Next.js role, a route's kind, methods or rendering). Assets (no hash):
+ *   when git lists their file as modified or renamed.
  * Edges are compared by kind and ends (and import type); conditions aren't compared.
  */
 export function diffSnapshots(base: Snapshot, head: Snapshot, files: Files, sides: Pick<SnapshotDiff, "base" | "head" | "against" | "compared">): SnapshotDiff {
@@ -30,10 +31,12 @@ export function diffSnapshots(base: Snapshot, head: Snapshot, files: Files, side
   const before: Record<NodeId, GraphNode> = {};
   const inBase = new Map<NodeId, GraphNode>();
   for (const [id, n] of Object.entries(base.nodes)) inBase.set(renamed[id] ?? id, n);
+  // assets (CSS, images…) aren't parsed, so they have no source hash: git says whether they changed
+  const touched = new Set(files.filter((f) => f.status === "modified" || f.status === "renamed").map((f) => f.path));
   for (const [id, n] of Object.entries(head.nodes)) {
     const was = inBase.get(id);
     if (!was) nodes[id] = "added";
-    else if (fingerprint(was) !== fingerprint(n)) {
+    else if (fingerprint(was) !== fingerprint(n) || (n.asset && touched.has(n.filePath))) {
       nodes[id] = "changed";
       const { renderTree: _tree, ...rest } = was;
       before[id] = rest;
