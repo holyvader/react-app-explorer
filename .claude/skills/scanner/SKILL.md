@@ -15,6 +15,8 @@ discoverProject (project.ts)      dir → glob source files │ file → single 
       → extractFile (extract/)    oxc-parser AST → FileExtract (imports/exports/decls/JSX/hooks/calls) + oxc-resolver
   → applyTypes (types/tsgo.ts)    TypeScript 7 Go checker over async IPC — only for types, at offsets oxc found
   → buildGraph (graph.ts)         cross-file symbol linking → nodes + edges, server/client propagation
+  → mergeSingleExportModules      (merge.ts, default on; --no-merge / mergeSingleExport: false) files declaring
+                                  exactly one thing, exported, collapse into it
   → writeSnapshot (scan.ts)       <root>/.explorer/snapshots/<ISO>.json + index.json
 ```
 
@@ -89,6 +91,17 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
    - Changing what extraction records means bumping `EXTRACT_VERSION` (cache.ts): caches keep each
      file's resolved imports.
 6. Adding a new schema field: schema → extract (worker output) → graph (node/edge mapping) → viewer display → test.
+
+## Merging single-export files (`merge.ts`)
+A module whose only declaration is exported (no private helpers, no extra types) is replaced by that
+declaration, **under the module's id** (`app/page.tsx`, not `app/page.tsx#HomePage`), so imports,
+`route.files`, middleware links and render-tree targets keep resolving. The node keeps the file's
+`nextRole`, `moduleType`, directives, dynamicApis, cache, middleware; it gets `file: true` and
+`fileName`. Its `declares` edge goes; edges and ids pointing at the declaration are renamed; duplicates
+collapse. `snapshot.options.mergeSingleExport` records the choice. Assets and missing files never merge.
+The viewer treats `file: true` nodes as files (`isFileNode` / `fileIdOf` in graph/drawn.ts): folder
+frames, route frames, the tree (a decl row where the file was) and the card's role / boundary badges.
+Tests that check file → declaration structure pass `mergeSingleExport: false`.
 
 ## Adding things
 - **New condition kind**: add to `ConditionKind` (schema) → push in `JsxAnalyzer` → `formatCondition` / `CONDITION_LABEL` in `packages/viewer/src/lib/conditions.ts` → test.

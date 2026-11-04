@@ -5,6 +5,7 @@ import { loadCache, saveCache } from "./cache.ts";
 import { collectFiles } from "./collect.ts";
 import type { FileExtract } from "./extract/types.ts";
 import { buildGraph } from "./graph.ts";
+import { mergeSingleExportModules } from "./merge.ts";
 import { discoverProject } from "./project.ts";
 import { applyTypes } from "./types/tsgo.ts";
 
@@ -15,6 +16,8 @@ export interface ScanOptions {
   types?: boolean;
   cache?: boolean;
   maxWorkers?: number;
+  /** Files that declare one exported thing become that declaration (default on). */
+  mergeSingleExport?: boolean;
   onWarn?: (msg: string) => void;
   /** Step-by-step progress (for logs): each phase as it starts and ends. */
   onProgress?: (msg: string) => void;
@@ -45,8 +48,9 @@ function phaseTimer(phases: Record<string, number>, onProgress?: (m: string) => 
   };
 }
 
-function toSnapshot(scan: Omit<StructureScan, "snapshot">, createdAt: string, types: boolean): Snapshot {
-  const { nodes, edges } = buildGraph(scan.files, scan.info);
+function toSnapshot(scan: Omit<StructureScan, "snapshot">, createdAt: string, types: boolean, merge: boolean): Snapshot {
+  const graph = buildGraph(scan.files, scan.info);
+  const { nodes, edges } = merge ? mergeSingleExportModules(graph.nodes, graph.edges) : graph;
   return {
     schemaVersion: SCHEMA_VERSION,
     createdAt,
@@ -61,6 +65,7 @@ function toSnapshot(scan: Omit<StructureScan, "snapshot">, createdAt: string, ty
       cacheHits: scan.cacheHits,
       types,
     },
+    options: { mergeSingleExport: merge },
     nodes,
     edges,
   };
@@ -101,7 +106,7 @@ export async function scanStructure(input: string, opts: ScanOptions = {}): Prom
   }
 
   const partial = { files, info, phases, cacheHits, t0 };
-  const snapshot = toSnapshot(partial, new Date().toISOString(), false);
+  const snapshot = toSnapshot(partial, new Date().toISOString(), false, opts.mergeSingleExport !== false);
   phase("graph");
   return { ...partial, snapshot };
 }
@@ -144,7 +149,7 @@ export async function addTypes(scan: StructureScan, opts: ScanOptions = {}): Pro
     saveCache(info.rootDir, files.values());
     phase("cacheSave");
   }
-  const snapshot = toSnapshot(scan, scan.snapshot.createdAt, typed);
+  const snapshot = toSnapshot(scan, scan.snapshot.createdAt, typed, opts.mergeSingleExport !== false);
   phase("graph");
   return snapshot;
 }

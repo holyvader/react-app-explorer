@@ -41,8 +41,10 @@ function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
   const Icon = meta.icon;
   // the kind in its colour, then quiet extras: "component · async", "function · cached 1h"
   const what = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
-  const extras = [fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean);
-  const boundary = node.moduleType && element.parent === null && node.moduleType !== "server" ? node.moduleType : undefined;
+  // a declaration standing for its file (merged scan) wears the file's badges: Next.js role, server / client
+  const fileBadges = !!node.file;
+  const extras = [fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, fileBadges ? undefined : node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean);
+  const boundary = !fileBadges && node.moduleType && element.parent === null && node.moduleType !== "server" ? node.moduleType : undefined;
   return (
     <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
@@ -63,6 +65,16 @@ function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
             )}
           </div>
         </div>
+        {fileBadges && (node.nextRole || node.moduleType) && (
+          <span className="rae-card__badges">
+            {node.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
+            {node.moduleType && (
+              <span className="rae-chip" data-boundary={node.moduleType}>
+                {node.moduleType}
+              </span>
+            )}
+          </span>
+        )}
         {node.route?.rendering && (
           <span className="rae-chip rae-card__boundary" data-render={renderingKey(node.route.rendering)} title={node.route.rendering.reasons.join("\n")}>
             {renderingLabel(node.route.rendering)}

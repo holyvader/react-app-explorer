@@ -18,6 +18,8 @@ export interface DrawnElement {
   name: string;
   /** Drawn container, null at the top level. */
   parent: string | null;
+  /** Chips on a card beside its name (a declaration standing for its file: `page`, `server`): the card widens for them. */
+  badges?: string[];
 }
 
 export interface DrawnRelation {
@@ -34,6 +36,11 @@ export interface DrawnGraph {
 
 export const FOLDER_PREFIX = "dir:";
 export const isFolder = (id: string) => id.startsWith(FOLDER_PREFIX);
+
+/** Whether a node is a file on the canvas: a module, or a declaration standing for its file (merged scan). */
+export const isFileNode = (n: GraphNode) => n.kind === "module" || !!n.file;
+/** The file a node is (or is declared in). */
+export const fileIdOf = (n: GraphNode): string | undefined => (isFileNode(n) ? n.id : n.moduleId);
 
 export interface DrawOptions {
   enabled: EnabledGroups;
@@ -95,7 +102,7 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
     // A declaration whose file isn't drawn sits in the nearest drawn folder, if any.
     for (const id of shown) {
       const n = nodes[id]!;
-      if (n.kind === "module" || n.kind === "external" || n.kind === "route" || parentOf.get(id)) continue;
+      if (isFileNode(n) || n.kind === "external" || n.kind === "route" || parentOf.get(id)) continue;
       const slash = n.filePath.lastIndexOf("/");
       if (slash > 0) parentOf.set(id, nearest(n.filePath.slice(0, slash)));
     }
@@ -106,7 +113,8 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
   }
   for (const id of shown) {
     const n = nodes[id]!;
-    elements.push({ id, kind: n.kind, name: n.name, parent: parentOf.get(id) ?? null });
+    const badges: string[] = n.file ? [n.nextRole, n.moduleType].filter((b) => b !== undefined) : [];
+    elements.push({ id, kind: n.kind, name: n.name, parent: parentOf.get(id) ?? null, ...(badges.length ? { badges } : {}) });
   }
 
   // Whether one is drawn inside the other: an edge would only run to its own border.
@@ -158,7 +166,7 @@ function routesFor(snapshot: Snapshot, shown: Set<string>): { id: string; parent
       continue;
     }
     // a file of a route; or a declaration in one whose file isn't drawn
-    const file = n.kind === "module" ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
+    const file = isFileNode(n) ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
     const route = file ? routeOfFile(snapshot, file) : undefined;
     if (route) holds.set(route, [...(holds.get(route) ?? []), id]);
   }
@@ -196,7 +204,7 @@ function drawnRouteNesting(snapshot: Snapshot, shown: Set<string>): { id: string
       continue;
     }
     // a route's file; or a declaration in one whose file isn't drawn
-    const file = n.kind === "module" ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
+    const file = isFileNode(n) ? id : n.moduleId && !shown.has(n.moduleId) ? n.moduleId : undefined;
     const route = file ? routeOfFile(snapshot, file) : undefined;
     if (route && shown.has(route)) out.push({ id, parent: route });
   }
@@ -208,7 +216,7 @@ export function routeOf(s: Snapshot, id: string): string | undefined {
   const n = s.nodes[id];
   if (!n) return undefined;
   if (n.kind === "route") return id;
-  const file = n.kind === "module" ? id : n.moduleId;
+  const file = fileIdOf(n);
   return file ? routeOfFile(s, file) : undefined;
 }
 
@@ -246,7 +254,7 @@ export function nodesUnderRoute(snapshot: Snapshot, visible: readonly string[], 
     const n = snapshot.nodes[id];
     if (!n) return false;
     if (n.kind === "route") return inside(n.route?.parent) || id === routeId;
-    const file = n.kind === "module" ? id : n.moduleId;
+    const file = fileIdOf(n);
     return !!file && inside(routeOfFile(snapshot, file));
   });
 }
@@ -260,7 +268,7 @@ function foldersFor(snapshot: Snapshot, shown: Set<string>, explicit: ReadonlySe
   const fileDirs = new Map<string, string[]>(); // dir → module ids
   for (const id of shown) {
     const n = snapshot.nodes[id]!;
-    if (n.kind !== "module") continue;
+    if (!isFileNode(n)) continue;
     const slash = n.filePath.lastIndexOf("/");
     if (slash <= 0 || n.filePath.startsWith("..")) continue;
     const dir = n.filePath.slice(0, slash);

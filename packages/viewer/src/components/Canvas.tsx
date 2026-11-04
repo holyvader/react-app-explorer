@@ -445,7 +445,7 @@ export function Canvas() {
     [baseEdges, related],
   );
 
-  // Keyboard shortcuts on the diagram (noesis-style).
+  // Keyboard shortcuts on the diagram.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = useExplorer.getState();
@@ -535,7 +535,7 @@ export function Canvas() {
         elementsSelectable={false}
         deleteKeyCode={null}
         selectionKeyCode={null}
-        // Space adds to the diagram (noesis); panning is a plain drag.
+        // Space adds to the diagram; panning is a plain drag.
         panActivationKeyCode={null}
         multiSelectionKeyCode={null}
         edgesFocusable={false}

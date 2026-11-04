@@ -6,6 +6,7 @@ import { isScanning, startScan } from "../lib/scanJob.ts";
 import { useExplorer } from "../store.ts";
 
 const LAST_PATH_KEY = "rae.scanPath";
+const MERGE_KEY = "rae.scanMerge";
 
 export interface ScanModalProps {
   open: boolean;
@@ -18,6 +19,8 @@ export interface ScanModalProps {
 export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   const [path, setPath] = useState(() => localStorage.getItem(LAST_PATH_KEY) ?? "");
   const [types, setTypes] = useState(true);
+  // remembered: whether files declaring one exported thing become that declaration (default on)
+  const [merge, setMerge] = useState(() => localStorage.getItem(MERGE_KEY) !== "off");
   const [listing, setListing] = useState<FsListing>();
   const [browseError, setBrowseError] = useState<string>();
   // progress, cancelling and errors live in the panel over the canvas (ScanProgress)
@@ -47,7 +50,8 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   const scan = () => {
     const target = path.trim();
     localStorage.setItem(LAST_PATH_KEY, target);
-    void startScan(target, types, onScanned);
+    localStorage.setItem(MERGE_KEY, merge ? "on" : "off");
+    void startScan(target, { types, merge }, onScanned);
     onOpenChange(false); // progress (and Cancel) show over the canvas: nothing blocks while it runs
   };
 
@@ -59,9 +63,6 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
       size="lg"
       footer={
         <HStack w="full">
-          <Switch checked={types} onCheckedChange={setTypes}>
-            Type info (TypeScript 7)
-          </Switch>
           <Box flex="1" />
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
@@ -141,6 +142,16 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
           </Box>
         </Box>
 
+        <Stack gap="2.5" borderWidth="1px" borderColor="border" rounded="md" px="3" py="2.5">
+          <Option
+            label="Merge single-export files"
+            hint="A file that declares one thing and exports it shows as that element (page.tsx → BlogPost, with its page / server badges)."
+            checked={merge}
+            onChange={setMerge}
+          />
+          <Option label="Type info (TypeScript 7)" hint="Prop, parameter and return types. Runs after the structure is shown." checked={types} onChange={setTypes} />
+        </Stack>
+
         {scanning && (
           <Alert status="info" title="A scan is running">
             Its progress is shown over the diagram, where you can cancel it.
@@ -148,5 +159,19 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
         )}
       </Stack>
     </Modal>
+  );
+}
+
+function Option({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <Flex align="center" gap="3">
+      <Box flex="1" minW="0">
+        <Text fontSize="sm">{label}</Text>
+        <Text fontSize="xs" color="fg.muted">
+          {hint}
+        </Text>
+      </Box>
+      <Switch size="sm" label={label} checked={checked} onCheckedChange={onChange} />
+    </Flex>
   );
 }

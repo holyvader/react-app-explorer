@@ -225,6 +225,12 @@ export interface GraphNode {
   loc?: Loc;
   moduleType?: ModuleType;
   nextRole?: NextRole;
+  /**
+   * A declaration standing for its whole file: the file declared only it (and exported it), and the
+   * scan merged the two (`mergeSingleExport`). Its id is the file's; `fileName` is the file's name.
+   */
+  file?: boolean;
+  fileName?: string;
   /** For decls: owning module node id. */
   moduleId?: NodeId;
   exported?: boolean;
@@ -303,6 +309,8 @@ export interface Snapshot {
   /** Next.js settings that change how routes render (`cacheComponents` in next.config). */
   next?: { cacheComponents?: boolean };
   stats: ScanStats;
+  /** How it was scanned: `mergeSingleExport` — files declaring one exported thing became that declaration. */
+  options?: { mergeSingleExport?: boolean };
   nodes: Record<NodeId, GraphNode>;
   edges: Edge[];
 }

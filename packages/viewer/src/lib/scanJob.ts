@@ -1,5 +1,5 @@
 import type { Snapshot } from "@rae/schema";
-import { fetchSnapshot, runScan, serverLogFile } from "./api.ts";
+import { fetchSnapshot, runScan, type ScanSettings, serverLogFile } from "./api.ts";
 import { type ScanState, useExplorer } from "../store.ts";
 
 /** How long the "Types added" note stays before the progress panel goes away. */
@@ -24,16 +24,16 @@ const patch = (p: Partial<ScanState>) => {
  * (`onStructure`); the type pass continues and its typed snapshot replaces the loaded one in place.
  * Lives outside components so it survives dialogs closing; `cancelScan` stops it.
  */
-export async function startScan(path: string, types: boolean, onStructure: (file: string) => void): Promise<void> {
+export async function startScan(path: string, settings: ScanSettings, onStructure: (file: string) => void): Promise<void> {
   clearTimeout(clearTimer);
   running?.abort();
   const controller = new AbortController();
   running = controller;
-  useExplorer.getState().setScan({ path, phase: "structure", stage: "discover", withTypes: types, startedAt: Date.now() });
+  useExplorer.getState().setScan({ path, phase: "structure", stage: "discover", withTypes: settings.types, startedAt: Date.now() });
   try {
     await runScan(
       path,
-      types,
+      settings,
       (e) => {
         switch (e.type) {
           case "progress":

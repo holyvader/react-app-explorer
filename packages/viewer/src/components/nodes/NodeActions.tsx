@@ -68,7 +68,7 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
 
 /**
  * A round "+" on the middle of a file's bottom border: what it declares that isn't drawn yet.
- * Opens a menu: all at once first, then each one (after noesis' "contains" button).
+ * Opens a menu: all at once first, then each one.
  */
 export function ContainsButton({ data }: { data: ElementNodeData }) {
   const n = data.undrawnContents;

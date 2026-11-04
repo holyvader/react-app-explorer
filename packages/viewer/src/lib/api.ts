@@ -67,12 +67,18 @@ export async function listDir(path?: string): Promise<FsListing> {
  * Starts a scan and reports its events as they stream in (NDJSON): progress, the structure snapshot,
  * then the typed snapshot. Resolves when the stream ends; rejects if the scan can't start.
  */
-export async function runScan(path: string, types: boolean, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
+/** How to scan: TypeScript type info, and merging files that declare one exported thing into it. */
+export interface ScanSettings {
+  types: boolean;
+  merge: boolean;
+}
+
+export async function runScan(path: string, { types, merge }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/api/scan", {
     signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, types }),
+    body: JSON.stringify({ path, types, merge }),
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));

@@ -16,6 +16,8 @@ export interface TreeNode {
   path: string;
   /** Snapshot node id (files, declarations, libraries). */
   id?: string;
+  /** A declaration standing for its whole file (merged scan): it sits where the file would, and its path matches. */
+  file?: boolean;
   children: TreeNode[];
 }
 
@@ -45,11 +47,12 @@ export function buildTree(s: Snapshot, filter: LibraryFilter): TreeNode[] {
     }
   }
   for (const n of Object.values(s.nodes)) {
-    if (n.kind !== "module" || isFiltered(n, filter)) continue;
+    if ((n.kind !== "module" && !n.file) || isFiltered(n, filter)) continue;
     const slash = n.filePath.lastIndexOf("/");
     const parent = slash < 0 || n.filePath.startsWith("..") ? root : folderFor(n.filePath.slice(0, slash));
     const decls = (declsOf.get(n.id) ?? []).sort((a, b) => (s.nodes[a.id!]?.loc?.line ?? 0) - (s.nodes[b.id!]?.loc?.line ?? 0));
-    parent.children.push({ key: n.id, kind: "file", name: n.name, path: n.filePath, id: n.id, children: decls });
+    if (n.file) parent.children.push({ key: n.id, kind: "decl", name: n.name, path: n.filePath, id: n.id, file: true, children: [] });
+    else parent.children.push({ key: n.id, kind: "file", name: n.name, path: n.filePath, id: n.id, children: decls });
   }
 
   const compress = (node: TreeNode): TreeNode => {
@@ -101,7 +104,7 @@ export function visibleRows(roots: TreeNode[], open: ReadonlySet<string>, query:
   const q = query.trim().toLowerCase();
   const rows: TreeRow[] = [];
   let truncated = false;
-  const matches = (n: TreeNode) => !q || n.name.toLowerCase().includes(q) || (n.kind !== "decl" && n.path.toLowerCase().includes(q));
+  const matches = (n: TreeNode) => !q || n.name.toLowerCase().includes(q) || ((n.kind !== "decl" || n.file) && n.path.toLowerCase().includes(q));
   // Whether a node or anything under it is shown.
   const memo = new Map<TreeNode, boolean>();
   const relevant = (n: TreeNode): boolean => {

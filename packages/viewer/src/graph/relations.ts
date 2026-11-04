@@ -72,7 +72,7 @@ const isChildEdge = (s: Snapshot, e: Edge, f: RelationFilter) => {
   const from = s.nodes[e.from];
   return (
     !!from &&
-    CHILD_KINDS[from.kind].has(e.kind) &&
+    (CHILD_KINDS[from.kind].has(e.kind) || (!!from.file && CHILD_KINDS.module.has(e.kind))) &&
     f.enabled[EDGE_GROUP_OF[e.kind]] &&
     !isFiltered(s.nodes[e.to], f.libraries) &&
     !isFiltered(from, f.libraries)

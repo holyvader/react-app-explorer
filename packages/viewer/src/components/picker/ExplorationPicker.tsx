@@ -9,7 +9,7 @@ import { relationFilterOf, useExplorer } from "../../store.ts";
 import { ElementTree, type TickState } from "./ElementTree.tsx";
 
 /**
- * What the diagram draws, chosen in one place (after noesis' exploration picker): the scanned
+ * What the diagram draws, chosen in one place: the scanned
  * model's tree, each element ticked in or out. A file row cycles: the file → with everything it
  * declares → off. Opens from the round plus at the canvas's foot, Space, ⌘K or "Start exploration".
  */

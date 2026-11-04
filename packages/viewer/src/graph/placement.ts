@@ -1,8 +1,8 @@
 import type { DrawnElement, DrawnGraph } from "./drawn.ts";
-import { CARD_HEIGHT, frameWidthOf, PADDING, type PlacedElement, SPACING, widthOf } from "./layout.ts";
+import { CARD_HEIGHT, cardWidthOf, frameWidthOf, PADDING, type PlacedElement, SPACING } from "./layout.ts";
 
 /*
- * Incremental placement, after the system model explorer in noesis:
+ * Incremental placement:
  *
  * - What stays keeps its place; what is gone is only gone.
  * - What comes is set beside the node the change came from, in the nearest free
@@ -74,7 +74,7 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     const r = absoluteOf(e.id);
     const was = before.get(e.id);
     if (!r || !was) continue;
-    const next = kidsOf(e.id).length === 0 && was.holds ? { ...r, width: widthOf(e.name), height: CARD_HEIGHT } : r;
+    const next = kidsOf(e.id).length === 0 && was.holds ? { ...r, width: cardWidthOf(e), height: CARD_HEIGHT } : r;
     rects.set(e.id, next);
     if (!same(next, r)) resized.push({ id: e.id, old: r });
   }
@@ -296,7 +296,7 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
       rects.set(e.id, r);
       return fit(e.parent);
     }
-    const width = widthOf(e.name);
+    const width = cardWidthOf(e);
     if (e.parent !== null) {
       const container = rects.get(e.parent);
       if (!container) return false;
@@ -329,7 +329,7 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
     const sorted = [...group].sort((a, b) => a.name.localeCompare(b.name));
     const cols = gridColumns(sorted.length);
     const rows = Math.ceil(sorted.length / cols);
-    const cell = Math.max(...sorted.map((e) => widthOf(e.name)));
+    const cell = Math.max(...sorted.map((e) => cardWidthOf(e)));
     const width = cols * cell + (cols - 1) * SPACING;
     const height = rows * CARD_HEIGHT + (rows - 1) * SPACING;
     let spot: Rect;
@@ -351,7 +351,7 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
     sorted.forEach((e, i) => {
       const c = i % cols;
       const r = Math.floor(i / cols);
-      rects.set(e.id, { x: spot.x + c * (cell + SPACING), y: spot.y + r * (CARD_HEIGHT + SPACING), width: widthOf(e.name), height: CARD_HEIGHT });
+      rects.set(e.id, { x: spot.x + c * (cell + SPACING), y: spot.y + r * (CARD_HEIGHT + SPACING), width: cardWidthOf(e), height: CARD_HEIGHT });
     });
     return fit(parent);
   };

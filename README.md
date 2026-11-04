@@ -11,11 +11,11 @@ Static analysis + interactive diagram for React / Next.js codebases.
   Output is a timestamped JSON snapshot.
 - **`packages/viewer`**: Vite + React Flow app. The canvas starts empty. Use **Add** (⌘K) to search for any scanned node, then expand parents or children step by step or all the way to the root or leaves.
   - Elements are nested: folder frames contain file modules, and file modules contain their components, hooks and functions.
-  - Layout uses ELK. Local placement and drag rules follow the noesis system model explorer: frames grow, shrink and push neighbours aside.
+  - Layout uses ELK. Local placement and drag rules: frames grow, shrink and push neighbours aside.
   - 3rd-party libraries can be filtered out. React is hidden by default.
   - Relations include imports, renders, hooks and **invokes** (calls, `new`, handler references, module-level calls; server actions are highlighted).
-  - Add elements as in the noesis explorer: a tree picker (Space or the round "+"), quick add by right-clicking the canvas, and the "+" on a file for what it contains.
-  - Each element kind has its own shape (translucent, so nesting reads with depth), and each relation its own animated, labelled, floating line. Hover an element for its props, hooks, renders, inputs/outputs or exports. Blue is reserved for selection. Clicking selects (blue) and highlights related elements; ⌘-click adds to the selection. Right-click opens every action plus relation submenus (imports / imported by, renders / rendered by, …). Dragging inside a frame pans. Keyboard shortcuts follow the noesis explorer (see the legend on the canvas).
+  - Add elements with a tree picker (Space or the round "+"), quick add by right-clicking the canvas, and the "+" on a file for what it contains.
+  - Each element kind has its own shape (translucent, so nesting reads with depth), and each relation its own animated, labelled, floating line. Hover an element for its props, hooks, renders, inputs/outputs or exports. Blue is reserved for selection. Clicking selects (blue) and highlights related elements; ⌘-click adds to the selection. Right-click opens every action plus relation submenus (imports / imported by, renders / rendered by, …). Dragging inside a frame pans. Keyboard shortcuts are listed in the legend on the canvas.
   - Undo/redo (⌘Z / ⇧⌘Z). Delete removes the selected element. The current diagram is stored per project and comes back on reload. The graph itself is read-only: nodes can't be connected by hand.
   - The sidebar shows details and an "Open in editor" link. You can also **Scan…** a project straight from the UI.
 - **`packages/design-system`**: Chakra UI v3 wrapper, the only place Chakra is imported.

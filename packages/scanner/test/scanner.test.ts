@@ -10,7 +10,7 @@ for (const types of [true, false]) {
   describe(`next-app (types: ${types})`, () => {
     let s: Snapshot;
     beforeAll(async () => {
-      s = await scan(fixture("next-app"), { cache: false, types });
+      s = await scan(fixture("next-app"), { cache: false, types, mergeSingleExport: false });
     });
 
     test("detects framework and next roles", () => {
@@ -91,7 +91,7 @@ for (const types of [true, false]) {
 describe("react-app", () => {
   let s: Snapshot;
   beforeAll(async () => {
-    s = await scan(fixture("react-app"), { cache: false });
+    s = await scan(fixture("react-app"), { cache: false, mergeSingleExport: false });
   });
 
   test("framework, module-level render and lazy import", () => {
@@ -116,7 +116,7 @@ describe("react-app", () => {
   });
 
   test("entry-file mode follows imports", async () => {
-    const s2 = await scan(fixture("react-app") + "src/main.tsx", { cache: false, types: false });
+    const s2 = await scan(fixture("react-app") + "src/main.tsx", { cache: false, types: false, mergeSingleExport: false });
     expect(Object.keys(s2.nodes)).toContain("src/components/Settings.tsx#Settings");
     expect(s2.entry).toBe("src/main.tsx");
   });
@@ -124,7 +124,7 @@ describe("react-app", () => {
 
 describe("invokes", () => {
   test("new Foo() and module-level calls create invokes edges", async () => {
-    const s = await scan(fixture("next-app"), { cache: false, types: false });
+    const s = await scan(fixture("next-app"), { cache: false, types: false, mergeSingleExport: false });
     expect(edge(s, "invokes", "lib/store.ts#createStore", "lib/store.ts#TodoStore")).toBeDefined();
     expect(edge(s, "invokes", "lib/store.ts", "lib/store.ts#createStore")).toBeDefined();
     expect(s.schemaVersion).toBe(2);
@@ -164,7 +164,7 @@ describe("aliases and externals: only packages are external", () => {
       "components/Real.tsx": `export function Real({ children }: { children?: unknown }) { return <div>{children as never}</div>; }`,
       "src/style.css": `body {}`,
     });
-    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false });
+    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false, mergeSingleExport: false });
     expect(kindOf(s, "components/Real.tsx")).toBe("module");
     expect(s.nodes["generated/Gone"]).toMatchObject({ kind: "module", missing: true, specifier: "@/generated/Gone" });
     expect(s.nodes["src/nowhere"]).toMatchObject({ kind: "module", missing: true });
@@ -183,7 +183,7 @@ describe("aliases and externals: only packages are external", () => {
       "src/main.tsx": `import { App } from "~/App";\nimport { X } from "~/missing/X";\nexport const main = () => [App, X];`,
       "src/App.tsx": `export function App() { return <div />; }`,
     });
-    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false });
+    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: false, mergeSingleExport: false });
     expect(kindOf(s, "src/App.tsx")).toBe("module");
     expect(s.nodes["src/missing/X"]).toMatchObject({ kind: "module", missing: true });
     expect(Object.values(s.nodes).filter((n) => n.kind === "external")).toEqual([]);
@@ -197,7 +197,7 @@ describe("aliases and externals: only packages are external", () => {
       "packages/ui/src/Button.tsx": `import { cn } from "@/lib/cn";\nimport { Icon } from "@/icons/Icon";\nexport function Button() { cn(); return <Icon />; }`,
       "packages/ui/src/lib/cn.ts": `export const cn = () => "";`,
     });
-    const s = await scan(join(root, "apps/web/page.tsx"), { cache: false, types: false });
+    const s = await scan(join(root, "apps/web/page.tsx"), { cache: false, types: false, mergeSingleExport: false });
     const cn = Object.keys(s.nodes).find((id) => id.endsWith("packages/ui/src/lib/cn.ts"));
     expect(cn && kindOf(s, cn)).toBe("module");
     // ui's "@/icons/Icon" means packages/ui/src/icons/Icon (missing) — not apps/web/icons, not a package
@@ -224,7 +224,7 @@ describe("generics and extends", () => {
         `export const pick = <T, K extends keyof T>(o: T, k: K): T[K] => o[k];`,
       ].join("\n"),
     );
-    const s = await scan(join(root, "src/list.tsx"), { cache: false, types: false });
+    const s = await scan(join(root, "src/list.tsx"), { cache: false, types: false, mergeSingleExport: false });
     expect(s.nodes["src/list.tsx#ListProps"]).toMatchObject({
       typeParams: [{ name: "T", constraint: "Item", default: "Item" }],
       extends: ["Base<T>", `Omit<Base<T>, "items">`],
@@ -264,7 +264,7 @@ describe("App Router routes", () => {
       mkdirSync(join(root, p, ".."), { recursive: true });
       writeFileSync(join(root, p), t);
     }
-    const s = await scan(root, { cache: false, types: false });
+    const s = await scan(root, { cache: false, types: false, mergeSingleExport: false });
     const r = (id: string) => s.nodes[id]!.route!;
     expect(r("route:/")).toMatchObject({ url: "/", segmentKind: "root", kind: "segment" });
     expect(r("route:/(marketing)")).toMatchObject({ url: "/", segmentKind: "group", kind: "page", parent: "route:/" });
@@ -323,7 +323,7 @@ describe("middleware matching", () => {
         `export const config = { matcher: ["/dashboard/:path*", { source: "/api/:path+", has: [{ type: "header", key: "x-key" }], missing: [{ type: "cookie", key: "skip", value: "1" }] }] };`,
       ].join("\n"),
     );
-    const s = await scan(root, { cache: false, types: false });
+    const s = await scan(root, { cache: false, types: false, mergeSingleExport: false });
     expect(s.nodes["proxy.ts"]!.middleware!.matchers).toEqual([
       { source: "/dashboard/:path*" },
       { source: "/api/:path+", has: ["header x-key"], missing: ["cookie skip=1"] },
@@ -336,9 +336,9 @@ describe("middleware matching", () => {
   });
 
   test("no matcher: it runs before every route; a negative-lookahead matcher skips what it excludes", async () => {
-    const all = await scan(app(`export function proxy() {}`), { cache: false, types: false });
+    const all = await scan(app(`export function proxy() {}`), { cache: false, types: false, mergeSingleExport: false });
     expect(targets(all)).toEqual(["route:/", "route:/api/data", "route:/dashboard", "route:/dashboard/[team]"]);
-    const most = await scan(app(`export function proxy() {}\nexport const config = { matcher: ["/((?!api|_next/static).*)"] };`), { cache: false, types: false });
+    const most = await scan(app(`export function proxy() {}\nexport const config = { matcher: ["/((?!api|_next/static).*)"] };`), { cache: false, types: false, mergeSingleExport: false });
     expect(targets(most)).toEqual(["route:/", "route:/dashboard", "route:/dashboard/[team]"]);
   });
 });
@@ -371,7 +371,7 @@ describe("static / dynamic rendering", () => {
       mkdirSync(join(root, p, ".."), { recursive: true });
       writeFileSync(join(root, p), t);
     }
-    const s = await scan(root, { cache: false, types: false });
+    const s = await scan(root, { cache: false, types: false, mergeSingleExport: false });
     const r = (id: string) => s.nodes[id]!.route!.rendering!;
     expect(r("route:/").mode).toBe("static"); // a server action using cookies() runs on submit: doesn't count
     expect(r("route:/account")).toMatchObject({ mode: "dynamic" });
@@ -422,7 +422,7 @@ describe("Cache Components: \"use cache\", cacheLife / cacheTag, invalidation, p
       "app/broken/page.tsx": `import { cookies } from "next/headers";\nexport default async function Broken() { return <p>{(await cookies()).get("x")?.value}</p>; }`,
       "app/client/page.tsx": `"use client";\nimport { useEffect } from "react";\nexport default function C() { useEffect(() => { fetch("/api/x"); }, []); return <p />; }`,
     });
-    const s = await scan(root, { cache: false, types: false });
+    const s = await scan(root, { cache: false, types: false, mergeSingleExport: false });
     expect(s.next?.cacheComponents).toBe(true);
     expect(s.nodes["lib/catalog.ts#getDeals"]!.cache).toEqual({ variant: "default", scope: "function", life: "hours", revalidate: 3600, expire: 86400, tags: ["deals", "products"] });
     expect(s.nodes["lib/catalog.ts#getStock"]!.cache).toMatchObject({ variant: "remote", revalidate: 60, expire: 600, tags: ["stock"] });
@@ -439,5 +439,41 @@ describe("Cache Components: \"use cache\", cacheLife / cacheTag, invalidation, p
     expect(r("route:/me").blocking).toBeUndefined();
     expect(r("route:/broken")).toMatchObject({ mode: "dynamic", blocking: true });
     expect(r("route:/client").mode).toBe("static"); // client code runs in the browser
+  });
+});
+
+describe("merging files that declare one exported thing (default on)", () => {
+  test("the declaration takes the file's id, role and boundary; links follow it", async () => {
+    const s = await scan(fixture("next-app"), { cache: false, types: false });
+    expect(s.options?.mergeSingleExport).toBe(true);
+    // app/page.tsx declares only HomePage: one node, the file's id
+    const page = s.nodes["app/page.tsx"]!;
+    expect(page).toMatchObject({ kind: "component", name: "HomePage", file: true, fileName: "page.tsx", nextRole: "page", moduleType: "server", isAsync: true });
+    expect(page.moduleId).toBeUndefined();
+    expect(s.nodes["app/page.tsx#HomePage"]).toBeUndefined();
+    // the route's page is the merged node; its imports and renders start from it
+    expect(s.nodes["route:/"]!.route!.files.page).toBe("app/page.tsx");
+    expect(edge(s, "imports", "app/page.tsx", "components/TodoList.tsx")).toBeDefined();
+    expect(edge(s, "renders", "app/page.tsx", "components/TodoList.tsx")?.conditions?.some((c) => c.kind === "suspense")).toBe(true);
+    expect(s.edges.some((e) => e.kind === "declares" && e.from === "app/page.tsx")).toBe(false);
+    // render trees point at merged ids
+    const json = JSON.stringify(page.renderTree);
+    expect(json).toContain('"targetId":"components/TodoList.tsx"');
+    expect(json).not.toContain("components/TodoList.tsx#TodoList");
+    // no edge points at a removed id
+    for (const e of s.edges) {
+      expect(s.nodes[e.from]).toBeDefined();
+      expect(s.nodes[e.to]).toBeDefined();
+    }
+    // several declarations (or a private one next to it) keep the file
+    expect(s.nodes["lib/data.ts"]!.kind).toBe("module");
+    expect(s.nodes["components/Header.tsx"]!.kind).toBe("module"); // HeaderProps + Header
+    expect(s.nodes["lib/format.ts"]).toMatchObject({ kind: "function", name: "formatTitle", file: true });
+  });
+
+  test("off: files and declarations as scanned", async () => {
+    const s = await scan(fixture("next-app"), { cache: false, types: false, mergeSingleExport: false });
+    expect(s.nodes["app/page.tsx"]!.kind).toBe("module");
+    expect(s.nodes["app/page.tsx#HomePage"]!.moduleId).toBe("app/page.tsx");
   });
 });

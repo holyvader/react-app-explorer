@@ -14,6 +14,7 @@ const { values, positionals } = parseArgs({
     exclude: { type: "string", multiple: true },
     "no-types": { type: "boolean", default: false },
     "no-cache": { type: "boolean", default: false },
+    "no-merge": { type: "boolean", default: false },
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
     stdout: { type: "boolean", default: false },
@@ -32,6 +33,7 @@ Options:
   --exclude <glob>    extra globs to exclude (repeatable)
   --no-types          skip the tsgo type pass (syntactic types only)
   --no-cache          ignore and don't write the incremental cache
+  --no-merge          keep files that declare one exported thing as file + declaration
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
   --stdout            print the snapshot JSON to stdout instead of writing a file
@@ -56,6 +58,7 @@ if (values.events) {
       exclude: values.exclude,
       types: !values["no-types"],
       cache: !values["no-cache"],
+      mergeSingleExport: !values["no-merge"],
       maxWorkers: values.workers ? Number(values.workers) : undefined,
       signal: controller.signal,
     },
@@ -71,6 +74,7 @@ const snapshot = await scan(input, {
   exclude: values.exclude,
   types: !values["no-types"],
   cache: !values["no-cache"],
+  mergeSingleExport: !values["no-merge"],
   maxWorkers: values.workers ? Number(values.workers) : undefined,
   onWarn: (m) => warnings.push(m),
 });

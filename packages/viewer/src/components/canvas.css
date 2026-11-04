@@ -106,9 +106,12 @@
 .rae-card__extra[data-boundary="client"] { color: var(--chakra-colors-boundary-client-fg); }
 .rae-card__extra[data-boundary="shared"] { color: var(--chakra-colors-boundary-shared-fg); }
 .rae-card__boundary { flex-shrink: 0; }
+.rae-card__badges { display: flex; gap: 4px; flex-shrink: 0; }
 /* the actions take its place on hover / selection */
 .react-flow__node-card:hover .rae-card__boundary,
-.react-flow__node-card.selected .rae-card__boundary { visibility: hidden; }
+.react-flow__node-card.selected .rae-card__boundary,
+.react-flow__node-card:hover .rae-card__badges,
+.react-flow__node-card.selected .rae-card__badges { visibility: hidden; }
 
 /* actions: a small inset group on the right, shown on hover / when selected */
 .rae-card__actions {

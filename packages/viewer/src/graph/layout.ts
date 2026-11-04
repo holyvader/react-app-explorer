@@ -23,6 +23,9 @@ const MIN_WIDTH = 230;
 const MAX_WIDTH = 320;
 /** Room for the name beside icon, boundary chip and the action buttons. */
 export const widthOf = (name: string) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, name.length * 7.5 + 150));
+/** A card's width: room for its name, plus its badges (each ≈ 6.5px a letter, padding and gap). */
+export const cardWidthOf = (e: Pick<DrawnElement, "name" | "badges">) =>
+  widthOf(e.name) + (e.badges ?? []).reduce((w, b) => w + b.length * 6.5 + 16, e.badges?.length ? 8 : 0);
 /** A frame's least width: its header holds the name, role/boundary chips and six actions. */
 export const frameWidthOf = (name: string) => widthOf(name) + 200;
 
@@ -50,7 +53,7 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
 
   const nodeOf = (e: DrawnElement): ElkNode => {
     const inside = kids.get(e.id) ?? [];
-    if (!inside.length) return { id: e.id, width: widthOf(e.name), height: CARD_HEIGHT };
+    if (!inside.length) return { id: e.id, width: cardWidthOf(e), height: CARD_HEIGHT };
     return {
       id: e.id,
       layoutOptions: {
@@ -87,7 +90,7 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
         holds: (n.children?.length ?? 0) > 0,
         x: n.x ?? 0,
         y: n.y ?? 0,
-        width: n.width ?? widthOf(element.name),
+        width: n.width ?? cardWidthOf(element),
         height: n.height ?? CARD_HEIGHT,
       });
       walk(n.children);

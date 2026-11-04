@@ -40,7 +40,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
   if (!snapshot || !c) return null;
 
   const name = path.slice(path.lastIndexOf("/") + 1);
-  const total = c.files.length + c.declarations.length;
+  const total = c.files.length + c.declarations.filter((d) => !d.file).length;
   const declsIn = (fileId: string) => c.declarations.filter((d) => d.moduleId === fileId).length;
   const canFiles = c.files.some((f) => !drawn.has(f.id));
   const canAll = canFiles || c.declarations.some((d) => !drawn.has(d.id));

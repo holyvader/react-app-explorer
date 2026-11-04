@@ -47,7 +47,7 @@ function json(res: ServerResponse, status: number, body: unknown) {
  *   GET /api/snapshots        → index (newest first)
  *   GET /api/snapshots/:file  → snapshot JSON
  *   GET /api/fs?path=…        → directory listing for the scan folder picker
- *   POST /api/scan {path, types} → runs the scanner CLI (under Bun), snapshot lands in the snapshots dir
+ *   POST /api/scan {path, types, merge} → runs the scanner CLI (under Bun), snapshot lands in the snapshots dir
  * Directory comes from RAE_SNAPSHOTS (absolute, or relative to the repo root).
  * Dev-only and local: it exposes the filesystem to the page, so never deploy this server.
  */
@@ -136,7 +136,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         // JSON only: a cross-site form/text POST can't send this without a CORS preflight.
         if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return json(res, 415, { error: "Content-Type must be application/json" });
         if (running) return json(res, 409, { error: "A scan is already running: cancel it first" });
-        let body: { path?: string; types?: boolean };
+        let body: { path?: string; types?: boolean; merge?: boolean };
         try {
           body = JSON.parse(await readBody(req));
         } catch {
@@ -147,7 +147,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         running = true;
         // The CLI's --events mode: NDJSON ScanEvents (progress, structure result, then types),
         // streamed to the viewer line by line. The scan finishes even if the page goes away.
-        const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"])];
+        const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"]), ...(body.merge !== false ? [] : ["--no-merge"])];
         const child = spawn(bun, args, { cwd: repoRoot });
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/x-ndjson");

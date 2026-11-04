@@ -219,6 +219,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               )}
               {note && <span className="rae-tree__note">{note}</span>}
               {!note && n.kind === "file" && n.children.length > 0 && <span className="rae-tree__note">{n.children.length}</span>}
+              {!note && n.file && node?.fileName && !node.route?.rendering && <span className="rae-tree__note">{node.fileName}</span>}
               {!note && node?.route?.rendering && (
                 <span className="rae-tree__note" title={node.route.rendering.reasons.join("\n")}>
                   {renderingLabel(node.route.rendering)}

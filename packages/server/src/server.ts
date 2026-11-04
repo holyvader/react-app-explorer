@@ -250,7 +250,7 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
     if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
-    let body: { path?: string; types?: boolean };
+    let body: { path?: string; types?: boolean; merge?: boolean };
     try {
       body = await req.json();
     } catch {
@@ -282,6 +282,7 @@ async function api(req: Request, url: URL): Promise<Response> {
           {
             outDir: snapshotsDir,
             types: body.types !== false,
+            mergeSingleExport: body.merge !== false,
             signal: job.abort.signal,
             onWarn: (m) => log(`warn: ${m}`),
             onProgress: (m) => log(`scan: ${m}`),

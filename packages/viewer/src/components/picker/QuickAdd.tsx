@@ -7,7 +7,7 @@ import { ElementTree } from "./ElementTree.tsx";
 /**
  * Right-click on the empty canvas: the model's tree under a filter box, right there. A row clicked
  * (a folder too) puts that element on the diagram at that point. What's drawn already is left out — or greyed,
- * to be opened, when something inside it isn't (after noesis' quick add).
+ * to be opened, when something inside it isn't.
  */
 export function QuickAdd() {
   const quick = useExplorer((s) => s.quickAdd);

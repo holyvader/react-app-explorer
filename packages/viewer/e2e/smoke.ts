@@ -1,6 +1,6 @@
 /**
  * Headless smoke test of the viewer.
- * Prereq: `bun run scan packages/fixtures/next-app` and a running dev server:
+ * Prereq: `bun run scan packages/fixtures/next-app --no-merge` (it checks files holding declarations) and a running dev server:
  *   RAE_SNAPSHOTS=packages/fixtures/next-app/.explorer/snapshots bun run dev -- --port 5199
  * Run: bun packages/viewer/e2e/smoke.ts [outDir]
  * Browser: PW_CHROMIUM_PATH=<chromium binary>, otherwise Playwright's default lookup.
@@ -37,12 +37,12 @@ const nth = await page.locator("[role=menu]").first().evaluate((menu) => {
   }
   return -1;
 });
-if (nth < 0) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app` first");
+if (nth < 0) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app --no-merge` first");
 await page.getByRole("menuitem").nth(nth).click();
 await page.waitForFunction(() => (window as any).__rae.getState().snapshot?.rootDir.endsWith("next-app"));
 await page.getByRole("button", { name: /^Snapshots: next-app/ }).waitFor();
 await page.getByText("Empty diagram").waitFor();
-// Add the way noesis does: "Start exploration" opens the picker; filter, Enter picks the first match.
+// Adding: "Start exploration" opens the picker; filter, Enter picks the first match.
 await page.getByRole("button", { name: "Start exploration" }).click();
 await page.getByLabel("Filter elements").fill("HomePage");
 await page.keyboard.press("Enter");
@@ -136,7 +136,7 @@ if (rb) {
   if ((await viewport()) === v0) fail("dragging inside a frame should pan the diagram");
 }
 
-// Space opens the picker (noesis shortcut).
+// Space opens the picker.
 await page.keyboard.press(" ");
 await page.getByLabel("Filter elements").waitFor();
 await page.keyboard.press("Escape");

@@ -186,7 +186,7 @@ const isKnown = (s: Snapshot | undefined, id: string) => {
   if (!s) return false;
   if (!isFolder(id)) return !!s.nodes[id];
   const prefix = id.slice(FOLDER_PREFIX.length) + "/";
-  return Object.values(s.nodes).some((n) => n.kind === "module" && n.filePath.startsWith(prefix));
+  return Object.values(s.nodes).some((n) => (n.kind === "module" || n.file) && n.filePath.startsWith(prefix));
 };
 
 export const useExplorer = create<ExplorerState>((set, get) => {
@@ -386,7 +386,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     select: (id, adding) => {
       if (id === undefined) return set({ selection: [], selectedId: undefined });
       const s = get();
-      // Clicked again while it's the only one selected: let go of it (noesis).
+      // Clicked again while it's the only one selected: let go of it.
       if (!adding) return s.selection.length === 1 && s.selection[0] === id ? set({ selection: [], selectedId: undefined }) : set({ selection: [id], selectedId: id });
       // ⌘/Ctrl+click: joins the selection, or leaves it.
       const selection = s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id];

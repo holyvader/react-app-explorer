@@ -27,12 +27,13 @@ export function folderContents(s: Snapshot, path: string): FolderContents {
   for (const n of Object.values(s.nodes)) {
     if (n.kind === "external" || !n.filePath.startsWith(prefix)) continue;
     countsByKind[n.kind] = (countsByKind[n.kind] ?? 0) + 1;
-    if (n.kind === "module") files.push(n);
-    else declarations.push(n);
+    // a declaration standing for its file (merged scan) counts as both
+    if (n.kind === "module" || n.file) files.push(n);
+    if (n.kind !== "module") declarations.push(n);
     const rest = n.filePath.slice(prefix.length);
     const slash = rest.indexOf("/");
     if (slash < 0) {
-      if (n.kind === "module") directFiles.push(n);
+      if (n.kind === "module" || n.file) directFiles.push(n);
     } else {
       const name = rest.slice(0, slash);
       sub.set(name, (sub.get(name) ?? 0) + 1);
@@ -52,7 +53,7 @@ export function folderContents(s: Snapshot, path: string): FolderContents {
 /** Ids to add for "show files inside" (deep = false) or "show everything inside" (files + declarations). */
 export function folderExpansion(s: Snapshot, path: string, deep: boolean): string[] {
   const c = folderContents(s, path);
-  return deep ? [...c.files, ...c.declarations].map((n) => n.id) : c.files.map((n) => n.id);
+  return deep ? [...new Set([...c.files, ...c.declarations].map((n) => n.id))] : c.files.map((n) => n.id);
 }
 
 /** A folder's parent folder id (`dir:a/b` → `dir:a`), or all of its ancestors up to the project root. */

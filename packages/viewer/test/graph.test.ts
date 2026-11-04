@@ -9,7 +9,7 @@ import { absoluteRect, autoPlaceSoleChildren, movedTo, placeLocally } from "../s
 // A fresh snapshot of the Next.js fixture (no cache, no types: fast and independent of files on disk).
 let cached: Promise<Snapshot> | undefined;
 const loadSnapshot = (): Promise<Snapshot> =>
-  (cached ??= scan(new URL("../../fixtures/next-app", import.meta.url).pathname, { cache: false, types: false }));
+  (cached ??= scan(new URL("../../fixtures/next-app", import.meta.url).pathname, { cache: false, types: false, mergeSingleExport: false }));
 
 const ALL = { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true };
 const opts = (o: Partial<{ folders: boolean; excluded: string[]; hideAll: boolean }> = {}) => ({
@@ -278,5 +278,27 @@ describe("routeChain: what renders a URL, root first", () => {
     // a route with no drawn parent, and a declaration whose file isn't drawn: in their route
     const alone = drawnGraph(snap, ["route:/(shop)/p/[id]", "app/(shop)/p/[id]/page.tsx#Product"], opts({ folders: false }));
     expect(Object.fromEntries(alone.elements.map((e) => [e.id, e.parent]))).toEqual({ "route:/(shop)/p/[id]": null, "app/(shop)/p/[id]/page.tsx#Product": "route:/(shop)/p/[id]" });
+  });
+});
+
+describe("merged scan: a declaration standing for its file", async () => {
+  const { buildTree } = await import("../src/graph/tree.ts");
+  const s = await scan(new URL("../../fixtures/next-app", import.meta.url).pathname, { cache: false, types: false });
+
+  test("drawn as a file: inside its folder frame, and in its route frame", () => {
+    const g = drawnGraph(s, ["app/page.tsx", "components/TodoList.tsx"], opts());
+    const byId = new Map(g.elements.map((e) => [e.id, e]));
+    expect(byId.get("app/page.tsx")).toMatchObject({ kind: "component", name: "HomePage", parent: "dir:app" });
+    expect(byId.get("components/TodoList.tsx")).toMatchObject({ kind: "component", parent: "dir:components" });
+    expect(g.relations.some((r) => r.edge.kind === "renders" && r.source === "app/page.tsx" && r.target === "components/TodoList.tsx")).toBe(true);
+    const routed = drawnGraph(s, ["app/page.tsx"], { ...opts(), routes: true });
+    expect(routed.elements.find((e) => e.id === "app/page.tsx")!.parent).toBe("route:/");
+  });
+
+  test("in the tree: a declaration row where the file was", () => {
+    const tree = buildTree(s, { excluded: new Set(), hideAll: false });
+    const app = tree.find((n) => n.key === "dir:app")!;
+    const row = app.children.find((c) => c.id === "app/page.tsx")!;
+    expect(row).toMatchObject({ kind: "decl", name: "HomePage", file: true, children: [] });
   });
 });
