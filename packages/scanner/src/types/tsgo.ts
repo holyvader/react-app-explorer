@@ -305,7 +305,8 @@ function makeProcessor(checker: Checker, keyOf: (f: FileExtract) => string) {
 /** Keep syntactic info (defaults) while preferring checker types. */
 function mergeProps(syntactic: PropDef[] | undefined, checked: PropDef[]): PropDef[] {
   const byName = new Map((syntactic ?? []).map((p) => [p.name, p]));
-  const merged: PropDef[] = checked.map((p) => ({ ...p, default: byName.get(p.name)?.default }));
+  // the checker's types, with what the source says: defaults and the annotations as written
+  const merged: PropDef[] = checked.map((p) => ({ ...p, default: byName.get(p.name)?.default, written: byName.get(p.name)?.written }));
   for (const p of syntactic ?? []) if (p.name.startsWith("...")) merged.push(p);
   return merged;
 }

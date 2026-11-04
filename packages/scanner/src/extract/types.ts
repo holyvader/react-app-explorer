@@ -89,6 +89,10 @@ export interface DeclExtract {
   hash: string;
   params: ParamDef[];
   returnType?: string;
+  /** The return type annotation as written (the type pass fills `returnType`). */
+  returnWritten?: string;
+  /** A hash of its `return` statements' code (or an arrow's expression body). */
+  returnHash?: string;
   props?: PropDef[];
   hooks: RawHook[];
   functions: RawFn[];

@@ -76,38 +76,73 @@ export function sideLabel(ref: string, sha: string, worktree?: boolean): string 
   return `${name} ${sha.slice(0, 7)}`;
 }
 
+/** A prop or parameter on one side of a change: its name, type and whether it's optional. */
+export interface ParamSide {
+  name: string;
+  type?: string;
+  optional?: boolean;
+  /** The annotation as written (diff snapshots that record them). */
+  written?: string;
+}
+
+/** A change to an element's signature: a prop / parameter added, removed or retyped, or its return type. */
+export type SignatureChange =
+  | { kind: "param"; what: "added" | "removed" | "changed"; isProp: boolean; from?: ParamSide; to?: ParamSide }
+  | { kind: "return"; from: string; to: string }
+  /** The same return type, but the code it returns changed (`return` statements, an arrow's body). */
+  | { kind: "returned"; type: string };
+
 /**
- * What changed in a node, in words: props / params added or removed, the return type, the boundary,
- * the Next.js role, the route's rendering, the type's text. Empty when only the body changed.
+ * What changed in an element's signature — props or parameters (added, removed, a different type or
+ * optionality) and its return type — for the details' "In this diff". The rest (body, boundary,
+ * role…) is the code diff's to show. Types are compared as displayed: whitespace, and the
+ * `| undefined` TypeScript adds to optional ones, don't count; and only when both sides have a type
+ * (the base is compared without the type pass, so a type on the head alone isn't a change).
  */
-export function describeChange(before: GraphNode, after: GraphNode): { what: string; from?: string; to?: string; optional?: boolean }[] {
-  const out: { what: string; from?: string; to?: string; optional?: boolean }[] = [];
-  const names = (n: GraphNode) => (n.props ?? n.signature?.params ?? []).map((p) => p.name);
-  const was = new Set(names(before));
-  const now = new Set(names(after));
-  const isProps = !!(after.props ?? before.props);
-  for (const p of now) if (!was.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} added`, to: p });
-  for (const p of was) if (!now.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} removed`, from: p });
-  const entry = (n: GraphNode, name: string) => (n.props ?? n.signature?.params ?? []).find((p) => p.name === name);
-  const typeOf = (n: GraphNode, name: string) => entry(n, name)?.type;
-  // compared as shown: whitespace, and the `| undefined` TypeScript adds to optional ones, don't count
+export function signatureChanges(before: GraphNode, after: GraphNode, { annotations = false }: { annotations?: boolean } = {}): SignatureChange[] {
+  const isProp = !!(after.props ?? before.props);
+  const list = (n: GraphNode): ParamSide[] =>
+    (n.props ?? n.signature?.params ?? []).map((p) => ({ name: p.name, type: p.type, optional: !!p.optional, ...(p.written !== undefined ? { written: p.written } : {}) }));
+  const was = new Map(list(before).map((p) => [p.name, p]));
+  const now = new Map(list(after).map((p) => [p.name, p]));
   const shown = (t: string | undefined, optional?: boolean) => (t === undefined ? undefined : typeLines(t, { flat: true, optional }).join(""));
-  // types count only when both sides have one: the base is compared without the type pass, so a type
-  // appearing on the head alone (inferred, or from the cache) isn't a change
   const differs = (a?: string, b?: string, optional?: boolean) => a !== undefined && b !== undefined && shown(a, optional) !== shown(b, optional);
-  for (const p of now) {
-    const optional = !!(entry(before, p)?.optional && entry(after, p)?.optional);
-    if (was.has(p) && differs(typeOf(before, p), typeOf(after, p), optional)) out.push({ what: `${p}: type`, from: typeOf(before, p), to: typeOf(after, p), optional });
+  // With annotations (`written`), what the code says is compared — the same as the code diff: the
+  // checker may print an unchanged annotation differently (an import changed, an alias expanded).
+  // Annotated on one side only: a change; on neither: the inferred types (both sides are typed).
+  const typeDiffers = (a: ParamSide, b: ParamSide, optional?: boolean) => {
+    if (!annotations) return differs(a.type, b.type, optional);
+    if (a.written !== undefined || b.written !== undefined) return a.written === undefined || b.written === undefined || differs(a.written, b.written, optional);
+    return differs(a.type, b.type, optional);
+  };
+  // shown as written when known (else as the checker printed it)
+  const asShown = (p: ParamSide): ParamSide => (annotations && p.written !== undefined ? { ...p, type: p.written } : p);
+  const out: SignatureChange[] = [];
+  for (const [name, to] of now) {
+    const from = was.get(name);
+    if (!from) out.push({ kind: "param", what: "added", isProp, to: asShown(to) });
+    else if (from.optional !== to.optional || typeDiffers(from, to, from.optional && to.optional)) out.push({ kind: "param", what: "changed", isProp, from: asShown(from), to: asShown(to) });
   }
-  const ret = (n: GraphNode) => n.signature?.returnType;
-  if (differs(ret(before), ret(after))) out.push({ what: "return type", from: ret(before), to: ret(after) });
-  if (before.isAsync !== after.isAsync) out.push({ what: "async", from: before.isAsync ? "yes" : "no", to: after.isAsync ? "yes" : "no" });
-  if (before.kind !== after.kind) out.push({ what: "kind", from: before.kind, to: after.kind });
-  if (before.moduleType !== after.moduleType) out.push({ what: "boundary", from: before.moduleType, to: after.moduleType });
-  if (before.nextRole !== after.nextRole) out.push({ what: "Next.js role", from: before.nextRole, to: after.nextRole });
-  if (before.exported !== after.exported) out.push({ what: "exported", from: before.exported ? "yes" : "no", to: after.exported ? "yes" : "no" });
-  const mode = (n: GraphNode) => n.route?.rendering?.mode;
-  if (mode(before) !== mode(after)) out.push({ what: "rendering", from: mode(before), to: mode(after) });
-  if (before.typeText !== after.typeText && (before.typeText || after.typeText)) out.push({ what: "type", from: before.typeText, to: after.typeText });
+  for (const [name, from] of was) if (!now.has(name)) out.push({ kind: "param", what: "removed", isProp, from: asShown(from) });
+  if (annotations) {
+    const a = before.signature?.returnWritten;
+    const b = after.signature?.returnWritten;
+    const ra = before.signature?.returnType;
+    const rb = after.signature?.returnType;
+    if (a !== undefined || b !== undefined) {
+      // annotated (on a side at least): as written; a side without one shows what was inferred
+      if (a === undefined || b === undefined || differs(a, b)) out.push({ kind: "return", from: a ?? ra ?? "(inferred)", to: b ?? rb ?? "(inferred)" });
+    } else if (differs(ra, rb)) out.push({ kind: "return", from: ra!, to: rb! });
+  } else {
+    const ret = (n: GraphNode) => n.signature?.returnType;
+    if (differs(ret(before), ret(after))) out.push({ kind: "return", from: ret(before)!, to: ret(after)! });
+  }
+  // the type stayed, what's returned didn't
+  const ha = before.signature?.returnHash;
+  const hb = after.signature?.returnHash;
+  if (!out.some((c) => c.kind === "return") && ha && hb && ha !== hb) {
+    const type = after.signature?.returnWritten ?? after.signature?.returnType ?? before.signature?.returnWritten ?? before.signature?.returnType;
+    out.push({ kind: "returned", type: type ?? "(inferred)" });
+  }
   return out;
 }

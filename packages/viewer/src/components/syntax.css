@@ -14,3 +14,8 @@
 .rae-tok--link { text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
 .rae-tok--link:hover { text-decoration-style: solid; color: var(--chakra-colors-kind-type-fg); }
 .rae-tok--link:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; border-radius: 2px; }
+/* a folded object `{…3}` (click to open) and an open one's `{` (click to fold) */
+.rae-tok--fold { cursor: pointer; border-radius: 3px; }
+.rae-tok--fold[data-folded] { padding: 0 3px; background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg-muted); }
+.rae-tok--fold:hover { background: var(--chakra-colors-bg-emphasized); color: var(--chakra-colors-fg); }
+.rae-tok--fold:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }

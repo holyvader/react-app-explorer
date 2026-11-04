@@ -3,7 +3,7 @@ import type { Edge, GraphNode, Snapshot } from "@rae/schema";
 import { drawnGraph } from "../src/graph/drawn.ts";
 import { DEFAULT_EXCLUDED } from "../src/graph/packages.ts";
 import { buildTree } from "../src/graph/tree.ts";
-import { applyDiff, changesToShow, describeChange, edgeChange, isGhost, sideLabel } from "../src/lib/diff.ts";
+import { applyDiff, changesToShow, edgeChange, isGhost, sideLabel, signatureChanges } from "../src/lib/diff.ts";
 
 // A hand-made diff snapshot: App renders Footer (new) instead of Old (removed); Header changed.
 const mod = (id: string): GraphNode => ({ id, kind: "module", name: id.split("/").pop()!, filePath: id });
@@ -86,15 +86,46 @@ describe("diff snapshots in the viewer", () => {
 
   test("before → after in words; refs in short", () => {
     const s = applyDiff(snapshot());
-    expect(describeChange(s.diff!.before["src/Header.tsx#Header"]!, s.nodes["src/Header.tsx#Header"]!)).toEqual([{ what: "prop added", to: "title" }]);
+    expect(signatureChanges(s.diff!.before["src/Header.tsx#Header"]!, s.nodes["src/Header.tsx#Header"]!)).toEqual([
+      { kind: "param", what: "added", isProp: true, to: { name: "title", type: "string", optional: false } },
+    ]);
     // a type only the head has (the base is compared untyped) isn't a change; a different one is
     const was = { ...s.nodes["src/Header.tsx#Header"]!, signature: { params: [] } };
-    expect(describeChange(was, { ...was, signature: { params: [], returnType: "Element" } })).toEqual([]);
-    expect(describeChange({ ...was, signature: { params: [], returnType: "string" } }, { ...was, signature: { params: [], returnType: "number" } })).toEqual([{ what: "return type", from: "string", to: "number" }]);
+    expect(signatureChanges(was, { ...was, signature: { params: [], returnType: "Element" } })).toEqual([]);
+    expect(signatureChanges({ ...was, signature: { params: [], returnType: "string" } }, { ...was, signature: { params: [], returnType: "number" } })).toEqual([{ kind: "return", from: "string", to: "number" }]);
+    // the rest (boundary, async, role) is the code diff's: not listed
+    expect(signatureChanges({ ...was, moduleType: "server", isAsync: false }, { ...was, moduleType: "client", isAsync: true })).toEqual([]);
     // an optional prop's `| undefined` (added by TypeScript on one side only) isn't a change either
     const opt = (type: string) => ({ ...was, props: [{ name: "list", optional: true, type }] });
-    expect(describeChange(opt("SnapshotList"), opt("SnapshotList | undefined"))).toEqual([]);
-    expect(describeChange(opt("A"), opt("B | undefined"))).toEqual([{ what: "list: type", from: "A", to: "B | undefined", optional: true }]);
+    expect(signatureChanges(opt("SnapshotList"), opt("SnapshotList | undefined"))).toEqual([]);
+    expect(signatureChanges(opt("A"), opt("B | undefined"))).toEqual([
+      { kind: "param", what: "changed", isProp: true, from: { name: "list", type: "A", optional: true }, to: { name: "list", type: "B | undefined", optional: true } },
+    ]);
+    // becoming optional is a change; a parameter removed keeps its type
+    const fn = (params: { name: string; type?: string; optional?: boolean }[]) => ({ ...was, props: undefined, signature: { params } });
+    expect(signatureChanges(fn([{ name: "a", type: "string" }]), fn([{ name: "a", type: "string", optional: true }]))[0]).toMatchObject({ what: "changed", isProp: false });
+    expect(signatureChanges(fn([{ name: "a", type: "string" }]), fn([]))).toEqual([{ kind: "param", what: "removed", isProp: false, from: { name: "a", type: "string", optional: false } }]);
+    // with annotations, what the code says counts: the same annotation printed differently isn't a change
+    const ann = (type: string, written?: string) => ({ ...was, props: undefined, signature: { params: [{ name: "rule", type, written }] } });
+    expect(signatureChanges(ann("DesignedRuleInput", "DesignedRuleInput"), ann("{ id: string; name?: string }", "DesignedRuleInput"), { annotations: true })).toEqual([]);
+    expect(signatureChanges(ann("A", "A"), ann("B", "B"), { annotations: true })).toEqual([
+      { kind: "param", what: "changed", isProp: false, from: { name: "rule", type: "A", optional: false, written: "A" }, to: { name: "rule", type: "B", optional: false, written: "B" } },
+    ]);
+    // inferred on both sides (both typed): the inferred types
+    expect(signatureChanges(ann("string"), ann("number"), { annotations: true })[0]).toMatchObject({ what: "changed", from: { type: "string" }, to: { type: "number" } });
+    expect(signatureChanges(ann("string"), ann("string", "string"), { annotations: true })).toHaveLength(1); // annotation added
+    const ret = (returnType: string, returnWritten?: string) => ({ ...was, props: undefined, signature: { params: [], returnType, returnWritten } });
+    expect(signatureChanges(ret("Props", "Props"), ret("{ a: string }", "Props"), { annotations: true })).toEqual([]);
+    expect(signatureChanges(ret("string", "string"), ret("number", "number"), { annotations: true })).toEqual([{ kind: "return", from: "string", to: "number" }]);
+    // an inferred return type (no annotation on either side) that changed
+    expect(signatureChanges(ret("JSX.Element"), ret("JSX.Element | null"), { annotations: true })).toEqual([{ kind: "return", from: "JSX.Element", to: "JSX.Element | null" }]);
+    // ReactElement[] written on both sides, printed with default type arguments on one: no change
+    expect(signatureChanges(ret("ReactElement[]", "ReactElement[]"), ret("ReactElement<unknown, string | JSXElementConstructor<any>>[]", "ReactElement[]"), { annotations: true })).toEqual([]);
+    // the same return type, other returned code: marked modified (and only then)
+    const rh = (returnHash: string, returnType = "ReactElement[]") => ({ ...was, props: undefined, signature: { params: [], returnType, returnWritten: returnType, returnHash } });
+    expect(signatureChanges(rh("a"), rh("b"), { annotations: true })).toEqual([{ kind: "returned", type: "ReactElement[]" }]);
+    expect(signatureChanges(rh("a"), rh("a"), { annotations: true })).toEqual([]);
+    expect(signatureChanges(rh("a", "string"), rh("b", "number"), { annotations: true })).toEqual([{ kind: "return", from: "string", to: "number" }]); // a real type change says so instead
     expect(sideLabel("refs/pull/12/head", "b".repeat(40))).toBe("#12 bbbbbbb");
     expect(sideLabel("refs/merge-requests/3/head", "b".repeat(40))).toBe("!3 bbbbbbb");
     expect(sideLabel("main", "a".repeat(40))).toBe("main aaaaaaa");

@@ -36,6 +36,7 @@ beforeAll(async () => {
   await sh(["init", "-q", "-b", "main"]);
   write({
     "package.json": `{ "name": "demo" }`,
+    "tsconfig.json": `{ "compilerOptions": { "jsx": "react-jsx", "strict": true } }`,
     "src/main.tsx": `import { App } from "./App";\nexport function main() { return <App />; }\n`,
     "src/App.tsx": `import { Header } from "./Header";\nimport { Old } from "./Old";\nexport function App() {\n  return <div><Header /><Old /></div>;\n}\n`,
     "src/Header.tsx": `export function Header() {\n  return <h1>Hi</h1>;\n}\n`,
@@ -457,4 +458,18 @@ describe("the code diff's source endpoint", () => {
       expect(await gitSource(repo, sha!, file!)).toHaveProperty("error");
     }
   });
+});
+
+describe("a typed diff: both sides typed", () => {
+  test("the base's inferred types are there to compare (return types without annotations)", async () => {
+    const s = await scanDiff(repo, { base: "main", head: "feature", cache: false, treesDir: trees, mergeSingleExport: false });
+    const before = s.diff!.before["src/App.tsx#App"]!;
+    expect(before.signature?.returnType).toBeDefined(); // inferred by the checker on the base side too
+    expect(before.signature?.returnWritten).toBeUndefined(); // not annotated
+    expect(s.nodes["src/App.tsx#App"]!.signature?.returnType).toBeDefined();
+    expect(s.diff!.nodes["src/App.tsx#App"]).toBe("changed");
+    // App returns other JSX: its returned code's hash differs
+    expect(before.signature?.returnHash).toBeDefined();
+    expect(s.nodes["src/App.tsx#App"]!.signature?.returnHash).not.toBe(before.signature?.returnHash);
+  }, 60_000);
 });

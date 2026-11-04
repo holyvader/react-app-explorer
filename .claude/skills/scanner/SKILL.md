@@ -33,6 +33,11 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
 1. **Bump `EXTRACT_VERSION` in `cache.ts`** whenever the `FileExtract` shape or semantics change, or users get stale cache data.
 2. oxc offsets are UTF-16 and match what tsgo positions expect. Pass `node.start` directly.
 3. tsgo prints types with `FORMAT` (TypeScript's defaults + `NoTruncation`: no `... N more ...`), clipped at `MAX_TYPE` (2000).
+3a. Props / params keep their annotation as written in `written` (and `signature.returnWritten`): the type
+   pass fills `type` / `returnType` but never these (`mergeProps` carries them over). Diffs (`annotations: true`)
+   compare signatures by them — the checker may print an unchanged annotation expanded (an import moved).
+3c. `signature.returnHash`: a hash of a function's `return` statements (not nested functions'), or an
+   arrow's expression body — a diff marks "return value changed" when it differs but the type doesn't.
 3b. tsgo: collect all positions per file and send **one** `checker.getTypeAtPosition(file, positions[])`. Pipeline follow-ups with `Promise.all`; never `await` in a per-node loop. Clip type strings (`MAX_TYPE`).
 4. Keep the extractor syntactic and worker-safe: plain serializable output, no closures, no class instances.
 5. **Type declarations** (interface / type alias / enum) are declarations of kind `type`. `typeText`
@@ -121,6 +126,8 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
 - Changes: ids match (after git's renames map `old#X` → `new#X`); `changed` = different `hash`
   (declaration source; for files and merged nodes the whole file) or kind / boundary / role / route
   rendering. Edges compare by kind + ends + importType. Removed nodes are kept in `diff.removed`.
+- With types on, **both sides are typed** (the base's type pass runs beside the head's): inferred
+  types (return types without an annotation) can be compared; the diff is rebuilt from both typed sides.
 - UIs: `runScanJob(dir, { diff: { base, head | request, against } })` streams it like a scan (the untyped
   diff snapshot, then the typed one with the **same diff** — computed from both sides untyped, so types
   never show as changes). `--request refs/pull/N/head` fetches a PR / MR first. The checkout (`HEAD`)

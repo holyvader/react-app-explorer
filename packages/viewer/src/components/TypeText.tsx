@@ -1,11 +1,11 @@
 import { Box, Text, Tooltip } from "@rae/design-system";
 import type { GraphNode, Snapshot } from "@rae/schema";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { isPrimitiveType } from "../lib/typeText.ts";
-import { layoutDefinition, layoutType, type Tok } from "../lib/syntax.ts";
+import { type FoldRule, layoutDefinition, layoutType, type Tok } from "../lib/syntax.ts";
 import { useExplorer } from "../store.ts";
 import { useCodeColumns } from "../lib/useColumns.ts";
-import { CodeLines, SourceCode, TypeCode } from "./Code.tsx";
+import { CodeLines, DefinitionCode, TypeCode } from "./Code.tsx";
 
 /** Lines of a definition shown in a tooltip before "…". */
 const PREVIEW_LINES = 24;
@@ -41,7 +41,7 @@ function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
           <Text fontSize="2xs" opacity={0.75} mb="1">
             {t.kind === "type" ? `${t.typeKind ?? "type"} · ${t.filePath}` : `from ${t.name}`} — click the name to add it
           </Text>
-          {t.typeText && <SourceCode text={t.typeText} maxLines={PREVIEW_LINES} block />}
+          {t.typeText && <DefinitionCode text={t.typeText} width={TOOLTIP_COLUMNS} maxLines={PREVIEW_LINES} />}
         </Box>
       ))}
     </Box>
@@ -58,7 +58,17 @@ function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
 export function TypeText({ text, owner, block, flat, optional }: { text: string; owner?: GraphNode; block?: boolean; flat?: boolean; /** an optional prop / parameter's type: no `| undefined` */ optional?: boolean }) {
   const snapshot = useExplorer((s) => s.snapshot);
   const [ref, cols] = useCodeColumns<HTMLSpanElement>();
-  const lines = useMemo(() => (block ? layoutDefinition(text, cols) : layoutType(text, { width: cols, flat, optional })), [text, block, cols, flat, optional]);
+  // folded objects: by default nested ones that'd take several lines (a definition's: any member's
+  // object that doesn't fit); the user's clicks override, per object
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const fold = useMemo<FoldRule>(
+    () => (id, depth, fits) => toggled[id] ?? (block ? !fits : depth >= 1 && !fits),
+    [toggled, block],
+  );
+  const lines = useMemo(
+    () => (block ? layoutDefinition(text, cols, flat ? undefined : fold) : layoutType(text, { width: cols, flat, optional, fold: flat ? undefined : fold })),
+    [text, block, cols, flat, optional, fold],
+  );
 
   // what the names in it stand for (types of the project, libraries), looked up before rendering
   const links = useMemo(() => {
@@ -75,6 +85,31 @@ export function TypeText({ text, owner, block, flat, optional }: { text: string;
   const targets = [...new Map([...links.values()].filter((n) => n.kind === "type" || n.kind === "external").map((n) => [n.id, n])).values()];
   const add = (target: GraphNode) => useExplorer.getState().addNodes([target.id], { select: target.id, focus: target.id, anchor: owner?.id ?? null });
   const render = (t: Tok, key: string) => {
+    // a folded object: click to open; an open one's `{`: click to fold it again
+    const toggle = t.fold ?? t.unfold;
+    if (toggle)
+      return (
+        <span
+          key={key}
+          className={`rae-tok--${t.k} rae-tok--fold`}
+          data-folded={t.fold ? "" : undefined}
+          role="button"
+          tabIndex={0}
+          aria-expanded={!t.fold}
+          title={t.fold ? `Show ${t.members} member${t.members === 1 ? "" : "s"}` : "Fold this object"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setToggled((s) => ({ ...s, [toggle]: !t.fold }));
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            setToggled((s) => ({ ...s, [toggle]: !t.fold }));
+          }}
+        >
+          {t.t}
+        </span>
+      );
     const target = t.k === "type" ? links.get(t.t) : undefined;
     if (!target) return (
       <span key={key} className={`rae-tok--${t.k}`}>

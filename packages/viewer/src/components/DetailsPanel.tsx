@@ -37,7 +37,7 @@ import {
 import { type ReactNode, useMemo, useState } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
-import { CHANGE_WORD, describeChange } from "../lib/diff.ts";
+import { CHANGE_WORD, type ParamSide, type SignatureChange, signatureChanges } from "../lib/diff.ts";
 import { EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
@@ -47,10 +47,12 @@ import { DetailsStrip } from "./DetailsStrip.tsx";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
 import { NodeDiffModal } from "./NodeDiffModal.tsx";
+import { useNodeDiff } from "../lib/nodeDiff.ts";
 import { RenderTree } from "./RenderTree.tsx";
 import { SourceCode } from "./Code.tsx";
 import { TypeText } from "./TypeText.tsx";
 import { Section } from "./Section.tsx";
+import { shownReturn, shownType } from "../lib/typeText.ts";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -105,6 +107,14 @@ export function DetailsPanel() {
   const kindWord = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
   const tags = [fileNote(node), node.isAsync ? "async" : undefined].filter((t): t is string => !!t);
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
+  // Uses / Used by leave out what another section already lists: declarations (Declares, and the
+  // "in <file>" chip), renders (Renders), the project's hooks (Custom hooks), a route's files and its
+  // middleware (Route)
+  const customHookIds = new Set(customHooks.map((h) => h.id));
+  const uses = relations.children.filter(
+    (e) => e.kind !== "declares" && e.kind !== "renders" && e.kind !== "routeFile" && !(e.kind === "usesHook" && customHookIds.has(e.to)),
+  );
+  const usedBy = relations.parents.filter((e) => e.kind !== "declares" && !(e.kind === "runsBefore" && node.route?.middleware?.id === e.from));
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
   return (
@@ -233,7 +243,7 @@ export function DetailsPanel() {
       </PanelHeader>
 
       {change && snapshot?.diff && (
-        <Section title="In this diff" defaultOpen={false} aside={<DiffLines node={node} change={change} />}>
+        <Section title="In this diff" defaultOpen={false} aside={<DiffLines key={node.id} node={node} />}>
           <DiffView key={node.id} node={node} change={change} />
         </Section>
       )}
@@ -283,7 +293,7 @@ export function DetailsPanel() {
               <CodeRow key={p.name}>
                 <CodeToken kind="name">{p.name}</CodeToken>
                 <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
-                <TypeText text={p.type ?? "unknown"} owner={node} optional={p.optional} />
+                <TypeText text={shownType(p) ?? "unknown"} owner={node} optional={p.optional} />
                 {p.default && (
                   <>
                     <CodeToken kind="punct"> = </CodeToken>
@@ -361,11 +371,11 @@ export function DetailsPanel() {
         </Section>
       )}
 
-      <Section title="Uses" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
-        <RelationList edges={relations.children} side="to" />
+      <Section title="Uses" count={uses.length} defaultOpen={uses.length <= 30}>
+        <RelationList edges={uses} side="to" />
       </Section>
-      <Section title="Used by" count={relations.parents.length}>
-        <RelationList key={node.id} edges={relations.parents} side="from" limit={USED_BY_LIMIT} />
+      <Section title="Used by" count={usedBy.length}>
+        <RelationList key={node.id} edges={usedBy} side="from" limit={USED_BY_LIMIT} />
       </Section>
 
       <Section title="Details" defaultOpen={false}>
@@ -423,10 +433,10 @@ function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
         <span key={i}>
           {i > 0 && <CodeToken kind="punct">, </CodeToken>}
           <CodeToken kind="name">{p.name}</CodeToken>
-          {p.type && (
+          {shownType(p) && (
             <>
               <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type} owner={owner} optional={p.optional} />
+              <TypeText text={shownType(p)!} owner={owner} optional={p.optional} />
             </>
           )}
           {p.default && (
@@ -668,7 +678,7 @@ function ComponentProps({ node }: { node: GraphNode }) {
             <CodeRow key={p.name}>
               <CodeToken kind="name">{p.name}</CodeToken>
               <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type ?? "unknown"} owner={node} optional={p.optional} />
+              <TypeText text={shownType(p) ?? "unknown"} owner={node} optional={p.optional} />
               {p.default && (
                 <>
                   <CodeToken kind="punct"> = </CodeToken>
@@ -696,10 +706,10 @@ function ParamRows({ node, params, mt }: { node: GraphNode; params: ParamDef[]; 
       {params.map((p, i) => (
         <Box key={i} {...CODE_BOX} wordBreak="break-word">
           <CodeToken kind="name">{p.name}</CodeToken>
-          {p.type && (
+          {shownType(p) && (
             <>
               <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type} owner={node} optional={p.optional} />
+              <TypeText text={shownType(p)!} owner={node} optional={p.optional} />
             </>
           )}
           {p.default && (
@@ -735,7 +745,7 @@ function Signature({ node }: { node: GraphNode }) {
         <Eyebrow>Output</Eyebrow>
         <Box {...box} mt="1.5" wordBreak="break-word">
           {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
-          <TypeText text={sig.returnType ?? "unknown"} owner={node} />
+          <TypeText text={shownReturn(sig) ?? "unknown"} owner={node} />
         </Box>
       </Box>
     </Stack>
@@ -890,43 +900,34 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
   );
 }
 
-/** Changes whose values are types ("return type", "title: type", "type"): shown coloured. */
-const isTypeChange = (what: string) => what === "type" || what.endsWith("type");
-
-/** A declaration's lines: from its line to its last (none for files, routes, libraries). */
-const lineCount = (n: GraphNode | undefined) => (n?.loc && n.endLine && n.kind !== "module" && !n.file ? n.endLine - n.loc.line + 1 : undefined);
-
-/** "In this diff"'s header: the element's lines before (−) and after (+), as it was and as it is. */
-function DiffLines({ node, change }: { node: GraphNode; change: "added" | "removed" | "changed" }) {
-  const diff = useExplorer((s) => s.snapshot?.diff);
-  const was = lineCount(change === "changed" ? diff?.before[node.id] : change === "removed" ? node : undefined);
-  const now = lineCount(change === "removed" ? undefined : node);
-  if (was === undefined && now === undefined) return null;
+/**
+ * "In this diff"'s header: the lines removed (−) and added (+) in the element's code — the same diff
+ * the code diff dialog shows (loaded once, shared). Nothing while loading, or when the code can't be read.
+ */
+function DiffLines({ node }: { node: GraphNode }) {
+  const snapshot = useExplorer((s) => s.snapshot);
+  const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
+  const { diff } = useNodeDiff(snapshot, node, hasCode);
+  if (!diff) return null;
   return (
-    <Text as="span" fontFamily="mono" fontSize="10.5px" title={`${was !== undefined ? `${was} lines before` : ""}${was !== undefined && now !== undefined ? ", " : ""}${now !== undefined ? `${now} lines now` : ""}`}>
-      {was !== undefined && (
-        <Text as="span" color="diff.removed.fg">
-          −{was}
-        </Text>
-      )}
-      {was !== undefined && now !== undefined && (
-        <Text as="span" color="fg.subtle">
-          /
-        </Text>
-      )}
-      {now !== undefined && (
-        <Text as="span" color="diff.added.fg">
-          +{now}
-        </Text>
-      )}
+    <Text as="span" fontFamily="mono" fontSize="10.5px" title={`${diff.removed} line${diff.removed === 1 ? "" : "s"} removed, ${diff.added} added`}>
+      <Text as="span" color="diff.removed.fg">
+        −{diff.removed}
+      </Text>
+      <Text as="span" color="fg.subtle">
+        /
+      </Text>
+      <Text as="span" color="diff.added.fg">
+        +{diff.added}
+      </Text>
     </Text>
   );
 }
 
-/** One side of a change, like a diff line: − on red, + on green. */
-function ChangeRow({ sign, change, children }: { sign: string; change: "added" | "removed"; children: ReactNode }) {
+/** One side of a change, like a diff line: − on red, + on green; `~` on amber for modified in place. */
+function ChangeRow({ sign, change, title, children }: { sign: string; change: "added" | "removed" | "changed"; title?: string; children: ReactNode }) {
   return (
-    <Flex align="baseline" gap="2" px="2" py="0.5" mb="1px" rounded="l1" bg={`diff.${change}.subtle`} fontFamily="mono" fontSize="11.5px" lineHeight="1.6" minW="0">
+    <Flex align="baseline" gap="2" px="2" py="0.5" mb="1px" rounded="l1" bg={`diff.${change}.subtle`} fontFamily="mono" fontSize="11.5px" lineHeight="1.6" minW="0" title={title}>
       <Text as="span" color={`diff.${change}.fg`} flexShrink={0} userSelect="none">
         {sign}
       </Text>
@@ -951,10 +952,12 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
   const diff = snapshot?.diff;
   if (!snapshot || !diff) return null;
   const before = diff.before[node.id];
-  const items = change === "changed" && before ? describeChange(before, node) : [];
+  // only the signature here: props / parameters and the return type; the rest is in the code diff
+  const items = change === "changed" && before ? signatureChanges(before, node, { annotations: !!diff.annotations }) : [];
   const shown = more ? items : items.slice(0, DIFF_ITEMS);
   // external packages and routes have no code of their own here
   const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
+  const word = (it: Extract<SignatureChange, { kind: "param" }>) => `${it.isProp ? "prop" : "parameter"} ${it.what}`;
   return (
     <Stack gap="2" fontSize="12.5px">
       <Flex align="center" gap="2">
@@ -964,25 +967,43 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
             : change === "removed"
               ? `Removed: only ${diff.base.ref} (${diff.compared.slice(0, 7)}) has it.`
               : items.length
-                ? `Changed${items.length > DIFF_ITEMS ? ` (${items.length})` : ""}:`
-                : "Its code changed (the body: nothing in its signature)."}
+                ? `Signature changed${items.length > DIFF_ITEMS ? ` (${items.length})` : ""}:`
+                : "Same signature: the code diff shows what changed."}
         </Text>
         {hasCode && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
       </Flex>
       {shown.map((it, i) => (
         <Box key={i} minW="0">
           <Text fontSize="11.5px" color="fg.subtle" mb="1">
-            {it.what}
+            {it.kind === "param" ? word(it) : it.kind === "returned" ? "return value changed" : "return type"}
           </Text>
-          {it.from !== undefined && (
-            <ChangeRow sign="−" change="removed">
-              {isTypeChange(it.what) ? <TypeText text={it.from} owner={snapshot.diff?.before[node.id] ?? node} block={it.what === "type"} optional={it.optional} /> : it.from}
+          {it.kind === "param" ? (
+            <>
+              {it.from && (
+                <ChangeRow sign="−" change="removed">
+                  <ParamText p={it.from} owner={before ?? node} />
+                </ChangeRow>
+              )}
+              {it.to && (
+                <ChangeRow sign="+" change="added">
+                  <ParamText p={it.to} owner={node} />
+                </ChangeRow>
+              )}
+            </>
+          ) : it.kind === "returned" ? (
+            // the same type, marked modified: what's returned changed (the code diff shows how)
+            <ChangeRow sign="~" change="changed" title="The return type is the same; the returned code changed">
+              <TypeText text={it.type} owner={node} />
             </ChangeRow>
-          )}
-          {it.to !== undefined && (
-            <ChangeRow sign="+" change="added">
-              {isTypeChange(it.what) ? <TypeText text={it.to} owner={node} block={it.what === "type"} optional={it.optional} /> : it.to}
-            </ChangeRow>
+          ) : (
+            <>
+              <ChangeRow sign="−" change="removed">
+                <TypeText text={it.from} owner={before ?? node} />
+              </ChangeRow>
+              <ChangeRow sign="+" change="added">
+                <TypeText text={it.to} owner={node} />
+              </ChangeRow>
+            </>
           )}
         </Box>
       ))}
@@ -993,5 +1014,25 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
       )}
       {codeOpen && <NodeDiffModal node={node} snapshot={snapshot} open={codeOpen} onOpenChange={setCodeOpen} />}
     </Stack>
+  );
+}
+
+/** A prop / parameter as in its signature: `name?: type` (just the name when its type isn't known). */
+function ParamText({ p, owner }: { p: ParamSide; owner: GraphNode }) {
+  return (
+    <Flex align="baseline" minW="0">
+      <CodeToken kind="name">{p.name}</CodeToken>
+      {p.type !== undefined && (
+        <>
+          <Text as="span" whiteSpace="pre">
+            <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
+          </Text>
+          <Box minW="0" flex="1">
+            <TypeText text={shownType(p)!} owner={owner} optional={p.optional} />
+          </Box>
+        </>
+      )}
+      {p.type === undefined && p.optional && <CodeToken kind="punct">?</CodeToken>}
+    </Flex>
   );
 }

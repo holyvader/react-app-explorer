@@ -177,14 +177,32 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
   `lexSource(text)`: TS / TSX as written (comments, strings and template literals across lines, JSX
   tags / attributes, calls, keywords) — definitions, default values, render-tree props, the code diff.
 - Details sections are `Section`s: their open / closed state is remembered per title, for every element.
-  "In this diff" starts collapsed; its header shows the element's lines before / after (`−143/+144`).
+  "In this diff" starts collapsed; its header shows the lines removed / added in the element's code
+  (`−0/+2`), from `lib/nodeDiff.ts` — the same diff (and fetch, cached per snapshot) as the code diff
+  dialog (`useNodeDiff`, `sidesOf`, `linesOf`).
+- Uses / Used by leave out what other sections list: `declares` (Declares; the "in <file>" chip),
+  `renders` (Renders), `usesHook` to the project's hooks (Custom hooks), `routeFile` and the route's
+  middleware (Route).
   Type changes are compared as displayed (flat layout, optional `| undefined` dropped), so the
   `| undefined` TypeScript adds on one side only isn't a change.
-- "In this diff": each change is its label, then `−` / `+` rows on diff.removed / diff.added backgrounds
-  (`ChangeRow`); type values laid out (definitions with `layoutDefinition`).
+- "In this diff" lists only the signature: props / parameters added, removed or changed (type or
+  optionality; `name?: type` past / current) and the return type (`signatureChanges` in lib/diff.ts),
+  as `−` / `+` rows (`ChangeRow`). Everything else (body, boundary, role, definition text) is the
+  code diff dialog's. No signature change: "Same signature: the code diff shows what changed."
+  With `diff.annotations`, types are compared (and shown) as written: same annotation = no change, even
+  when the checker prints it differently; annotated on one side only = a change; inferred on both = left
+  to the code diff. Older diffs fall back to the checker's types. Same return type but other returned
+  code (`signature.returnHash`, from the scanner) → "return value changed": one `~` row on amber.
 - Token kinds → `.rae-tok--*` classes in `syntax.css` (syntax.* colours). `CodeLines`, `TypeCode`
   (laid out, no links), `SourceCode`.
 - `TypeText` lays itself out to the room it has: `useCodeColumns` (lib/useColumns.ts) measures from its
   left edge to its row's right edge and re-measures on resize and when web fonts load. The character
   width comes from the font's parts — Chrome leaves the `font` shorthand empty here.
 - Types come untruncated from the scanner (`TypeFormatFlags.NoTruncation`, capped at 2000 characters).
+- Types shown: the annotation as written when the code has one (`shownType` / `shownReturn` in
+  lib/typeText.ts: `written ?? type`, `returnWritten ?? returnType`) — `rule: DesignedRuleInput`,
+  `ReactElement[]` — else what the checker inferred.
+- Folding (`FoldRule` in lib/syntax.ts): object groups get stable ids (`numberGroups`); folded ones
+  print `{…N}` (`fold` token), open ones' `{` carries `unfold`. TypeText: nested objects that'd take
+  several lines fold by default (definitions: a member's object that doesn't fit); clicks toggle per
+  object. Tooltips (`TypeCode`, `DefinitionCode`): `FIRST_LEVEL`, no toggles.

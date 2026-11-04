@@ -11,6 +11,12 @@ export type TokKind = "keyword" | "primitive" | "type" | "name" | "literal" | "p
 export interface Tok {
   k: TokKind;
   t: string;
+  /** A folded object (`{…3}`): clicking it unfolds the group with this id. */
+  fold?: string;
+  /** An unfolded object's `{`: clicking it folds the group with this id again. */
+  unfold?: string;
+  /** How many members a folded object has. */
+  members?: number;
 }
 export type TokLine = Tok[];
 
@@ -91,6 +97,8 @@ interface Group {
   open: Tok;
   close?: Tok;
   items: Seq[];
+  /** Objects (`{…}`): a stable id, by position in the type (folding one doesn't renumber the rest). */
+  id?: string;
 }
 type El = Tok | Group;
 type Seq = El[];
@@ -180,10 +188,27 @@ function groupFlatLen(g: Group): number {
   return g.open.t.length + pad + items.reduce((n, it) => n + flatLen(it), 0) + (items.length - 1) * 2 + (g.close?.t.length ?? 0);
 }
 
+/** Whether an object group prints folded: by its id, nesting depth (objects around it), whether it'd fit on the line, and size. */
+export type FoldRule = (id: string, depth: number, fits: boolean, members: number) => boolean;
+
+/** Numbers the object groups of a type in order: `<prefix>0`, `<prefix>1`… */
+function numberGroups(s: Seq, prefix: string, next = { n: 0 }): Seq {
+  for (const e of s) {
+    if (!isGroup(e)) continue;
+    if (e.open.t === "{") e.id = `${prefix}${next.n++}`;
+    for (const it of e.items) numberGroups(it, prefix, next);
+  }
+  return s;
+}
+
 class Printer {
   lines: TokLine[] = [[]];
   col = 0;
-  constructor(readonly width: number, readonly start: number) {
+  constructor(
+    readonly width: number,
+    readonly start: number,
+    readonly fold?: FoldRule,
+  ) {
     this.col = start;
   }
   emit(t: Tok) {
@@ -199,13 +224,13 @@ class Printer {
   }
 }
 
-function printSeq(p: Printer, s: Seq, indent: number) {
+function printSeq(p: Printer, s: Seq, indent: number, depth = 0) {
   // a member or parameter (`name?: value`): its name, then its value laid out on its own
   const colon = s.findIndex((e) => !isGroup(e) && e.t === ":");
   if (colon > 0 && s.slice(0, colon).every((e) => !isGroup(e) && (e.k === "name" || e.t === "?" || e.k === "plain" || e.t === "readonly" || e.t === "..."))) {
     for (const e of s.slice(0, colon + 1)) if (!(e as Tok).t.trim() && p.atLineStart) continue;
     else p.emit(e as Tok);
-    printSeq(p, s.slice(colon + 1), indent);
+    printSeq(p, s.slice(colon + 1), indent, depth);
     return;
   }
   // a long union of simple members (literals, names): one member per line, each after a `|`
@@ -220,7 +245,7 @@ function printSeq(p: Printer, s: Seq, indent: number) {
       if (!(first && fresh)) p.newline(inner);
       first = false;
       p.emit({ k: "punct", t: "| " });
-      printSeq(p, trim(m), inner);
+      printSeq(p, trim(m), inner, depth);
     }
     return;
   }
@@ -234,37 +259,52 @@ function printSeq(p: Printer, s: Seq, indent: number) {
     // what follows up to the next group stays on this line too (`) => void`, `} | undefined`)
     let rest = 0;
     for (let r = k + 1; r < s.length && !isGroup(s[r]!); r++) rest += (s[r] as Tok).t.length;
-    if (p.col + groupFlatLen(e) + rest <= p.width) printFlat(p, e);
-    else printBroken(p, e, indent);
+    const fits = p.col + groupFlatLen(e) + rest <= p.width;
+    const members = e.items.filter((it) => !isBlank(it)).length;
+    if (e.id && members && p.fold?.(e.id, depth, fits, members)) p.emit({ k: "punct", t: `{…${members}}`, fold: e.id, members });
+    else if (fits) printFlat(p, e, depth);
+    else printBroken(p, e, indent, depth);
   }
 }
 
-function printFlat(p: Printer, g: Group) {
+function printFlat(p: Printer, g: Group, depth = 0) {
   const items = g.items.map(trim).filter((it) => it.length);
+  const inner = g.open.t === "{" ? depth + 1 : depth;
   p.emit({ ...g.open, k: "punct" });
   if (items.length && g.open.t === "{") p.emit({ k: "plain", t: " " });
   items.forEach((it, n) => {
     if (n) p.emit({ k: "punct", t: `${SEP[g.open.t]} ` });
-    for (const e of it) if (isGroup(e)) printFlat(p, e);
-    else p.emit(e);
+    for (const e of it) {
+      if (!isGroup(e)) {
+        p.emit(e);
+        continue;
+      }
+      const members = e.items.filter((x) => !isBlank(x)).length;
+      if (e.id && members && p.fold?.(e.id, inner, true, members)) p.emit({ k: "punct", t: `{…${members}}`, fold: e.id, members });
+      else printFlat(p, e, inner);
+    }
   });
   if (items.length && g.open.t === "{") p.emit({ k: "plain", t: " " });
   if (g.close) p.emit({ ...g.close, k: "punct" });
 }
 
-function printBroken(p: Printer, g: Group, indent: number) {
+function printBroken(p: Printer, g: Group, indent: number, depth = 0) {
   const items = g.items.map(trim).filter((it) => it.length);
   // a single bracketed entry hugs its brackets: `Promise<{` … `}>`
   const only = items.length === 1 && items[0]!.length === 1 && isGroup(items[0]![0]!) ? (items[0]![0] as Group) : undefined;
-  p.emit({ ...g.open, k: "punct" });
+  const inner = g.open.t === "{" ? depth + 1 : depth;
+  p.emit({ ...g.open, k: "punct", ...(g.id && p.fold ? { unfold: g.id } : {}) });
   if (only) {
-    printBroken(p, only, indent);
+    if (only.id && p.fold?.(only.id, inner, false, only.items.filter((it) => !isBlank(it)).length)) {
+      const n = only.items.filter((it) => !isBlank(it)).length;
+      p.emit({ k: "punct", t: `{…${n}}`, fold: only.id, members: n });
+    } else printBroken(p, only, indent, inner);
     if (g.close) p.emit({ ...g.close, k: "punct" });
     return;
   }
   items.forEach((it, n) => {
     p.newline(indent + 1);
-    printSeq(p, it, indent + 1);
+    printSeq(p, it, indent + 1, inner);
     if (g.open.t === "{") p.emit({ k: "punct", t: ";" });
     else if (n < items.length - 1) p.emit({ k: "punct", t: "," });
   });
@@ -283,17 +323,24 @@ export interface LayoutOptions {
   keepUndefined?: boolean;
   /** The type of an optional prop / parameter shown on its own (`x?:` is outside the text): drop its `| undefined` too. */
   optional?: boolean;
+  /** Which objects print folded (`{…3}`); none without it. */
+  fold?: FoldRule;
+  /** Prefix of the objects' ids (several types laid out together, as a definition's members). */
+  idPrefix?: string;
 }
 
+/** Tooltips: the first level only — every nested object folded. */
+export const FIRST_LEVEL: FoldRule = (_id, depth) => depth >= 1;
+
 /** A type laid out as lines of coloured tokens (see the file's header). */
-export function layoutType(text: string, { width = 60, start = 0, flat = false, keepUndefined = false, optional = false }: LayoutOptions = {}): TokLine[] {
-  let tree = cleanGroups(parseType(lexType(text.trim())), !keepUndefined);
+export function layoutType(text: string, { width = 60, start = 0, flat = false, keepUndefined = false, optional = false, fold, idPrefix = "" }: LayoutOptions = {}): TokLine[] {
+  let tree = numberGroups(cleanGroups(parseType(lexType(text.trim())), !keepUndefined), idPrefix);
   if (optional && !keepUndefined) {
     // as if it were `x?: <type>`: the same rule as for members
     const asMember: Seq = [{ k: "name", t: "x" }, { k: "punct", t: "?" }, { k: "punct", t: ":" }, { k: "plain", t: " " }, ...tree];
     tree = dropOptionalUndefined(asMember).slice(3);
   }
-  const p = new Printer(flat ? Infinity : Math.max(20, width), start);
+  const p = new Printer(flat ? Infinity : Math.max(20, width), start, fold);
   printSeq(p, trim(tree), 0);
   return p.lines.filter((l, n) => n === 0 || l.length);
 }
@@ -428,7 +475,7 @@ const MEMBER = /^(\s*)((?:readonly\s+)?[\w$]+\??\s*:\s*|(?:export\s+)?(?:declare
  * broken one entry per line under the member. Lines that fit, comments and what's already
  * spread over lines stay as written; so does `| undefined` the author wrote.
  */
-export function layoutDefinition(text: string, width: number): TokLine[] {
+export function layoutDefinition(text: string, width: number, fold?: FoldRule): TokLine[] {
   const raw = text.split("\n");
   const coloured = lexSource(text);
   const out: TokLine[] = [];
@@ -442,7 +489,7 @@ export function layoutDefinition(text: string, width: number): TokLine[] {
     }
     const [, indent, lead, value, semi] = m as unknown as [string, string, string, string, string];
     const head = lexSource(indent + lead)[0] ?? [];
-    const laid = layoutType(value, { width: width - indent.length, start: lead.length, keepUndefined: true });
+    const laid = layoutType(value, { width: width - indent.length, start: lead.length, keepUndefined: true, fold, idPrefix: `${n}.` });
     laid.forEach((l, k) => {
       const last = k === laid.length - 1;
       const tail: Tok[] = last && semi ? [{ k: "punct", t: semi }] : [];

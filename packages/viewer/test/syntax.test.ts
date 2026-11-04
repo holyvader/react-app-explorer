@@ -114,3 +114,36 @@ describe("an optional prop / parameter's type on its own", () => {
     expect(typeLines("undefined", { optional: true })).toEqual(["undefined"]); // nothing else left: kept
   });
 });
+
+describe("folding objects", () => {
+  const { typeLines, layoutType, layoutDefinition, FIRST_LEVEL } = require("../src/lib/syntax.ts") as typeof import("../src/lib/syntax.ts");
+  const T = '(diff: { base?: string; head?: string; requestInfo?: { title?: string; author?: string; url?: string }; against?: "base" | "merge-base" } | undefined) => void';
+
+  test("the first level only (tooltips): nested objects as `{…N}`", () => {
+    expect(typeLines(T, { width: 60, fold: FIRST_LEVEL })).toEqual([
+      "(",
+      "  diff: {",
+      "    base?: string;",
+      "    head?: string;",
+      "    requestInfo?: {…3};",
+      '    against?: "base" | "merge-base";',
+      "  } | undefined",
+      ") => void",
+    ]);
+    expect(typeLines("{ a: { b: string } }", { flat: true, fold: FIRST_LEVEL })).toEqual(["{ a: {…1} }"]);
+  });
+
+  test("folded tokens carry their object's id (stable whatever else is folded) and size", () => {
+    const folded = layoutType(T, { width: 60, fold: FIRST_LEVEL }).flat().find((t) => t.fold)!;
+    expect(folded).toMatchObject({ t: "{…3}", members: 3 });
+    // unfolding it: the same id now on its `{`, to fold it back
+    const open = layoutType(T, { width: 30, fold: (id) => id !== folded.fold && false }).flat();
+    expect(open.some((t) => t.unfold === folded.fold)).toBe(true);
+  });
+
+  test("definitions: a member's object that doesn't fit folds", () => {
+    const def = "interface S {\n  a: string;\n  diff?: { base?: string; head?: string; info?: { title?: string; url?: string } };\n}";
+    const lines = layoutDefinition(def, 40, (_id, _depth, fits) => !fits).map((l) => l.map((t) => t.t).join(""));
+    expect(lines).toEqual(["interface S {", "  a: string;", "  diff?: {…3};", "}"]);
+  });
+});

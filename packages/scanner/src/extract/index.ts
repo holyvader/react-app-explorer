@@ -504,6 +504,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       ...src.extent(Math.min((c.nameNode ?? node).start, node.start), node.end),
       params,
       returnType: c.fn?.returnType ? src.slice(c.fn.returnType.typeAnnotation, 160) : undefined,
+      returnWritten: c.fn?.returnType ? src.slice(c.fn.returnType.typeAnnotation, 160) : undefined,
       hooks: [],
       functions: [],
       calls: [],
@@ -519,6 +520,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     }
 
     const body = c.fn ? c.fn.body : c.cls?.body;
+    if (c.fn) decl.returnHash = returnHashOf(c.fn);
     collectBody(body, decl);
     const navs = navigationsIn(body);
     if (navs.length) decl.navigations = navs;
@@ -549,7 +551,21 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       const end = p.typeAnnotation ? p.typeAnnotation.start : p.end;
       name = src.slice({ start: p.start, end }, 80).replace(/:\s*$/, "");
     } else name = src.slice(p, 40);
-    return { name, type, optional: !!p.optional || def !== undefined, default: def };
+    return { name, type, written: type, optional: !!p.optional || def !== undefined, default: def };
+  }
+
+  /**
+   * A hash of what a function returns: its `return` statements (not nested functions'), or an arrow's
+   * expression body. Changes when the returned code does, even if the return type stays the same.
+   */
+  function returnHashOf(fn: N): string | undefined {
+    if (fn.body && fn.body.type !== "BlockStatement") return Bun.hash(src.text.slice(fn.body.start, fn.body.end)).toString(36);
+    const parts: string[] = [];
+    walk(fn.body, (n) => {
+      if (isFunction(n)) return false;
+      if (n.type === "ReturnStatement") parts.push(src.text.slice(n.start, n.end));
+    });
+    return parts.length ? Bun.hash(parts.join("\n")).toString(36) : undefined;
   }
 
   function propsOf(param: N): PropDef[] | undefined {
@@ -559,10 +575,10 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     const ann = p.typeAnnotation?.typeAnnotation;
     const fromType = (t: N) => {
       if (!t) return;
-      if (t.type === "TSTypeLiteral") for (const m of typeMembers(t.members)) members.set(m.name, { ...m });
+      if (t.type === "TSTypeLiteral") for (const m of typeMembers(t.members)) members.set(m.name, { ...m, written: m.type });
       else if (t.type === "TSTypeReference" && t.typeName?.type === "Identifier") {
         const local = types.get(t.typeName.name);
-        if (local) for (const m of local) members.set(m.name, { ...m });
+        if (local) for (const m of local) members.set(m.name, { ...m, written: m.type });
       } else if (t.type === "TSIntersectionType") t.types.forEach(fromType);
     };
     fromType(ann);

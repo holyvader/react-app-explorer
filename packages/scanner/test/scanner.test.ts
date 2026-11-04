@@ -505,5 +505,11 @@ describe("type text", () => {
     const ret = s.nodes["src/main.tsx#pick"]!.signature!.returnType!;
     expect(ret).toContain('"sigma"');
     expect(ret).not.toContain("more");
+    // the annotations as written survive the type pass (a diff compares those)
+    expect(prop.written).toBe("(diff: Diff | undefined) => void");
+    const pick = s.nodes["src/main.tsx#pick"]!.signature!;
+    expect(pick.params[0]!.written).toContain('"alpha" | "beta"');
+    expect(pick.returnWritten).toBeUndefined(); // not annotated: inferred only
+    expect(pick.returnType).toBeDefined();
   }, 60_000);
 });

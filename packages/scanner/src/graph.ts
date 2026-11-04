@@ -67,7 +67,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         directives: d.directives.length ? d.directives : undefined,
         nextRole: exportNames?.includes("default") ? nodes[id]!.nextRole : undefined,
         props: d.props,
-        signature: d.kind === "type" ? undefined : { params: d.params, returnType: d.returnType },
+        signature: d.kind === "type" ? undefined : { params: d.params, returnType: d.returnType, returnWritten: d.returnWritten, returnHash: d.returnHash },
         typeText: d.typeText,
         typeKind: d.typeKind,
         typeParams: d.typeParams,

@@ -1,10 +1,9 @@
 import { Alert, Button, Flex, HStack, Modal, Spinner, Text } from "@rae/design-system";
 import { IconInline, IconSplit } from "@rae/design-system/icons";
 import type { GraphNode, Snapshot } from "@rae/schema";
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { fetchSource } from "../lib/api.ts";
-import { sideLabel } from "../lib/diff.ts";
-import { type DiffLine, diffLines, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
+import { Fragment, useMemo, useState } from "react";
+import { type DiffLine, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
+import { sidesOf, useNodeDiff } from "../lib/nodeDiff.ts";
 import { lexSource, type TokLine } from "../lib/syntax.ts";
 import "./syntax.css";
 import "./nodeDiff.css";
@@ -41,25 +40,6 @@ export interface NodeDiffModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/** One side of the diff: which commit, which file, which lines (a declaration's, or the whole file). */
-interface Side {
-  sha: string;
-  label: string;
-  node: GraphNode;
-  whole: boolean;
-}
-
-/** The lines a node covers in its file's text: a declaration's (loc → endLine), else the whole file. */
-function linesOf(text: string, side: Side): { lines: string[]; start: number } {
-  const all = text.split("\n");
-  if (all.length && all[all.length - 1] === "") all.pop();
-  const { loc, endLine } = side.node;
-  if (side.whole || !loc || !endLine) return { lines: all, start: 1 };
-  // from the line its name is on (where the scanner places it) to its last line
-  const from = Math.max(1, loc.line);
-  return { lines: all.slice(from - 1, endLine), start: from };
-}
-
 /**
  * The code of one element, before → after: split (side by side) or inline (one column, − / +).
  * The base side is the commit compared against (the merge-base or the base's tip); the head side
@@ -67,18 +47,7 @@ function linesOf(text: string, side: Side): { lines: string[]; start: number } {
  * (`git show`), so nothing in the checkout is touched.
  */
 export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffModalProps) {
-  const diff = snapshot.diff!;
-  const change = diff.nodes[node.id];
-  const whole = node.kind === "module" || !!node.file;
-  const before: Side | undefined = useMemo(() => {
-    const was = change === "changed" ? diff.before[node.id] : change === "removed" ? node : undefined;
-    return was ? { sha: diff.compared, label: sideLabel(diff.base.ref, diff.compared), node: was, whole } : undefined;
-  }, [change, diff, node, whole]);
-  const after: Side | undefined = useMemo(
-    () => (change === "removed" ? undefined : { sha: diff.head.worktree ? "worktree" : diff.head.sha, label: sideLabel(diff.head.ref, diff.head.sha, diff.head.worktree), node, whole }),
-    [change, diff, node, whole],
-  );
-
+  const { before, after, whole } = useMemo(() => sidesOf(snapshot, node), [snapshot, node]);
   const [mode, setMode] = useState<DiffMode>(() => (localStorage.getItem(MODE_KEY) as DiffMode | null) ?? "split");
   const pickMode = (m: DiffMode) => {
     localStorage.setItem(MODE_KEY, m);
@@ -86,30 +55,11 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   };
   const [showAll, setShowAll] = useState(false);
 
-  // both texts (an external system: the server reads them from git)
-  const [texts, setTexts] = useState<{ key: string; before?: string; after?: string; error?: string; truncated?: boolean }>();
-  const key = `${node.id}|${before?.sha ?? ""}|${after?.sha ?? ""}`;
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const read = (side?: Side) => (side ? fetchSource(snapshot.rootDir, side.sha, side.node.filePath) : Promise.resolve(undefined));
-    Promise.all([read(before), read(after)])
-      .then(([b, a]) => !cancelled && setTexts({ key, before: b?.text, after: a?.text, truncated: b?.truncated || a?.truncated }))
-      .catch((e: Error) => !cancelled && setTexts({ key, error: e.message }));
-    return () => {
-      cancelled = true;
-    };
-  }, [open, key, before, after, snapshot.rootDir]);
-  const loaded = texts?.key === key ? texts : undefined;
-
-  const lines = useMemo<DiffLine[] | undefined>(() => {
-    if (!loaded || loaded.error) return undefined;
-    const b = before && loaded.before !== undefined ? linesOf(loaded.before, before) : { lines: [], start: 1 };
-    const a = after && loaded.after !== undefined ? linesOf(loaded.after, after) : { lines: [], start: 1 };
-    return diffLines(b.lines, a.lines, b.start, a.start);
-  }, [loaded, before, after]);
-  const coloured = useMemo<Coloured>(() => (loaded && !loaded.error ? { before: colour(loaded.before), after: colour(loaded.after) } : {}), [loaded]);
-  const counts = useMemo(() => ({ add: lines?.filter((l) => l.type === "add").length ?? 0, del: lines?.filter((l) => l.type === "del").length ?? 0 }), [lines]);
+  // both versions from git, and their line diff (shared with the details' "In this diff" header)
+  const { diff: loaded, error } = useNodeDiff(snapshot, node, open);
+  const lines: DiffLine[] | undefined = loaded?.lines;
+  const coloured = useMemo<Coloured>(() => (loaded ? { before: colour(loaded.before), after: colour(loaded.after) } : {}), [loaded]);
+  const counts = { add: loaded?.added ?? 0, del: loaded?.removed ?? 0 };
 
   const title = (
     <Flex align="baseline" gap="2" minW="0">
@@ -148,13 +98,13 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
           <ModeButton on={mode === "inline"} onClick={() => pickMode("inline")} icon={<IconInline size={14} />} label="Inline" />
         </HStack>
       </Flex>
-      {loaded?.error && (
+      {error && (
         <Alert status="error" title="Couldn't read the code">
-          {loaded.error}
+          {error}
         </Alert>
       )}
       {loaded?.truncated && <Text fontSize="xs" color="fg.muted" mb="2">The file is large: only its first 2 MB are compared.</Text>}
-      {!loaded && (
+      {!loaded && !error && (
         <Flex align="center" gap="2" color="fg.muted" fontSize="sm" py="6" justify="center">
           <Spinner size="sm" /> Reading both versions from git…
         </Flex>

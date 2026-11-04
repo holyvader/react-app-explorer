@@ -112,6 +112,8 @@ export interface PropDef {
   type?: string;
   optional: boolean;
   default?: string;
+  /** The type annotation as written in the source (kept when the type pass fills `type`): what a diff compares. */
+  written?: string;
 }
 
 export interface ParamDef {
@@ -119,11 +121,17 @@ export interface ParamDef {
   type?: string;
   optional?: boolean;
   default?: string;
+  /** The type annotation as written (see PropDef.written). */
+  written?: string;
 }
 
 export interface Signature {
   params: ParamDef[];
   returnType?: string;
+  /** The return type annotation as written (see PropDef.written). */
+  returnWritten?: string;
+  /** A hash of the returned code (`return` statements, or an arrow's expression body): a diff tells "returns something else" by it. */
+  returnHash?: string;
 }
 
 export interface HookUsage {
@@ -347,6 +355,8 @@ export interface SnapshotDiff {
   nodes: Record<NodeId, ChangeKind>;
   /** Nodes only the base had, as they were (ids as in the base). */
   removed: Record<NodeId, GraphNode>;
+  /** Props / params / return types carry their annotations as written (`written`): signatures are compared by those. */
+  annotations?: boolean;
   /** Changed nodes as they were in the base (by head id), without their render trees: for before → after. */
   before: Record<NodeId, GraphNode>;
   /** Base id → head id, for nodes in renamed files. */

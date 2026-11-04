@@ -11,3 +11,12 @@ export function isPrimitiveType(text: string): boolean {
     .replace(IDENT, (w) => (PRIMITIVES.has(w) ? " " : w));
   return PRIMITIVE_REST.test(rest);
 }
+
+/**
+ * The type to show for a prop / parameter: its annotation as written when the code has one (the
+ * named type the author chose: `rule: DesignedRuleInput`, `ReactElement[]`), else what the checker
+ * inferred (which spells aliases out and fills default type arguments).
+ */
+export const shownType = (p: { type?: string; written?: string }) => p.written ?? p.type;
+/** A signature's return type to show: as written when annotated, else inferred. */
+export const shownReturn = (s: { returnType?: string; returnWritten?: string } | undefined) => s?.returnWritten ?? s?.returnType;

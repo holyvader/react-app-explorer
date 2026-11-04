@@ -3,7 +3,7 @@ import { join, relative, sep } from "node:path";
 import type { Snapshot, SnapshotDiff } from "@rae/schema";
 import { diffSnapshots } from "./diff.ts";
 import { changedFiles, commitInfo, exportCommit, fetchRequest, GitError, mergeBase, repoOf, resolveRef } from "./git.ts";
-import { addTypes, scan, type ScanOptions, scanStructure } from "./scan.ts";
+import { addTypes, type ScanOptions, scanStructure } from "./scan.ts";
 
 export interface DiffScanOptions extends ScanOptions {
   /** The base: a branch (`main`), tag or sha. Default: the repo's default branch. */
@@ -63,7 +63,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
 
   const { base: _b, head: _h, request: _r, requestInfo, worktree: _w, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
   // progress counts follow the head's scan (the one the UI waits on)
-  const baseSnap = await scan(at(baseTree), { ...scanOpts, types: false, onCount: undefined });
+  const base = await scanStructure(at(baseTree), { ...scanOpts, types: false, onCount: undefined });
   const head = await scanStructure(at(headTree), { ...scanOpts, types: false });
 
   // changed files under the scanned folder, relative to it
@@ -73,7 +73,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
     .filter((f) => inside(f.path) || (f.from && inside(f.from)))
     .map((f) => ({ ...f, path: f.path.slice(prefix.length), from: f.from?.slice(prefix.length) }));
 
-  const diff = diffSnapshots(baseSnap, head.snapshot, files, {
+  const sides = {
     base: { ref: baseRef, sha: baseTip, subject: baseInfo.subject },
     head: {
       ref: headRef,
@@ -84,18 +84,25 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
     },
     against,
     compared,
-  });
+  };
+  const diff = diffSnapshots(base.snapshot, head.snapshot, files, sides);
 
   // the project's paths: the checkout when it is the head, else the exported copy (what the head has)
   const headRoot = at(headTree);
-  const finish = (s: Snapshot): Snapshot => {
+  const finish = (s: Snapshot, d: SnapshotDiff): Snapshot => {
     if (headSha === repo.head && !opts.worktree) for (const n of Object.values(s.nodes)) if (n.absPath?.startsWith(headRoot)) n.absPath = dir + n.absPath.slice(headRoot.length);
-    return { ...s, rootDir: dir, diff };
+    return { ...s, rootDir: dir, diff: d };
   };
-  const structure = finish(head.snapshot);
+  const structure = finish(head.snapshot, diff);
   onStructure?.(structure);
   if (opts.types === false) return structure;
-  return finish(await addTypes(head, scanOpts));
+  // both sides typed (the base too: inferred types — return types without an annotation — can then
+  // be compared); what changed is decided by source hashes, so only `before` / `removed` gain types
+  const [typedHead, typedBase] = await Promise.all([
+    addTypes(head, scanOpts),
+    addTypes(base, { ...scanOpts, onCount: undefined, onProgress: undefined }).catch(() => base.snapshot),
+  ]);
+  return finish(typedHead, diffSnapshots(typedBase, typedHead, files, sides));
 }
 
 /** A request ref as the diff's `head.request`: its number and host, with the CLI's title, author, link. */

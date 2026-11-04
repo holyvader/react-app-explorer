@@ -52,7 +52,7 @@ export function diffSnapshots(base: Snapshot, head: Snapshot, files: Files, side
   const added = head.edges.filter((e) => !baseEdges.has(key(e)));
   const gone = [...baseEdges].filter(([k]) => !headKeys.has(k)).map(([, e]) => e);
 
-  return { ...sides, nodes, removed, before, renamed, edges: { added, removed: gone }, files };
+  return { ...sides, annotations: true, nodes, removed, before, renamed, edges: { added, removed: gone }, files };
 }
 
 /** What a node's change is judged by: its source, and what it is. */
