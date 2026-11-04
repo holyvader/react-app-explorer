@@ -88,9 +88,12 @@ export function describeChange(before: GraphNode, after: GraphNode): { what: str
   for (const p of now) if (!was.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} added`, to: p });
   for (const p of was) if (!now.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} removed`, from: p });
   const typeOf = (n: GraphNode, name: string) => (n.props ?? n.signature?.params ?? []).find((p) => p.name === name)?.type;
-  for (const p of now) if (was.has(p) && typeOf(before, p) !== typeOf(after, p)) out.push({ what: `${p}: type`, from: typeOf(before, p), to: typeOf(after, p) });
+  // types count only when both sides have one: the base is compared without the type pass, so a type
+  // appearing on the head alone (inferred, or from the cache) isn't a change
+  const differs = (a?: string, b?: string) => a !== undefined && b !== undefined && a !== b;
+  for (const p of now) if (was.has(p) && differs(typeOf(before, p), typeOf(after, p))) out.push({ what: `${p}: type`, from: typeOf(before, p), to: typeOf(after, p) });
   const ret = (n: GraphNode) => n.signature?.returnType;
-  if (ret(before) !== ret(after)) out.push({ what: "return type", from: ret(before), to: ret(after) });
+  if (differs(ret(before), ret(after))) out.push({ what: "return type", from: ret(before), to: ret(after) });
   if (before.isAsync !== after.isAsync) out.push({ what: "async", from: before.isAsync ? "yes" : "no", to: after.isAsync ? "yes" : "no" });
   if (before.kind !== after.kind) out.push({ what: "kind", from: before.kind, to: after.kind });
   if (before.moduleType !== after.moduleType) out.push({ what: "boundary", from: before.moduleType, to: after.moduleType });

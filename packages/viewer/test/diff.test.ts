@@ -87,6 +87,10 @@ describe("diff snapshots in the viewer", () => {
   test("before → after in words; refs in short", () => {
     const s = applyDiff(snapshot());
     expect(describeChange(s.diff!.before["src/Header.tsx#Header"]!, s.nodes["src/Header.tsx#Header"]!)).toEqual([{ what: "prop added", to: "title" }]);
+    // a type only the head has (the base is compared untyped) isn't a change; a different one is
+    const was = { ...s.nodes["src/Header.tsx#Header"]!, signature: { params: [] } };
+    expect(describeChange(was, { ...was, signature: { params: [], returnType: "Element" } })).toEqual([]);
+    expect(describeChange({ ...was, signature: { params: [], returnType: "string" } }, { ...was, signature: { params: [], returnType: "number" } })).toEqual([{ what: "return type", from: "string", to: "number" }]);
     expect(sideLabel("refs/pull/12/head", "b".repeat(40))).toBe("#12 bbbbbbb");
     expect(sideLabel("refs/merge-requests/3/head", "b".repeat(40))).toBe("!3 bbbbbbb");
     expect(sideLabel("main", "a".repeat(40))).toBe("main aaaaaaa");

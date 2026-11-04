@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
 import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
 import type { ScanDiffRequest } from "./job.ts";
@@ -147,4 +147,38 @@ export function parseDiffRequest(raw: unknown): ScanDiffRequest | undefined {
     requestInfo = { title: text(r.title, 300), author: text(r.author, 100), url };
   }
   return { base: ref("base"), head: ref("head"), request, ...(requestInfo ? { requestInfo } : {}), ...(d.worktree === true ? { worktree: true } : {}), against };
+}
+
+/** Most of a file sent for a code diff (bigger ones are cut, and say so). */
+const SOURCE_MAX = 2 * 1024 * 1024;
+
+/**
+ * A file's text at a commit (`git show <sha>:<path>`), or in the working tree (`sha` = "worktree"),
+ * for the viewer's code diff. `file` is relative to the scanned folder `dir` (it may climb out of it,
+ * like a workspace package's `../../packages/ui/x.tsx`) but must stay inside the repo.
+ */
+export async function gitSource(dir: string, sha: string, file: string): Promise<{ text: string; truncated?: boolean; missing?: boolean } | { error: string }> {
+  if (sha !== "worktree" && !/^[0-9a-f]{40,64}$/.test(sha)) return { error: "Not a commit sha" };
+  if (!file || file.includes("\0") || isAbsolute(file)) return { error: "Invalid file" };
+  const info = await repoOf(folderOf(dir)).catch(() => undefined);
+  if (!info) return { error: "Not in a git repository" };
+  const abs = resolve(folderOf(dir), file);
+  const rel = relative(info.root, abs);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the repository" };
+  try {
+    let text: string;
+    if (sha === "worktree") {
+      if (!existsSync(abs)) return { text: "", missing: true };
+      text = readFileSync(abs, "utf8");
+    } else {
+      text = await git(info.root, ["show", `${sha}:${rel.split(sep).join("/")}`]).catch((e: Error) => {
+        if (/does not exist|exists on disk, but not in/.test(e.message)) return "\0missing";
+        throw e;
+      });
+      if (text === "\0missing") return { text: "", missing: true };
+    }
+    return text.length > SOURCE_MAX ? { text: text.slice(0, SOURCE_MAX), truncated: true } : { text };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }

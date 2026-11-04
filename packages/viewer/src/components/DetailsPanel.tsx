@@ -26,6 +26,7 @@ import {
   IconArrowUp,
   IconChevronsDown,
   IconChevronsUp,
+  IconCodeDiff,
   IconClose,
   IconCopy,
   IconDetailsClose,
@@ -46,6 +47,7 @@ import { isFolder } from "../graph/drawn.ts";
 import { DetailsStrip } from "./DetailsStrip.tsx";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
+import { NodeDiffModal } from "./NodeDiffModal.tsx";
 import { RenderTree } from "./RenderTree.tsx";
 import { TypeText } from "./TypeText.tsx";
 
@@ -231,7 +233,7 @@ export function DetailsPanel() {
 
       {change && snapshot?.diff && (
         <PanelSection title="In this diff">
-          <DiffView node={node} change={change} />
+          <DiffView key={node.id} node={node} change={change} />
         </PanelSection>
       )}
 
@@ -887,25 +889,40 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
   );
 }
 
-/** What a diff did to the element: new, gone, or before → after (props, types, boundary, rendering…), and its file's lines. */
+/** How many changes "In this diff" lists before "Show more". */
+const DIFF_ITEMS = 5;
+
+/**
+ * What a diff did to the element: new, gone, or before → after (props, types, boundary, rendering…),
+ * the first few with "Show more", its file's lines, and the code itself (split or inline) in a dialog.
+ */
 function DiffView({ node, change }: { node: GraphNode; change: "added" | "removed" | "changed" }) {
-  const diff = useExplorer((s) => s.snapshot?.diff);
-  if (!diff) return null;
+  const snapshot = useExplorer((s) => s.snapshot);
+  const [more, setMore] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const diff = snapshot?.diff;
+  if (!snapshot || !diff) return null;
   const file = diff.files.find((f) => f.path === node.filePath);
   const before = diff.before[node.id];
   const items = change === "changed" && before ? describeChange(before, node) : [];
+  const shown = more ? items : items.slice(0, DIFF_ITEMS);
+  // external packages and routes have no code of their own here
+  const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
   return (
     <Stack gap="2" fontSize="12.5px">
-      <Text color="fg.muted">
-        {change === "added"
-          ? `New in ${diff.head.ref}.`
-          : change === "removed"
-            ? `Removed: only ${diff.base.ref} (${diff.compared.slice(0, 7)}) has it.`
-            : items.length
-              ? "Changed:"
-              : "Its code changed (the body: nothing in its signature)."}
-      </Text>
-      {items.map((it, i) => (
+      <Flex align="center" gap="2">
+        <Text color="fg.muted" flex="1">
+          {change === "added"
+            ? `New in ${diff.head.ref}.`
+            : change === "removed"
+              ? `Removed: only ${diff.base.ref} (${diff.compared.slice(0, 7)}) has it.`
+              : items.length
+                ? `Changed${items.length > DIFF_ITEMS ? ` (${items.length})` : ""}:`
+                : "Its code changed (the body: nothing in its signature)."}
+        </Text>
+        {hasCode && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
+      </Flex>
+      {shown.map((it, i) => (
         <Flex key={i} gap="2" align="baseline" minW="0">
           <Text color="fg.subtle" flexShrink={0} minW="90px">
             {it.what}
@@ -929,6 +946,11 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
           </Box>
         </Flex>
       ))}
+      {items.length > DIFF_ITEMS && (
+        <Button size="2xs" variant="ghost" alignSelf="start" px="1.5" color="fg.muted" onClick={() => setMore(!more)}>
+          {more ? "Show less" : `Show more (${items.length - DIFF_ITEMS})`}
+        </Button>
+      )}
       {file && (
         <Text fontFamily="mono" fontSize="11px" color="fg.subtle">
           {file.from ? `${file.from} → ` : ""}
@@ -941,6 +963,7 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
           </Text>
         </Text>
       )}
+      {codeOpen && <NodeDiffModal node={node} snapshot={snapshot} open={codeOpen} onOpenChange={setCodeOpen} />}
     </Stack>
   );
 }

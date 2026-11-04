@@ -84,6 +84,14 @@ export async function fetchGit(path: string): Promise<GitOverview> {
   return data;
 }
 
+/** A file's text at a commit (`sha`), or in the working tree (`"worktree"`), for the code diff. `file` is relative to `dir` (the scanned folder). */
+export async function fetchSource(dir: string, sha: string, file: string): Promise<{ text: string; truncated?: boolean; missing?: boolean }> {
+  const res = await fetch(`/api/git/source?path=${encodeURIComponent(dir)}&sha=${encodeURIComponent(sha)}&file=${encodeURIComponent(file)}`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error ?? `Couldn't read ${file}`);
+  return data;
+}
+
 /** The GitHub / GitLab CLIs here (installed, logged in) and what Auto picks; `refresh` re-checks them. */
 export async function fetchGitTools(path: string, refresh = false): Promise<GitTools> {
   const res = await fetch(`/api/git/tools?path=${encodeURIComponent(path)}${refresh ? "&refresh=1" : ""}`);

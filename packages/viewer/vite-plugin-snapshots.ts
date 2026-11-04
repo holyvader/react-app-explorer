@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "vite";
-import { gitOverview, gitRequests, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
+import { gitOverview, gitRequests, gitSource, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
 
 const SOURCE_FILE = /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/;
 const SKIP_DIRS = new Set(["node_modules", ".git", ".next", "dist", "build", "out", "coverage", ".turbo", ".explorer"]);
@@ -128,6 +128,10 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         const url = new URL(req.url ?? "/", "http://localhost");
         const q = url.searchParams.get("path");
         if (!q) return json(res, 400, { error: "path is required" });
+        if (url.pathname === "/source") {
+          const r = await gitSource(resolve(q), url.searchParams.get("sha") ?? "", url.searchParams.get("file") ?? "");
+          return json(res, "error" in r ? 400 : 200, r);
+        }
         if (url.pathname === "/tools" && url.searchParams.get("refresh")) refreshTools();
         json(
           res,

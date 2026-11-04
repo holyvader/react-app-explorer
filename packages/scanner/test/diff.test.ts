@@ -444,3 +444,17 @@ describe("phase 5: pull / merge requests from the GitHub / GitLab CLIs", () => {
     }
   });
 });
+
+describe("the code diff's source endpoint", () => {
+  test("a file at a commit, in the working tree; missing files; nothing outside the repo", async () => {
+    const { gitSource } = await import("../src/gitApi.ts");
+    expect(await gitSource(repo, baseSha, "src/Old.tsx")).toEqual({ text: "export function Old() {\n  return <p>old</p>;\n}\n" });
+    expect(await gitSource(repo, featureSha, "src/Old.tsx")).toEqual({ text: "", missing: true });
+    expect(await gitSource(repo, "worktree", "src/Footer.tsx")).toMatchObject({ text: expect.stringContaining("function Footer") });
+    // relative to the scanned folder, climbing out of it but not out of the repo
+    expect(await gitSource(join(repo, "src/util"), featureSha, "../Header.tsx")).toMatchObject({ text: expect.stringContaining("title") });
+    for (const [sha, file] of [["HEAD", "src/App.tsx"], ["--output=x", "src/App.tsx"], [baseSha, "../../etc/passwd"], [baseSha, "/etc/passwd"], ["worktree", "../outside.txt"], [baseSha, ""]]) {
+      expect(await gitSource(repo, sha!, file!)).toHaveProperty("error");
+    }
+  });
+});

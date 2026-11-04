@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { gitOverview, gitPath, gitRequests, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
+import { gitOverview, gitPath, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -238,9 +238,13 @@ async function api(req: Request, url: URL): Promise<Response> {
   }
 
   // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)
-  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools") {
+  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools" || path === "/api/git/source") {
     const q = url.searchParams.get("path");
     if (!q) return json({ error: "path is required" }, 400);
+    if (path === "/api/git/source") {
+      const r = await gitSource(resolve(q), url.searchParams.get("sha") ?? "", url.searchParams.get("file") ?? "");
+      return json(r, "error" in r ? 400 : 200);
+    }
     if (path === "/api/git") return json(await gitOverview(resolve(q)));
     if (path === "/api/git/tools") {
       if (url.searchParams.get("refresh")) refreshTools();

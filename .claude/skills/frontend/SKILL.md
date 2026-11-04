@@ -151,7 +151,12 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
   diagrams are stored per diff (`rae.diagram:<root>@<base>..<head>`).
 - Files panel: the Changes view (`ChangesList`, file by file as git lists them, plus elements whose file didn't
   change); the tree marks rows A/M/D and folders holding changes. Details: "In this diff" (`describeChange`
-  over `diff.before`). Toolbar: the `base ← head` chip.
+  over `diff.before`; the first 5 changes, then "Show more"; type changes only when both sides have a
+  type — the base is compared untyped). Its code-diff button opens `NodeDiffModal`: both versions from
+  `GET /api/git/source?path&sha&file` (`git show`, or the working tree; paths must stay in the repo),
+  a declaration's lines (loc → endLine) or the whole file (modules, merged files), `lib/lineDiff.ts`
+  (prefix/suffix + capped LCS), split or inline (remembered: `rae.codeDiffMode`), unchanged runs folded.
+  Toolbar: the `base ← head` chip.
 - Scan dialog: `CompareOptions` (shown when the folder is in a git repo): base branch, what to compare
   (the checkout, a branch, or a PR / MR listed on demand by "PRs / MRs"), from the merge-base or the
   base's tip; warns when the checkout is dirty. It sends `diff` with the scan (`ScanSettings.diff`).
