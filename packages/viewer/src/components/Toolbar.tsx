@@ -18,6 +18,7 @@ import {
 } from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
 import {
+  IconBranch,
   IconChevronDown,
   IconClear,
   IconHistory,
@@ -32,6 +33,7 @@ import {
   IconViewOptions,
 } from "@rae/design-system/icons";
 import { useRef, useState } from "react";
+import { sideLabel } from "../lib/diff.ts";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { useExplorer } from "../store.ts";
@@ -79,8 +81,8 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         (s): MenuEntry => ({
           type: "item",
           value: s.file,
-          label: when(s.createdAt),
-          hint: s.file === current ? "open" : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
+          label: s.diff ? `${when(s.createdAt)} · diff ${s.diff.base.split(" ")[0]} ← ${s.diff.head.split(" ")[0]}` : when(s.createdAt),
+          hint: s.file === current ? "open" : s.diff ? `${s.diff.changes} changes` : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
           onSelect: () => onPickSnapshot(s.file),
         }),
       ),
@@ -135,6 +137,18 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           </Box>
         </Flex>
       </Tooltip>
+      {snapshot?.diff && (
+        <Tooltip
+          content={`Comparing ${snapshot.diff.head.ref} (${snapshot.diff.head.sha.slice(0, 7)}${snapshot.diff.head.subject ? `: ${snapshot.diff.head.subject}` : ""})\nwith ${snapshot.diff.against === "merge-base" ? `its merge-base with ${snapshot.diff.base.ref}` : snapshot.diff.base.ref} (${snapshot.diff.compared.slice(0, 7)})`}
+        >
+          <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" flexShrink={1} minW="0" fontFamily="mono" fontSize="11px" color="diff.changed.fg" bg="diff.changed.subtle">
+            <IconBranch size={12} />
+            <Text as="span" truncate>
+              {sideLabel(snapshot.diff.base.ref, snapshot.diff.compared).split(" ")[0]} ← {sideLabel(snapshot.diff.head.ref, snapshot.diff.head.sha)}
+            </Text>
+          </Flex>
+        </Tooltip>
+      )}
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
         ref={fileRef}
@@ -214,7 +228,9 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const visible = useExplorer((s) => s.visible);
-  const { setEditor, setShowAssets, clear } = useExplorer.getState();
+  const isDiff = useExplorer((s) => !!s.snapshot?.diff);
+  const diffOverlay = useExplorer((s) => s.diffOverlay);
+  const { setEditor, setShowAssets, setDiffOverlay, clear } = useExplorer.getState();
   return (
     <Popover
       open={open}
@@ -235,6 +251,11 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
         <Row label="Dark mode">
           <Switch size="xs" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
         </Row>
+        {isDiff && (
+          <Row label="Diff overlay" hint="What changed: colours, removed elements">
+            <Switch size="xs" label="Diff overlay" checked={diffOverlay} onCheckedChange={setDiffOverlay} />
+          </Row>
+        )}
         <Row label="Asset files" hint="CSS, images, JSON">
           <Switch size="xs" label="Asset files" checked={showAssets} onCheckedChange={setShowAssets} />
         </Row>

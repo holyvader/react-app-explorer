@@ -22,6 +22,7 @@ import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
 import { childEdges, EDGE_GROUPS, type EdgeGroup, hasUndrawn, parentEdges } from "../graph/relations.ts";
 import { IconBack, IconForward } from "@rae/design-system/icons";
+import { changeOf, edgeChange } from "../lib/diff.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
@@ -171,7 +172,10 @@ export function Canvas() {
   }, [layoutToken, applyLayout, flow]);
 
   const showAssets = useExplorer((s) => s.showAssets);
-  const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets }), [enabled, excluded, hideAllLibraries, showAssets]);
+  const diffOverlay = useExplorer((s) => s.diffOverlay);
+  const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets, diffOverlay }), [enabled, excluded, hideAllLibraries, showAssets, diffOverlay]);
+  // diff snapshots, overlay on: what changed is marked
+  const showDiff = !!snapshot?.diff && diffOverlay;
 
   // Scanned elements (files + declarations) under each folder, for folder headers.
   const scannedUnder = useMemo(() => {
@@ -251,12 +255,13 @@ export function Canvas() {
                   allChildren: folderExpansion(snapshot, folderPath(id), true).some((x) => !drawn.has(x)),
                 }
               : { parents: false, allParents: false, children: false, allChildren: false },
+          change: showDiff ? changeOf(snapshot, id) : undefined,
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
       } as ElementFlowNode;
     });
-  }, [snapshot, index, placed, filter, scannedUnder]);
+  }, [snapshot, index, placed, filter, scannedUnder, showDiff]);
 
   // What the selection relates to: the other ends of its edges, and its containers / contents.
   const related = useMemo(() => {
@@ -422,18 +427,19 @@ export function Canvas() {
     return shown
       .map(({ id, source, target, edge: e }) => {
         const look = edgeLook(e);
+        const change = showDiff ? edgeChange(e) : undefined;
         return {
           id,
           source,
           target,
           type: "condition",
-          className: look.className,
-          data: { edge: e, ...laneOf.get(id) },
+          className: change ? `${look.className} rae-edge--${change}` : look.className,
+          data: { edge: e, change, ...laneOf.get(id) },
           zIndex: 1,
-          markerEnd: { type: MarkerType.ArrowClosed, color: look.color, width: 12, height: 12 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: change ? cssVar(`diff.${change}.solid`) : look.color, width: 12, height: 12 },
         };
       });
-  }, [graph, placed]);
+  }, [graph, placed, showDiff]);
 
   const edges = useMemo<ConditionFlowEdge[]>(
     () =>

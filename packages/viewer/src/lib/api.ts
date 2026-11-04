@@ -1,4 +1,5 @@
 import type { ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import { applyDiff } from "./diff.ts";
 
 export interface SnapshotList {
   dir: string;
@@ -23,7 +24,7 @@ export async function fetchSnapshotList(): Promise<SnapshotList> {
   return list;
 }
 
-/** Upgrades older snapshots in place: schema v1 named invokes edges `calls` / `callsAction`. */
+/** Upgrades older snapshots in place (schema v1 named invokes edges `calls` / `callsAction`); a diff's removed nodes become ghosts. */
 export function normalizeSnapshot(s: Snapshot): Snapshot {
   if ((s.schemaVersion ?? 1) < 2) {
     for (const e of s.edges as { kind: string }[]) {
@@ -31,7 +32,7 @@ export function normalizeSnapshot(s: Snapshot): Snapshot {
       else if (e.kind === "callsAction") e.kind = "invokesAction";
     }
   }
-  return s;
+  return applyDiff(s);
 }
 
 export async function fetchSnapshot(file: string): Promise<Snapshot> {

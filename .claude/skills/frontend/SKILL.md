@@ -137,3 +137,20 @@ PW_CHROMIUM_PATH=~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome
 ```
 Afterwards stop **only that server**: `kill "$(cat /tmp/rae-test.pid)"`. Never `pkill -f "bun --filter @rae/viewer dev"` or `pkill -f vite`: that pattern matches the user's own `bun run dev` and kills their server.
 Pass a screenshot dir and look at the PNG to check layout visually. In dev, `window.__rae` is the zustand store: tests can call `__rae.getState().addNodes([...])` to build big canvases, and you can profile with CDP `Profiler.*` through `page.context().newCDPSession(page)`. Extend `e2e/smoke.ts` when adding user flows. Use accessible names (`getByRole(..., { name })`); every icon button has a label through `ActionIconButton`.
+
+## Diff snapshots (`snapshot.diff`, lib/diff.ts)
+- `normalizeSnapshot` → `applyDiff`: the diff's removed nodes and edges go into the graph as **ghosts**
+  (`isGhost`, `edgeChange` via WeakSets/WeakMaps — no extra fields on schema objects); added edges are marked.
+- The **diff overlay** (`diffOverlay` in the store, View options) shows changes; off, `LibraryFilter.hideRemoved`
+  hides ghosts everywhere (canvas, tree, relations) through `isFiltered` / `drawnGraph` / `isChildEdge`.
+  Pass `diffOverlay` to every `relationFilterOf` call.
+- Canvas: node data `change` → `data-change` on `.rae-card` / `.rae-frame` + the A/M/D `.rae-change` corner
+  badge; edges get `rae-edge--added|removed`. Colours: `diff.{added,changed,removed}.{solid,subtle,fg}` tokens
+  (green / amber / red; blue stays selection's).
+- A diff opens with `changesToShow` (declarations first, then their files) unless its diagram was saved;
+  diagrams are stored per diff (`rae.diagram:<root>@<base>..<head>`).
+- Files panel: the Changes view (`ChangesList`, file by file as git lists them, plus elements whose file didn't
+  change); the tree marks rows A/M/D and folders holding changes. Details: "In this diff" (`describeChange`
+  over `diff.before`). Toolbar: the `base ← head` chip.
+- Try it: `bun run scan packages/viewer --base <ref> --head <ref> --out <dir>` and a dev server with
+  `RAE_SNAPSHOTS=<dir>`; swap base and head (`--against-tip`) for removals to look at.

@@ -1,4 +1,4 @@
-import type { GraphNode } from "@rae/schema";
+import type { ChangeKind, GraphNode } from "@rae/schema";
 import type { Node } from "@xyflow/react";
 import type { DrawnElement } from "../../graph/drawn.ts";
 
@@ -19,6 +19,8 @@ export type ElementNodeData = {
   scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */
   undrawnContents?: number;
+  /** Diff snapshots (overlay on): how it changed against the base. */
+  change?: ChangeKind;
   /** Frame refuses the card being dragged over it. */
   refused?: boolean;
 };

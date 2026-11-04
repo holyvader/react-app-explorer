@@ -27,12 +27,17 @@ export function diffSnapshots(base: Snapshot, head: Snapshot, files: Files, side
 
   const nodes: Record<NodeId, ChangeKind> = {};
   const removed: Record<NodeId, GraphNode> = {};
+  const before: Record<NodeId, GraphNode> = {};
   const inBase = new Map<NodeId, GraphNode>();
   for (const [id, n] of Object.entries(base.nodes)) inBase.set(renamed[id] ?? id, n);
   for (const [id, n] of Object.entries(head.nodes)) {
-    const before = inBase.get(id);
-    if (!before) nodes[id] = "added";
-    else if (fingerprint(before) !== fingerprint(n)) nodes[id] = "changed";
+    const was = inBase.get(id);
+    if (!was) nodes[id] = "added";
+    else if (fingerprint(was) !== fingerprint(n)) {
+      nodes[id] = "changed";
+      const { renderTree: _tree, ...rest } = was;
+      before[id] = rest;
+    }
   }
   for (const [id, n] of Object.entries(base.nodes)) if (!head.nodes[renamed[id] ?? id]) removed[id] = n;
   for (const id of Object.keys(removed)) nodes[id] = "removed";
@@ -47,7 +52,7 @@ export function diffSnapshots(base: Snapshot, head: Snapshot, files: Files, side
   const added = head.edges.filter((e) => !baseEdges.has(key(e)));
   const gone = [...baseEdges].filter(([k]) => !headKeys.has(k)).map(([, e]) => e);
 
-  return { ...sides, nodes, removed, renamed, edges: { added, removed: gone }, files };
+  return { ...sides, nodes, removed, before, renamed, edges: { added, removed: gone }, files };
 }
 
 /** What a node's change is judged by: its source, and what it is. */

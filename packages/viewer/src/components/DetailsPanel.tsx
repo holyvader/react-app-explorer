@@ -37,6 +37,7 @@ import {
 import { type ReactNode, useMemo, useState } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
+import { CHANGE_WORD, describeChange } from "../lib/diff.ts";
 import { EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
@@ -66,6 +67,7 @@ export function DetailsPanel() {
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
+  const diffOverlay = useExplorer((s) => s.diffOverlay);
   const editor = useExplorer((s) => s.editor);
   const { select, expand, addNodes, inspect } = useExplorer.getState();
   // closing a file-tree inspection goes back to the diagram's selection (if any)
@@ -74,12 +76,12 @@ export function DetailsPanel() {
 
   const relations = useMemo(() => {
     if (!snapshot || !index || !node) return { parents: [], children: [] };
-    const filter = relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets });
+    const filter = relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets, diffOverlay });
     return {
       parents: parentEdges(snapshot, index, node.id, filter),
       children: childEdges(snapshot, index, node.id, filter),
     };
-  }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets]);
+  }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets, diffOverlay]);
 
   // Several selected on the diagram: no one element's details (a file-tree inspection still shows).
   if (multiSelected) return null;
@@ -96,6 +98,7 @@ export function DetailsPanel() {
       .reduce((m, h) => m.set(h.targetId!, (m.get(h.targetId!) ?? 0) + 1), new Map<string, number>()),
   ].map(([id, count]) => ({ id, count }));
   const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
+  const change = diffOverlay ? snapshot?.diff?.nodes[node.id] : undefined;
   const kindWord = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
   const tags = [fileNote(node), node.isAsync ? "async" : undefined].filter((t): t is string => !!t);
   const renders = [...new Set((index.out.get(node.id) ?? []).filter((e) => e.kind === "renders").map((e) => e.to))];
@@ -137,6 +140,11 @@ export function DetailsPanel() {
           <KindChip kind={node.kind}>{kindWord}</KindChip>
           {node.moduleType && <BoundaryChip boundary={node.moduleType} />}
           {node.nextRole && <KindChip kind="route">{node.nextRole}</KindChip>}
+          {change && (
+            <TagChip color={`diff.${change}.solid`}>
+              {CHANGE_WORD[change]}
+            </TagChip>
+          )}
           {tags.map((t) => (
             <CodeChip key={t} fontFamily="body">
               {t}
@@ -220,6 +228,12 @@ export function DetailsPanel() {
           </HStack>
         </Flex>
       </PanelHeader>
+
+      {change && snapshot?.diff && (
+        <PanelSection title="In this diff">
+          <DiffView node={node} change={change} />
+        </PanelSection>
+      )}
 
       {node.cache && (
         <PanelSection title="Cache">
@@ -870,5 +884,63 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
         )}
       </Box>
     </Flex>
+  );
+}
+
+/** What a diff did to the element: new, gone, or before → after (props, types, boundary, rendering…), and its file's lines. */
+function DiffView({ node, change }: { node: GraphNode; change: "added" | "removed" | "changed" }) {
+  const diff = useExplorer((s) => s.snapshot?.diff);
+  if (!diff) return null;
+  const file = diff.files.find((f) => f.path === node.filePath);
+  const before = diff.before[node.id];
+  const items = change === "changed" && before ? describeChange(before, node) : [];
+  return (
+    <Stack gap="2" fontSize="12.5px">
+      <Text color="fg.muted">
+        {change === "added"
+          ? `New in ${diff.head.ref}.`
+          : change === "removed"
+            ? `Removed: only ${diff.base.ref} (${diff.compared.slice(0, 7)}) has it.`
+            : items.length
+              ? "Changed:"
+              : "Its code changed (the body: nothing in its signature)."}
+      </Text>
+      {items.map((it, i) => (
+        <Flex key={i} gap="2" align="baseline" minW="0">
+          <Text color="fg.subtle" flexShrink={0} minW="90px">
+            {it.what}
+          </Text>
+          <Box fontFamily="mono" fontSize="11.5px" minW="0" overflowWrap="anywhere">
+            {it.from !== undefined && (
+              <Text as="span" color="diff.removed.fg" textDecoration={it.to !== undefined ? "line-through" : undefined}>
+                {it.from}
+              </Text>
+            )}
+            {it.from !== undefined && it.to !== undefined && (
+              <Text as="span" color="fg.subtle">
+                {" → "}
+              </Text>
+            )}
+            {it.to !== undefined && (
+              <Text as="span" color="diff.added.fg">
+                {it.to}
+              </Text>
+            )}
+          </Box>
+        </Flex>
+      ))}
+      {file && (
+        <Text fontFamily="mono" fontSize="11px" color="fg.subtle">
+          {file.from ? `${file.from} → ` : ""}
+          {file.path}{" "}
+          <Text as="span" color="diff.added.fg">
+            +{file.additions}
+          </Text>{" "}
+          <Text as="span" color="diff.removed.fg">
+            −{file.deletions}
+          </Text>
+        </Text>
+      )}
+    </Stack>
   );
 }

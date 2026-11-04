@@ -53,6 +53,8 @@ export {
   TriangleAlert as IconWarning,
   SlidersHorizontal as IconViewOptions,
   ListFilter as IconFilter,
+  GitCompareArrows as IconDiff,
+  GitBranch as IconBranch,
   Ellipsis as IconMore,
   Sun as IconLight,
   Moon as IconDark,

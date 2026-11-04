@@ -1,6 +1,7 @@
 import { IconChevronDown, IconChevronRight, IconClose, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
 import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { buildTree, type TreeNode, visibleRows } from "../../graph/tree.ts";
+import { CHANGE_LETTER, CHANGE_WORD, changeOf } from "../../lib/diff.ts";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../../store.ts";
 import "./picker.css";
@@ -43,6 +44,15 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const excluded = useExplorer((s) => s.excluded);
   const hideAll = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
+  const diffOverlay = useExplorer((s) => s.diffOverlay);
+  // diff snapshots: folders holding changed files get a dot
+  const diffShown = !!snapshot?.diff && diffOverlay;
+  const changedDirs = useMemo(() => {
+    const dirs = new Set<string>();
+    if (!diffShown) return dirs;
+    for (const f of snapshot!.diff!.files) for (const p of [f.path, f.from]) for (let i = p?.lastIndexOf("/") ?? -1; i > 0; i = p!.lastIndexOf("/", i - 1)) dirs.add(p!.slice(0, i));
+    return dirs;
+  }, [snapshot, diffShown]);
   const [query, setQuery] = useState("");
   // the filter box hidden: its text no longer filters
   if (hideFilter && query) setQuery("");
@@ -51,9 +61,9 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
 
   const roots = useMemo(() => {
     if (!snapshot) return [];
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets });
+    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets, diffOverlay });
     return buildTree(snapshot, f.libraries);
-  }, [snapshot, excluded, hideAll, showAssets]);
+  }, [snapshot, excluded, hideAll, showAssets, diffOverlay]);
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);
 
   // browse mode: a newly selected element's row comes into sight (its folders opened)
@@ -163,6 +173,8 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           const Icon = n.kind === "folder" ? IconFolder : n.kind === "libraries" ? IconLibrary : n.kind === "routes" ? KIND_META.route.icon : KIND_META[node?.kind ?? "module"].icon;
           const tick = mode === "toggle" ? tickOf?.(n) : null;
           const note = inactive?.(n);
+          const change = diffShown && n.id ? changeOf(snapshot, n.id) : undefined;
+          const dirChanged = diffShown && n.kind === "folder" && changedDirs.has(n.path);
           return (
             <button
               key={n.key}
@@ -201,7 +213,15 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               <span className="rae-tree__icon" data-kind={n.kind === "folder" || n.kind === "libraries" ? n.kind : n.kind === "routes" ? "route" : node?.kind}>
                 <Icon size={14} />
               </span>
-              <span className="rae-tree__name">{n.name}</span>
+              <span className="rae-tree__name" data-change={change}>
+                {n.name}
+              </span>
+              {change && (
+                <span className="rae-tree__change" data-change={change} title={`${CHANGE_WORD[change]} in this diff`}>
+                  {CHANGE_LETTER[change]}
+                </span>
+              )}
+              {dirChanged && <span className="rae-tree__change" data-change="dir" title="Changes inside" />}
               {mode === "browse" && onAdd && (n.id || n.kind === "folder") && !drawn?.(n) && (
                 <span
                   role="button"

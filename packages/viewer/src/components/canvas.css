@@ -476,3 +476,40 @@
   background: var(--sel-ring);
   border-radius: 2px;
 }
+
+/* ---- diff mode: added (green), changed (amber), removed (red ghosts); selection stays blue ---- */
+.rae-card[data-change], .rae-frame[data-change] { --d: var(--chakra-colors-diff-changed-solid); --d-bg: var(--chakra-colors-diff-changed-subtle); }
+.rae-card[data-change="added"], .rae-frame[data-change="added"] { --d: var(--chakra-colors-diff-added-solid); --d-bg: var(--chakra-colors-diff-added-subtle); }
+.rae-card[data-change="removed"], .rae-frame[data-change="removed"] { --d: var(--chakra-colors-diff-removed-solid); --d-bg: var(--chakra-colors-diff-removed-subtle); }
+.react-flow__node:not(.selected) .rae-card[data-change] { border: 1.5px solid var(--d); }
+.react-flow__node:not(.selected) .rae-frame[data-change] { border-color: var(--d); border-width: 1.5px; }
+.rae-card[data-change="added"] { background: color-mix(in oklab, var(--d-bg) 55%, var(--chakra-colors-card-bg)); }
+/* removed: a ghost of what the base had */
+.react-flow__node:not(.selected) .rae-card[data-change="removed"],
+.react-flow__node:not(.selected) .rae-frame[data-change="removed"] { border-style: dashed; }
+.rae-card[data-change="removed"] > :not(.rae-change), .rae-frame[data-change="removed"] > :not(.rae-change) { opacity: 0.55; }
+.rae-card[data-change="removed"] .rae-name { text-decoration: line-through; text-decoration-color: var(--d); text-decoration-thickness: 2px; }
+/* the A / M / D letter on the top-left corner */
+.rae-change {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 10px/1 var(--chakra-fonts-mono);
+  color: var(--chakra-colors-bg);
+  background: var(--chakra-colors-diff-changed-solid);
+  pointer-events: auto;
+}
+.rae-change[data-change="added"] { background: var(--chakra-colors-diff-added-solid); }
+.rae-change[data-change="removed"] { background: var(--chakra-colors-diff-removed-solid); }
+/* relations: new ones green and thicker, gone ones red and dashed */
+.react-flow__edge.rae-edge--added path.react-flow__edge-path { stroke: var(--chakra-colors-diff-added-solid); stroke-width: 2px; }
+.react-flow__edge.rae-edge--removed path.react-flow__edge-path { stroke: var(--chakra-colors-diff-removed-solid); stroke-dasharray: 5 4; opacity: 0.7; }
+.rae-edge-label[data-change="added"] { box-shadow: inset 0 0 0 1px var(--chakra-colors-diff-added-solid); color: var(--chakra-colors-diff-added-fg); }
+.rae-edge-label[data-change="removed"] { box-shadow: inset 0 0 0 1px var(--chakra-colors-diff-removed-solid); color: var(--chakra-colors-diff-removed-fg); text-decoration: line-through; }

@@ -122,3 +122,14 @@
 .rae-filetree .rae-tree__row { height: 24px; width: 100%; margin: 0; border-radius: 0; gap: 7px; }
 .rae-filetree .rae-tree__icon[data-kind="folder"] { display: none; }
 .rae-filetree .rae-tree-search__clear { right: 16px; }
+
+/* diff snapshots: A / M / D after the name, a dot on folders holding changes */
+.rae-tree__change {
+  flex-shrink: 0;
+  font: 600 10px/1 var(--chakra-fonts-mono);
+  color: var(--chakra-colors-diff-changed-fg);
+}
+.rae-tree__change[data-change="added"] { color: var(--chakra-colors-diff-added-fg); }
+.rae-tree__change[data-change="removed"] { color: var(--chakra-colors-diff-removed-fg); }
+.rae-tree__change[data-change="dir"] { width: 6px; height: 6px; border-radius: 999px; background: var(--chakra-colors-diff-changed-solid); }
+.rae-tree__name[data-change="removed"] { text-decoration: line-through; color: var(--chakra-colors-fg-subtle); }

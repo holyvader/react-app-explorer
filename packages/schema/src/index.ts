@@ -343,6 +343,8 @@ export interface SnapshotDiff {
   nodes: Record<NodeId, ChangeKind>;
   /** Nodes only the base had, as they were (ids as in the base). */
   removed: Record<NodeId, GraphNode>;
+  /** Changed nodes as they were in the base (by head id), without their render trees: for before → after. */
+  before: Record<NodeId, GraphNode>;
   /** Base id → head id, for nodes in renamed files. */
   renamed: Record<NodeId, NodeId>;
   /** Edges only the head has, and edges only the base had (base edges use head ids where renamed). */
