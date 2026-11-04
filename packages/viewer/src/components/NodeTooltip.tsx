@@ -2,6 +2,10 @@ import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
 import type { CSSProperties, ReactNode } from "react";
 import type { GraphIndex } from "../graph/relations.ts";
 import { cacheLabel, fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
+import { SourceCode, TypeCode } from "./Code.tsx";
+
+/** Characters a laid-out type may take in the tooltip. */
+const TIP_COLUMNS = 52;
 
 /*
  * Node tooltip — plain HTML (one instance for the whole canvas), in the same visual language as
@@ -52,13 +56,13 @@ function ParamRows({ params }: { params: ParamDef[] }) {
           {p.type && (
             <>
               <Tok k="punct">{p.optional && !p.default ? "?: " : ": "}</Tok>
-              <Tok k="type">{p.type}</Tok>
+              <TypeCode text={p.type} flat optional={p.optional} />
             </>
           )}
           {p.default && (
             <>
               <Tok k="punct"> = </Tok>
-              <Tok k="value">{p.default}</Tok>
+              <SourceCode text={p.default} />
             </>
           )}
         </div>
@@ -155,11 +159,11 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
                   <div key={p.name}>
                     <Tok k="name">{p.name}</Tok>
                     <Tok k="punct">{p.optional ? "?: " : ": "}</Tok>
-                    <Tok k="type">{p.type ?? "unknown"}</Tok>
+                    <TypeCode text={p.type ?? "unknown"} flat optional={p.optional} />
                     {p.default && (
                       <>
                         <Tok k="punct"> = </Tok>
-                        <Tok k="value">{p.default}</Tok>
+                        <SourceCode text={p.default} />
                       </>
                     )}
                   </div>
@@ -194,8 +198,8 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
             <ParamRows params={n.signature?.params ?? []} />
           </Section>
           <Section label="Output">
-            <div className="rae-tip__code">
-              <Tok k="type">{n.signature?.returnType ?? "unknown"}</Tok>
+            <div className="rae-tip__code rae-tip__pre">
+              <TypeCode text={n.signature?.returnType ?? "unknown"} width={TIP_COLUMNS} />
             </div>
           </Section>
           {hookNames(n, s).length > 0 && (
@@ -294,7 +298,9 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
       return (
         <>
           <Section label={n.typeKind === "interface" ? "Interface" : n.typeKind === "enum" ? "Enum" : "Type"}>
-            <pre className="rae-tip__code rae-tip__pre">{(n.typeText ?? "").split("\n").slice(0, 14).join("\n")}{(n.typeText ?? "").split("\n").length > 14 ? "\n…" : ""}</pre>
+            <div className="rae-tip__code rae-tip__pre">
+              <SourceCode text={n.typeText ?? ""} maxLines={14} />
+            </div>
           </Section>
           <div className="rae-tip__foot">Used by {new Set(inc.filter((e) => e.kind === "usesType").map((e) => e.from)).size} declarations</div>
         </>

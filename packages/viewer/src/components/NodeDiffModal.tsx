@@ -3,10 +3,35 @@ import { IconInline, IconSplit } from "@rae/design-system/icons";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { fetchSource } from "../lib/api.ts";
+import { sideLabel } from "../lib/diff.ts";
 import { type DiffLine, diffLines, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
+import { lexSource, type TokLine } from "../lib/syntax.ts";
+import "./syntax.css";
 import "./nodeDiff.css";
 
 export type DiffMode = "split" | "inline";
+
+/** Files bigger than this (characters) are shown without colours: lexing them would slow the dialog. */
+const COLOUR_LIMIT = 400_000;
+
+/** Each side's lines, coloured (by line number − 1), from the whole file: comments and strings spanning lines colour right. */
+type Coloured = { before?: TokLine[]; after?: TokLine[] };
+const colour = (text: string | undefined) => (text !== undefined && text.length <= COLOUR_LIMIT ? lexSource(text) : undefined);
+
+/** A line's code: coloured when its side was, else as text. */
+function Code({ tokens, text }: { tokens?: TokLine; text: string }) {
+  if (!tokens) return <>{text || " "}</>;
+  if (!tokens.length) return <> </>;
+  return (
+    <>
+      {tokens.map((t, i) => (
+        <span key={i} className={`rae-tok--${t.k}`}>
+          {t.t}
+        </span>
+      ))}
+    </>
+  );
+}
 const MODE_KEY = "rae.codeDiffMode";
 
 export interface NodeDiffModalProps {
@@ -47,10 +72,10 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   const whole = node.kind === "module" || !!node.file;
   const before: Side | undefined = useMemo(() => {
     const was = change === "changed" ? diff.before[node.id] : change === "removed" ? node : undefined;
-    return was ? { sha: diff.compared, label: `${diff.base.ref} ${diff.compared.slice(0, 7)}`, node: was, whole } : undefined;
+    return was ? { sha: diff.compared, label: sideLabel(diff.base.ref, diff.compared), node: was, whole } : undefined;
   }, [change, diff, node, whole]);
   const after: Side | undefined = useMemo(
-    () => (change === "removed" ? undefined : { sha: diff.head.worktree ? "worktree" : diff.head.sha, label: diff.head.worktree ? `${diff.head.ref} + uncommitted` : `${diff.head.ref} ${diff.head.sha.slice(0, 7)}`, node, whole }),
+    () => (change === "removed" ? undefined : { sha: diff.head.worktree ? "worktree" : diff.head.sha, label: sideLabel(diff.head.ref, diff.head.sha, diff.head.worktree), node, whole }),
     [change, diff, node, whole],
   );
 
@@ -83,6 +108,7 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
     const a = after && loaded.after !== undefined ? linesOf(loaded.after, after) : { lines: [], start: 1 };
     return diffLines(b.lines, a.lines, b.start, a.start);
   }, [loaded, before, after]);
+  const coloured = useMemo<Coloured>(() => (loaded && !loaded.error ? { before: colour(loaded.before), after: colour(loaded.after) } : {}), [loaded]);
   const counts = useMemo(() => ({ add: lines?.filter((l) => l.type === "add").length ?? 0, del: lines?.filter((l) => l.type === "del").length ?? 0 }), [lines]);
 
   const title = (
@@ -134,7 +160,7 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
         </Flex>
       )}
       {lines && lines.length === 0 && <Text color="fg.muted">No lines.</Text>}
-      {lines && lines.length > 0 && (mode === "split" ? <SplitView lines={lines} showAll={showAll} onExpand={() => setShowAll(true)} /> : <InlineView lines={lines} showAll={showAll} onExpand={() => setShowAll(true)} />)}
+      {lines && lines.length > 0 && (mode === "split" ? <SplitView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} /> : <InlineView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} />)}
     </Modal>
   );
 }
@@ -159,7 +185,7 @@ function Fold({ count, cols, onExpand }: { count: number; cols: number; onExpand
   );
 }
 
-function InlineView({ lines, showAll, onExpand }: { lines: DiffLine[]; showAll: boolean; onExpand: () => void }) {
+function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void }) {
   const parts = showAll ? [{ type: "rows" as const, rows: lines }] : foldUnchanged(lines, (l) => l.type !== "same");
   return (
     <div className="rae-cdiff" data-mode="inline">
@@ -175,7 +201,9 @@ function InlineView({ lines, showAll, onExpand }: { lines: DiffLine[]; showAll: 
                     <td className="rae-cdiff__num">{l.type !== "add" ? l.a : ""}</td>
                     <td className="rae-cdiff__num">{l.type !== "del" ? l.b : ""}</td>
                     <td className="rae-cdiff__sign">{l.type === "add" ? "+" : l.type === "del" ? "−" : ""}</td>
-                    <td className="rae-cdiff__code">{l.text || " "}</td>
+                    <td className="rae-cdiff__code">
+                      <Code tokens={l.type === "add" ? coloured.after?.[l.b - 1] : coloured.before?.[l.a - 1]} text={l.text} />
+                    </td>
                   </tr>
                 ))}
               </Fragment>
@@ -187,7 +215,7 @@ function InlineView({ lines, showAll, onExpand }: { lines: DiffLine[]; showAll: 
   );
 }
 
-function SplitView({ lines, showAll, onExpand }: { lines: DiffLine[]; showAll: boolean; onExpand: () => void }) {
+function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void }) {
   const rows = useMemo(() => splitRows(lines), [lines]);
   const parts = showAll ? [{ type: "rows" as const, rows }] : foldUnchanged(rows, (r) => r.left?.type === "del" || r.right?.type === "add");
   return (
@@ -211,13 +239,13 @@ function SplitView({ lines, showAll, onExpand }: { lines: DiffLine[]; showAll: b
                       {r.left?.a ?? ""}
                     </td>
                     <td className="rae-cdiff__code" data-type={r.left?.type ?? "empty"}>
-                      {r.left ? r.left.text || " " : ""}
+                      {r.left ? <Code tokens={coloured.before?.[r.left.a - 1]} text={r.left.text} /> : ""}
                     </td>
                     <td className="rae-cdiff__num" data-type={r.right?.type ?? "empty"}>
                       {r.right?.b ?? ""}
                     </td>
                     <td className="rae-cdiff__code" data-type={r.right?.type ?? "empty"}>
-                      {r.right ? r.right.text || " " : ""}
+                      {r.right ? <Code tokens={coloured.after?.[r.right.b - 1]} text={r.right.text} /> : ""}
                     </td>
                   </tr>
                 ))}

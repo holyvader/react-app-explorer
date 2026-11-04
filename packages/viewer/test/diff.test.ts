@@ -91,6 +91,10 @@ describe("diff snapshots in the viewer", () => {
     const was = { ...s.nodes["src/Header.tsx#Header"]!, signature: { params: [] } };
     expect(describeChange(was, { ...was, signature: { params: [], returnType: "Element" } })).toEqual([]);
     expect(describeChange({ ...was, signature: { params: [], returnType: "string" } }, { ...was, signature: { params: [], returnType: "number" } })).toEqual([{ what: "return type", from: "string", to: "number" }]);
+    // an optional prop's `| undefined` (added by TypeScript on one side only) isn't a change either
+    const opt = (type: string) => ({ ...was, props: [{ name: "list", optional: true, type }] });
+    expect(describeChange(opt("SnapshotList"), opt("SnapshotList | undefined"))).toEqual([]);
+    expect(describeChange(opt("A"), opt("B | undefined"))).toEqual([{ what: "list: type", from: "A", to: "B | undefined", optional: true }]);
     expect(sideLabel("refs/pull/12/head", "b".repeat(40))).toBe("#12 bbbbbbb");
     expect(sideLabel("refs/merge-requests/3/head", "b".repeat(40))).toBe("!3 bbbbbbb");
     expect(sideLabel("main", "a".repeat(40))).toBe("main aaaaaaa");

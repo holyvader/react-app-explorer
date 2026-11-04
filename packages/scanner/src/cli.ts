@@ -119,7 +119,8 @@ if (values.stdout) {
   if (snapshot.diff) {
     const d = snapshot.diff;
     const tally = (k: string) => Object.values(d.nodes).filter((c) => c === k).length;
-    console.log(`  diff ${d.base.ref} ${d.compared.slice(0, 7)} → ${d.head.ref} ${d.head.sha.slice(0, 7)}: ${d.files.length} files, +${tally("added")} ~${tally("changed")} -${tally("removed")} nodes, +${d.edges.added.length} -${d.edges.removed.length} edges`);
+    const side = (ref: string, sha: string) => (sha.startsWith(ref) ? sha.slice(0, 7) : `${ref} ${sha.slice(0, 7)}`);
+    console.log(`  diff ${side(d.base.ref, d.compared)} → ${side(d.head.ref, d.head.sha)}: ${d.files.length} files, +${tally("added")} ~${tally("changed")} -${tally("removed")} nodes, +${d.edges.added.length} -${d.edges.removed.length} edges`);
   }
 }
 if (values.stats) console.error("phases (ms):", snapshot.stats.phases, "cache hits:", snapshot.stats.cacheHits);

@@ -1,13 +1,16 @@
 import { Box, Text, Tooltip } from "@rae/design-system";
 import type { GraphNode, Snapshot } from "@rae/schema";
-import { Fragment, type ReactNode } from "react";
-import { formatType, isPrimitiveType } from "../lib/typeText.ts";
+import { useMemo } from "react";
+import { isPrimitiveType } from "../lib/typeText.ts";
+import { layoutDefinition, layoutType, type Tok } from "../lib/syntax.ts";
 import { useExplorer } from "../store.ts";
-
-const IDENT = /[A-Za-z_$][\w$]*/g;
+import { useCodeColumns } from "../lib/useColumns.ts";
+import { CodeLines, SourceCode, TypeCode } from "./Code.tsx";
 
 /** Lines of a definition shown in a tooltip before "…". */
 const PREVIEW_LINES = 24;
+/** The tooltip's width, in characters. */
+const TOOLTIP_COLUMNS = 72;
 
 /** Type declarations by name, per snapshot: the fallback for names the owner didn't record (inferred types). */
 const byName = new WeakMap<Snapshot, Map<string, string[]>>();
@@ -29,29 +32,16 @@ function targetOf(s: Snapshot, owner: GraphNode | undefined, name: string): Grap
   return named.length === 1 ? s.nodes[named[0]!] : undefined;
 }
 
-const clip = (text: string) => {
-  const lines = text.split("\n");
-  return lines.length > PREVIEW_LINES ? [...lines.slice(0, PREVIEW_LINES), "…"].join("\n") : text;
-};
-
 function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
   return (
-    <Box maxW="min(560px, 80vw)">
-      {text && (
-        <Box as="pre" fontFamily="mono" fontSize="2xs" whiteSpace="pre-wrap" wordBreak="break-word" m="0">
-          {text}
-        </Box>
-      )}
+    <Box maxW="min(620px, 80vw)" fontSize="2xs" lineHeight="1.6">
+      {text && <TypeCode text={text} width={TOOLTIP_COLUMNS} />}
       {targets.map((t, i) => (
-        <Box key={t.id} mt={text || i ? "2.5" : 0} pt={text || i ? "2" : 0} borderTopWidth={text || i ? "1px" : 0} borderColor="whiteAlpha.300">
+        <Box key={t.id} mt={text || i ? "2.5" : 0} pt={text || i ? "2" : 0} borderTopWidth={text || i ? "1px" : 0} borderColor="border.muted">
           <Text fontSize="2xs" opacity={0.75} mb="1">
             {t.kind === "type" ? `${t.typeKind ?? "type"} · ${t.filePath}` : `from ${t.name}`} — click the name to add it
           </Text>
-          {t.typeText && (
-            <Box as="pre" fontFamily="mono" fontSize="2xs" whiteSpace="pre-wrap" wordBreak="break-word" m="0">
-              {clip(t.typeText)}
-            </Box>
-          )}
+          {t.typeText && <SourceCode text={t.typeText} maxLines={PREVIEW_LINES} block />}
         </Box>
       ))}
     </Box>
@@ -59,59 +49,60 @@ function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
 }
 
 /**
- * A TypeScript type as text: hover for a tooltip with the whole type and the definitions of the
- * project types it names; those names are links that add the type (or library) to the diagram.
- * `owner` is the node whose annotation this is (its `typeRefs` say what each name resolves to).
+ * A TypeScript type, coloured: inline types are laid out to the room they have (one line when it
+ * fits, objects / parameters / long unions broken over lines, `| undefined` dropped from optional
+ * members); `block` shows a definition as written. Names of project types and libraries are links
+ * that add them to the diagram; hovering shows those definitions. `owner` is the node whose
+ * annotation this is (its `typeRefs` say what each name resolves to). `flat`: one line, always.
  */
-export function TypeText({ text: raw, owner, block, pretty }: { text: string; owner?: GraphNode; block?: boolean; pretty?: boolean }) {
+export function TypeText({ text, owner, block, flat, optional }: { text: string; owner?: GraphNode; block?: boolean; flat?: boolean; /** an optional prop / parameter's type: no `| undefined` */ optional?: boolean }) {
   const snapshot = useExplorer((s) => s.snapshot);
-  // `pretty`: object types laid out over several lines (the tooltip always shows them that way)
-  const text = pretty ? formatType(raw) : raw;
-  if (!snapshot) return <>{text}</>;
+  const [ref, cols] = useCodeColumns<HTMLSpanElement>();
+  const lines = useMemo(() => (block ? layoutDefinition(text, cols) : layoutType(text, { width: cols, flat, optional })), [text, block, cols, flat, optional]);
 
-  const parts: ReactNode[] = [];
-  const targets = new Map<string, GraphNode>();
-  let last = 0;
-  for (const m of text.matchAll(IDENT)) {
-    const name = m[0];
-    const target = targetOf(snapshot, owner, name);
-    if (!target || target.id === owner?.id) continue;
-    if (target.kind === "type" || target.kind === "external") targets.set(target.id, target);
-    parts.push(text.slice(last, m.index));
-    parts.push(
-      <Box
-        key={`${m.index}-${name}`}
-        as="span"
+  // what the names in it stand for (types of the project, libraries), looked up before rendering
+  const links = useMemo(() => {
+    const m = new Map<string, GraphNode>();
+    if (!snapshot) return m;
+    for (const line of lines)
+      for (const t of line) {
+        if (t.k !== "type" || m.has(t.t)) continue;
+        const target = targetOf(snapshot, owner, t.t);
+        if (target && target.id !== owner?.id) m.set(t.t, target);
+      }
+    return m;
+  }, [lines, snapshot, owner]);
+  const targets = [...new Map([...links.values()].filter((n) => n.kind === "type" || n.kind === "external").map((n) => [n.id, n])).values()];
+  const add = (target: GraphNode) => useExplorer.getState().addNodes([target.id], { select: target.id, focus: target.id, anchor: owner?.id ?? null });
+  const render = (t: Tok, key: string) => {
+    const target = t.k === "type" ? links.get(t.t) : undefined;
+    if (!target) return (
+      <span key={key} className={`rae-tok--${t.k}`}>
+        {t.t}
+      </span>
+    );
+    return (
+      <span
+        key={key}
+        className={`rae-tok--${t.k} rae-tok--link`}
         role="link"
         tabIndex={0}
-        textDecoration="underline dotted"
-        textUnderlineOffset="3px"
-        cursor="pointer"
-        _hover={{ color: "kind.type.fg", textDecorationStyle: "solid" }}
         onClick={(e) => {
           e.stopPropagation();
-          useExplorer.getState().addNodes([target.id], { select: target.id, focus: target.id, anchor: owner?.id ?? null });
+          add(target);
         }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") useExplorer.getState().addNodes([target.id], { select: target.id, focus: target.id, anchor: owner?.id ?? null });
-        }}
+        onKeyDown={(e) => e.key === "Enter" && add(target)}
       >
-        {name}
-      </Box>,
+        {t.t}
+      </span>
     );
-    last = m.index + name.length;
-  }
-  parts.push(text.slice(last));
-
-  // block definitions are already shown in full, primitives need no preview; other inline types get the full-text tooltip
-  const hasTooltip = !(targets.size === 0 && (block || isPrimitiveType(text)));
+  };
   const body = (
-    <Box as="span" color="syntax.type" whiteSpace={block || pretty ? "pre-wrap" : undefined} wordBreak={block || pretty ? "break-word" : undefined} cursor={hasTooltip ? "help" : undefined}>
-      {parts.map((p, i) => (
-        <Fragment key={i}>{p}</Fragment>
-      ))}
-    </Box>
+    <span ref={ref}>
+      <CodeLines lines={lines} render={render} block={block} />
+    </span>
   );
-  if (!hasTooltip) return body;
-  return <Tooltip content={<Preview text={block ? "" : formatType(raw)} targets={[...targets.values()]} />}>{body}</Tooltip>;
+  // the type is shown whole: a tooltip only adds the definitions of the types it names
+  if (!targets.length || isPrimitiveType(text)) return body;
+  return <Tooltip content={<Preview text="" targets={targets} />}>{body}</Tooltip>;
 }

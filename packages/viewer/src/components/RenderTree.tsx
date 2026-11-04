@@ -4,6 +4,7 @@ import { IconChevronDown, IconChevronRight } from "@rae/design-system/icons";
 import { useState } from "react";
 import { CONDITION_LABEL, formatCondition } from "../lib/conditions.ts";
 import { useExplorer } from "../store.ts";
+import { SourceCode } from "./Code.tsx";
 
 /** Children shown per element before "… N more". */
 const MAX_CHILDREN = 40;
@@ -90,7 +91,7 @@ function RenderTreeNode({ node, depth }: { node: JsxNode; depth: number }) {
               {!p.isSpread && (
                 <>
                   <CodeToken kind="punct">=</CodeToken>
-                  <CodeToken kind="value">{p.value}</CodeToken>
+                  <SourceCode text={p.value ?? ""} />
                 </>
               )}
             </Text>

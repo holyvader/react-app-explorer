@@ -165,3 +165,26 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
   The toolbar's `DiffChip` shows `#12 title` and an open-on-GitHub/GitLab button (`openRequestPage`).
 - Try it: `bun run scan packages/viewer --base <ref> --head <ref> --out <dir>` and a dev server with
   `RAE_SNAPSHOTS=<dir>`; swap base and head (`--against-tip`) for removals to look at.
+
+## Code and type text (lib/syntax.ts, components/Code.tsx, TypeText.tsx)
+- `layoutType(text, { width, start, flat })`: a checker-printed type laid out like an editor — one line
+  when it fits, else objects / parameter lists broken one entry per line, a lone object hugging its
+  brackets (`Promise<{`…`}>`), unions of 3+ simple members one `| member` per line; a member's value
+  is laid out after its `name:`. `x?: T | undefined` → `x?: T` (optional members and parameters only).
+  `optional: true` does the same for an optional prop / parameter's type shown on its own row.
+  `layoutDefinition(text, width)`: a definition as written, each too-long member / one-line alias laid
+  out like a type under its member (comments, lines that fit and written `| undefined` kept).
+  `lexSource(text)`: TS / TSX as written (comments, strings and template literals across lines, JSX
+  tags / attributes, calls, keywords) — definitions, default values, render-tree props, the code diff.
+- Details sections are `Section`s: their open / closed state is remembered per title, for every element.
+  "In this diff" starts collapsed; its header shows the element's lines before / after (`−143/+144`).
+  Type changes are compared as displayed (flat layout, optional `| undefined` dropped), so the
+  `| undefined` TypeScript adds on one side only isn't a change.
+- "In this diff": each change is its label, then `−` / `+` rows on diff.removed / diff.added backgrounds
+  (`ChangeRow`); type values laid out (definitions with `layoutDefinition`).
+- Token kinds → `.rae-tok--*` classes in `syntax.css` (syntax.* colours). `CodeLines`, `TypeCode`
+  (laid out, no links), `SourceCode`.
+- `TypeText` lays itself out to the room it has: `useCodeColumns` (lib/useColumns.ts) measures from its
+  left edge to its row's right edge and re-measures on resize and when web fonts load. The character
+  width comes from the font's parts — Chrome leaves the `font` shorthand empty here.
+- Types come untruncated from the scanner (`TypeFormatFlags.NoTruncation`, capped at 2000 characters).

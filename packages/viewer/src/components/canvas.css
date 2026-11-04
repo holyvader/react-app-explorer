@@ -420,12 +420,7 @@
   color: color-mix(in oklab, var(--c) 70%, var(--chakra-colors-fg));
   background: color-mix(in oklab, var(--c) 16%, var(--chakra-colors-panel-bg));
 }
-/* code tokens — the same colours the details panel uses (syntax.* tokens) */
-.rae-tok--name { color: var(--chakra-colors-syntax-name); }
-.rae-tok--type { color: var(--chakra-colors-syntax-type); }
-.rae-tok--value { color: var(--chakra-colors-syntax-literal); }
-.rae-tok--punct { color: var(--chakra-colors-syntax-punct); }
-.rae-tok--keyword { color: var(--chakra-colors-syntax-keyword); }
+/* code tokens (.rae-tok--*): syntax.css, shared with the details panel and the code diff */
 
 /* The "+ n" on a file's bottom border: what it contains that isn't drawn. */
 .rae-contains {

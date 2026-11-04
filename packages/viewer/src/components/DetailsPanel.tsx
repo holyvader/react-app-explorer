@@ -15,7 +15,6 @@ import {
   Panel,
   PanelBar,
   PanelHeader,
-  PanelSection,
   Stack,
   TagChip,
   Text,
@@ -49,7 +48,9 @@ import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
 import { NodeDiffModal } from "./NodeDiffModal.tsx";
 import { RenderTree } from "./RenderTree.tsx";
+import { SourceCode } from "./Code.tsx";
 import { TypeText } from "./TypeText.tsx";
+import { Section } from "./Section.tsx";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -232,108 +233,108 @@ export function DetailsPanel() {
       </PanelHeader>
 
       {change && snapshot?.diff && (
-        <PanelSection title="In this diff">
+        <Section title="In this diff" defaultOpen={false} aside={<DiffLines node={node} change={change} />}>
           <DiffView key={node.id} node={node} change={change} />
-        </PanelSection>
+        </Section>
       )}
 
       {node.cache && (
-        <PanelSection title="Cache">
+        <Section title="Cache">
           <CacheView node={node} />
-        </PanelSection>
+        </Section>
       )}
 
       {node.middleware && (
-        <PanelSection title="Middleware">
+        <Section title="Middleware">
           <MiddlewareView node={node} />
-        </PanelSection>
+        </Section>
       )}
 
       {node.route && (
-        <PanelSection title="Route">
+        <Section title="Route">
           <RouteInfoView node={node} />
-        </PanelSection>
+        </Section>
       )}
 
       {node.kind === "type" && (node.typeParams?.length || node.extends?.length) ? (
-        <PanelSection title={node.extends?.length ? (node.typeParams?.length ? "Generics & extends" : "Extends") : "Generics"}>
+        <Section id="Generics" title={node.extends?.length ? (node.typeParams?.length ? "Generics & extends" : "Extends") : "Generics"}>
           <Generics node={node} />
-        </PanelSection>
+        </Section>
       ) : null}
 
       {node.kind === "type" && node.typeText && (
-        <PanelSection title="Definition">
+        <Section title="Definition">
           <Box bg="syntax.bg" rounded="l2" px="3" py="2.5" fontFamily="mono" fontSize="xs" lineHeight="1.7" borderWidth="1px" borderColor="border.muted" overflowX="auto">
             <TypeText text={node.typeText} owner={node} block />
           </Box>
-        </PanelSection>
+        </Section>
       )}
 
       {/* components: their props (no output: a component always returns an element) */}
       {node.kind === "component" ? (
-        <PanelSection title="Props" count={node.props?.length || undefined}>
+        <Section title="Props" count={node.props?.length || undefined}>
           <ComponentProps node={node} />
-        </PanelSection>
+        </Section>
       ) : null}
       {node.kind !== "component" && node.props && node.props.length > 0 && (
-        <PanelSection title="Props" count={node.props.length}>
+        <Section title="Props" count={node.props.length}>
           <Stack gap="0.5">
             {node.props.map((p) => (
               <CodeRow key={p.name}>
                 <CodeToken kind="name">{p.name}</CodeToken>
                 <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
-                <TypeText text={p.type ?? "unknown"} owner={node} />
+                <TypeText text={p.type ?? "unknown"} owner={node} optional={p.optional} />
                 {p.default && (
                   <>
                     <CodeToken kind="punct"> = </CodeToken>
-                    <CodeToken kind="value">{p.default}</CodeToken>
+                    <SourceCode text={p.default} />
                   </>
                 )}
               </CodeRow>
             ))}
           </Stack>
-        </PanelSection>
+        </Section>
       )}
 
       {node.signature && node.kind !== "module" && node.kind !== "external" && node.kind !== "component" && (
-        <PanelSection title="Inputs & output">
+        <Section title="Inputs & output">
           <Signature node={node} />
-        </PanelSection>
+        </Section>
       )}
 
       {customHooks.length > 0 && (
-        <PanelSection title="Custom hooks" count={customHooks.length}>
+        <Section title="Custom hooks" count={customHooks.length}>
           {/* just names: the details (arguments, types) are on the hook itself — click to go there */}
           <Wrap gap="1.5">
             {customHooks.map(({ id, count }) => (
               <NodeChip key={id} id={id} anchor={node.id} suffix={count > 1 ? `×${count}` : undefined} />
             ))}
           </Wrap>
-        </PanelSection>
+        </Section>
       )}
 
       {renders.length > 0 && (
-        <PanelSection title="Renders" count={renders.length}>
+        <Section title="Renders" count={renders.length}>
           <Wrap gap="1.5">
             {renders.map((id) => (
               <NodeChip key={id} id={id} anchor={node.id} />
             ))}
           </Wrap>
-        </PanelSection>
+        </Section>
       )}
 
       {declared.length > 0 && (
-        <PanelSection title="Declares" count={declared.length}>
+        <Section title="Declares" count={declared.length}>
           <Wrap gap="1.5">
             {declared.map((d) => (
               <NodeChip key={d.id} id={d.id} anchor={node.id} suffix={d.exported ? undefined : "local"} />
             ))}
           </Wrap>
-        </PanelSection>
+        </Section>
       )}
 
       {node.functions && node.functions.length > 0 && (
-        <PanelSection title="Functions" count={node.functions.length}>
+        <Section title="Functions" count={node.functions.length}>
           <Stack gap="1">
             {node.functions.map((f, i) => (
               <CodeRow key={i} aside={`:${f.loc.line}`}>
@@ -351,23 +352,23 @@ export function DetailsPanel() {
               </CodeRow>
             ))}
           </Stack>
-        </PanelSection>
+        </Section>
       )}
 
       {node.renderTree && node.renderTree.length > 0 && (
-        <PanelSection title="Render tree">
+        <Section title="Render tree">
           <RenderTree nodes={node.renderTree} />
-        </PanelSection>
+        </Section>
       )}
 
-      <PanelSection title="Uses" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
+      <Section title="Uses" count={relations.children.length} defaultOpen={relations.children.length <= 30}>
         <RelationList edges={relations.children} side="to" />
-      </PanelSection>
-      <PanelSection title="Used by" count={relations.parents.length}>
+      </Section>
+      <Section title="Used by" count={relations.parents.length}>
         <RelationList key={node.id} edges={relations.parents} side="from" limit={USED_BY_LIMIT} />
-      </PanelSection>
+      </Section>
 
-      <PanelSection title="Details" defaultOpen={false}>
+      <Section title="Details" defaultOpen={false}>
         <Stack gap="3">
           <Box>
             <Eyebrow>Exports</Eyebrow>
@@ -382,7 +383,7 @@ export function DetailsPanel() {
             </Text>
           </Box>
         </Stack>
-      </PanelSection>
+      </Section>
     </Panel>
   );
 }
@@ -425,13 +426,13 @@ function Params({ params, owner }: { params: ParamDef[]; owner?: GraphNode }) {
           {p.type && (
             <>
               <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type} owner={owner} />
+              <TypeText text={p.type} owner={owner} optional={p.optional} />
             </>
           )}
           {p.default && (
             <>
               <CodeToken kind="punct"> = </CodeToken>
-              <CodeToken kind="value">{p.default}</CodeToken>
+              <SourceCode text={p.default} />
             </>
           )}
         </span>
@@ -622,13 +623,13 @@ function Generics({ node }: { node: GraphNode }) {
                 {t.constraint && (
                   <>
                     <CodeToken kind="keyword"> extends </CodeToken>
-                    <TypeText text={t.constraint} owner={node} pretty />
+                    <TypeText text={t.constraint} owner={node} />
                   </>
                 )}
                 {t.default && (
                   <>
                     <CodeToken kind="punct"> = </CodeToken>
-                    <TypeText text={t.default} owner={node} pretty />
+                    <TypeText text={t.default} owner={node} />
                   </>
                 )}
               </Box>
@@ -642,7 +643,7 @@ function Generics({ node }: { node: GraphNode }) {
           <Stack gap="1.5" mt="1.5">
             {node.extends.map((x, i) => (
               <Box key={i} {...CODE_BOX} wordBreak="break-word">
-                <TypeText text={x} owner={node} pretty />
+                <TypeText text={x} owner={node} />
               </Box>
             ))}
           </Stack>
@@ -667,11 +668,11 @@ function ComponentProps({ node }: { node: GraphNode }) {
             <CodeRow key={p.name}>
               <CodeToken kind="name">{p.name}</CodeToken>
               <CodeToken kind="punct">{p.optional ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type ?? "unknown"} owner={node} />
+              <TypeText text={p.type ?? "unknown"} owner={node} optional={p.optional} />
               {p.default && (
                 <>
                   <CodeToken kind="punct"> = </CodeToken>
-                  <CodeToken kind="value">{p.default}</CodeToken>
+                  <SourceCode text={p.default} />
                 </>
               )}
             </CodeRow>
@@ -698,13 +699,13 @@ function ParamRows({ node, params, mt }: { node: GraphNode; params: ParamDef[]; 
           {p.type && (
             <>
               <CodeToken kind="punct">{p.optional && !p.default ? "?: " : ": "}</CodeToken>
-              <TypeText text={p.type} owner={node} pretty />
+              <TypeText text={p.type} owner={node} optional={p.optional} />
             </>
           )}
           {p.default && (
             <>
               <CodeToken kind="punct"> = </CodeToken>
-              <CodeToken kind="value">{p.default}</CodeToken>
+              <SourceCode text={p.default} />
             </>
           )}
         </Box>
@@ -734,7 +735,7 @@ function Signature({ node }: { node: GraphNode }) {
         <Eyebrow>Output</Eyebrow>
         <Box {...box} mt="1.5" wordBreak="break-word">
           {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
-          <TypeText text={sig.returnType ?? "unknown"} owner={node} pretty />
+          <TypeText text={sig.returnType ?? "unknown"} owner={node} />
         </Box>
       </Box>
     </Stack>
@@ -889,6 +890,53 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
   );
 }
 
+/** Changes whose values are types ("return type", "title: type", "type"): shown coloured. */
+const isTypeChange = (what: string) => what === "type" || what.endsWith("type");
+
+/** A declaration's lines: from its line to its last (none for files, routes, libraries). */
+const lineCount = (n: GraphNode | undefined) => (n?.loc && n.endLine && n.kind !== "module" && !n.file ? n.endLine - n.loc.line + 1 : undefined);
+
+/** "In this diff"'s header: the element's lines before (−) and after (+), as it was and as it is. */
+function DiffLines({ node, change }: { node: GraphNode; change: "added" | "removed" | "changed" }) {
+  const diff = useExplorer((s) => s.snapshot?.diff);
+  const was = lineCount(change === "changed" ? diff?.before[node.id] : change === "removed" ? node : undefined);
+  const now = lineCount(change === "removed" ? undefined : node);
+  if (was === undefined && now === undefined) return null;
+  return (
+    <Text as="span" fontFamily="mono" fontSize="10.5px" title={`${was !== undefined ? `${was} lines before` : ""}${was !== undefined && now !== undefined ? ", " : ""}${now !== undefined ? `${now} lines now` : ""}`}>
+      {was !== undefined && (
+        <Text as="span" color="diff.removed.fg">
+          −{was}
+        </Text>
+      )}
+      {was !== undefined && now !== undefined && (
+        <Text as="span" color="fg.subtle">
+          /
+        </Text>
+      )}
+      {now !== undefined && (
+        <Text as="span" color="diff.added.fg">
+          +{now}
+        </Text>
+      )}
+    </Text>
+  );
+}
+
+/** One side of a change, like a diff line: − on red, + on green. */
+function ChangeRow({ sign, change, children }: { sign: string; change: "added" | "removed"; children: ReactNode }) {
+  return (
+    <Flex align="baseline" gap="2" px="2" py="0.5" mb="1px" rounded="l1" bg={`diff.${change}.subtle`} fontFamily="mono" fontSize="11.5px" lineHeight="1.6" minW="0">
+      <Text as="span" color={`diff.${change}.fg`} flexShrink={0} userSelect="none">
+        {sign}
+      </Text>
+      <Box minW="0" flex="1" overflowWrap="anywhere" color="fg">
+        {children}
+      </Box>
+    </Flex>
+  );
+}
+
 /** How many changes "In this diff" lists before "Show more". */
 const DIFF_ITEMS = 5;
 
@@ -902,7 +950,6 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
   const [codeOpen, setCodeOpen] = useState(false);
   const diff = snapshot?.diff;
   if (!snapshot || !diff) return null;
-  const file = diff.files.find((f) => f.path === node.filePath);
   const before = diff.before[node.id];
   const items = change === "changed" && before ? describeChange(before, node) : [];
   const shown = more ? items : items.slice(0, DIFF_ITEMS);
@@ -923,45 +970,26 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
         {hasCode && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
       </Flex>
       {shown.map((it, i) => (
-        <Flex key={i} gap="2" align="baseline" minW="0">
-          <Text color="fg.subtle" flexShrink={0} minW="90px">
+        <Box key={i} minW="0">
+          <Text fontSize="11.5px" color="fg.subtle" mb="1">
             {it.what}
           </Text>
-          <Box fontFamily="mono" fontSize="11.5px" minW="0" overflowWrap="anywhere">
-            {it.from !== undefined && (
-              <Text as="span" color="diff.removed.fg" textDecoration={it.to !== undefined ? "line-through" : undefined}>
-                {it.from}
-              </Text>
-            )}
-            {it.from !== undefined && it.to !== undefined && (
-              <Text as="span" color="fg.subtle">
-                {" → "}
-              </Text>
-            )}
-            {it.to !== undefined && (
-              <Text as="span" color="diff.added.fg">
-                {it.to}
-              </Text>
-            )}
-          </Box>
-        </Flex>
+          {it.from !== undefined && (
+            <ChangeRow sign="−" change="removed">
+              {isTypeChange(it.what) ? <TypeText text={it.from} owner={snapshot.diff?.before[node.id] ?? node} block={it.what === "type"} optional={it.optional} /> : it.from}
+            </ChangeRow>
+          )}
+          {it.to !== undefined && (
+            <ChangeRow sign="+" change="added">
+              {isTypeChange(it.what) ? <TypeText text={it.to} owner={node} block={it.what === "type"} optional={it.optional} /> : it.to}
+            </ChangeRow>
+          )}
+        </Box>
       ))}
       {items.length > DIFF_ITEMS && (
         <Button size="2xs" variant="ghost" alignSelf="start" px="1.5" color="fg.muted" onClick={() => setMore(!more)}>
           {more ? "Show less" : `Show more (${items.length - DIFF_ITEMS})`}
         </Button>
-      )}
-      {file && (
-        <Text fontFamily="mono" fontSize="11px" color="fg.subtle">
-          {file.from ? `${file.from} → ` : ""}
-          {file.path}{" "}
-          <Text as="span" color="diff.added.fg">
-            +{file.additions}
-          </Text>{" "}
-          <Text as="span" color="diff.removed.fg">
-            −{file.deletions}
-          </Text>
-        </Text>
       )}
       {codeOpen && <NodeDiffModal node={node} snapshot={snapshot} open={codeOpen} onOpenChange={setCodeOpen} />}
     </Stack>

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { PropDef } from "@rae/schema";
-import { API, SignatureKind, SymbolFlags, type Type } from "typescript/async";
+import { API, SignatureKind, SymbolFlags, type Type, TypeFormatFlags } from "typescript/async";
 import type { DeclExtract, FileExtract, RawFn, RawHook } from "../extract/types.ts";
 
 /**
@@ -11,7 +11,12 @@ import type { DeclExtract, FileExtract, RawFn, RawHook } from "../extract/types.
  */
 
 // long enough for the details (laid out over lines) and tooltips to show whole object types
-const MAX_TYPE = 1000;
+const MAX_TYPE = 2000;
+/**
+ * How types are printed: TypeScript's defaults (aliases from other scopes, unique symbols) without
+ * its truncation — it cuts long types to `"a" | ... 1 more ...` around 160 characters; MAX_TYPE caps them instead.
+ */
+const FORMAT = TypeFormatFlags.NoTruncation | TypeFormatFlags.UseAliasDefinedOutsideCurrentScope | TypeFormatFlags.AllowUniqueESSymbolType;
 const MAX_PROPS = 40;
 const FILE_CONCURRENCY = 48;
 /** No progress for this long (no file answered, or the checker never got ready) → give up on types. */
@@ -219,7 +224,7 @@ async function runAll(
 }
 
 function makeProcessor(checker: Checker, keyOf: (f: FileExtract) => string) {
-  const str = (t: TType | undefined) => (t ? checker.typeToString(t).then(clip) : Promise.resolve(undefined));
+  const str = (t: TType | undefined) => (t ? checker.typeToString(t, undefined, FORMAT).then(clip) : Promise.resolve(undefined));
 
   async function signatureOf(t: TType | undefined) {
     if (!t) return undefined;

@@ -477,3 +477,33 @@ describe("merging files that declare one exported thing (default on)", () => {
     expect(s.nodes["app/page.tsx#HomePage"]!.moduleId).toBe("app/page.tsx");
   });
 });
+
+describe("type text", () => {
+  test("long types are printed whole (no `... N more ...`)", async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const root = mkdtempSync(join(tmpdir(), "rae-types-"));
+    const project = (files: Record<string, string>) => {
+      for (const [path, text] of Object.entries(files)) {
+        mkdirSync(join(root, path, ".."), { recursive: true });
+        writeFileSync(join(root, path), text);
+      }
+      return root;
+    };
+    project({
+      "tsconfig.json": `{ "compilerOptions": { "jsx": "react-jsx", "strict": true } }`,
+      "src/main.tsx": [
+        `type Diff = { base?: string; head?: string; request?: string; requestInfo?: { title?: string; author?: string; url?: string }; worktree?: boolean; against?: "base" | "merge-base" };`,
+        `export function Options({ onChange }: { onChange: (diff: Diff | undefined) => void }) { onChange(undefined); return <div />; }`,
+        `export const pick = (k: "alpha" | "beta" | "gamma" | "delta" | "epsilon" | "zeta" | "eta" | "theta" | "iota" | "kappa" | "lambda" | "mu" | "nu" | "xi" | "omicron" | "pi" | "rho" | "sigma") => k;`,
+      ].join("\n"),
+    });
+    const s = await scan(join(root, "src/main.tsx"), { cache: false, types: true, mergeSingleExport: false });
+    const prop = s.nodes["src/main.tsx#Options"]!.props!.find((p) => p.name === "onChange")!;
+    expect(prop.type).not.toContain("more");
+    const ret = s.nodes["src/main.tsx#pick"]!.signature!.returnType!;
+    expect(ret).toContain('"sigma"');
+    expect(ret).not.toContain("more");
+  }, 60_000);
+});

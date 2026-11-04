@@ -1,4 +1,5 @@
 import type { ChangeKind, Edge, GraphNode, Snapshot } from "@rae/schema";
+import { typeLines } from "./syntax.ts";
 
 /*
  * A diff snapshot (`snapshot.diff`, see @rae/scanner's diffScan) is the head's graph plus what
@@ -79,19 +80,25 @@ export function sideLabel(ref: string, sha: string, worktree?: boolean): string 
  * What changed in a node, in words: props / params added or removed, the return type, the boundary,
  * the Next.js role, the route's rendering, the type's text. Empty when only the body changed.
  */
-export function describeChange(before: GraphNode, after: GraphNode): { what: string; from?: string; to?: string }[] {
-  const out: { what: string; from?: string; to?: string }[] = [];
+export function describeChange(before: GraphNode, after: GraphNode): { what: string; from?: string; to?: string; optional?: boolean }[] {
+  const out: { what: string; from?: string; to?: string; optional?: boolean }[] = [];
   const names = (n: GraphNode) => (n.props ?? n.signature?.params ?? []).map((p) => p.name);
   const was = new Set(names(before));
   const now = new Set(names(after));
   const isProps = !!(after.props ?? before.props);
   for (const p of now) if (!was.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} added`, to: p });
   for (const p of was) if (!now.has(p)) out.push({ what: `${isProps ? "prop" : "parameter"} removed`, from: p });
-  const typeOf = (n: GraphNode, name: string) => (n.props ?? n.signature?.params ?? []).find((p) => p.name === name)?.type;
+  const entry = (n: GraphNode, name: string) => (n.props ?? n.signature?.params ?? []).find((p) => p.name === name);
+  const typeOf = (n: GraphNode, name: string) => entry(n, name)?.type;
+  // compared as shown: whitespace, and the `| undefined` TypeScript adds to optional ones, don't count
+  const shown = (t: string | undefined, optional?: boolean) => (t === undefined ? undefined : typeLines(t, { flat: true, optional }).join(""));
   // types count only when both sides have one: the base is compared without the type pass, so a type
   // appearing on the head alone (inferred, or from the cache) isn't a change
-  const differs = (a?: string, b?: string) => a !== undefined && b !== undefined && a !== b;
-  for (const p of now) if (was.has(p) && differs(typeOf(before, p), typeOf(after, p))) out.push({ what: `${p}: type`, from: typeOf(before, p), to: typeOf(after, p) });
+  const differs = (a?: string, b?: string, optional?: boolean) => a !== undefined && b !== undefined && shown(a, optional) !== shown(b, optional);
+  for (const p of now) {
+    const optional = !!(entry(before, p)?.optional && entry(after, p)?.optional);
+    if (was.has(p) && differs(typeOf(before, p), typeOf(after, p), optional)) out.push({ what: `${p}: type`, from: typeOf(before, p), to: typeOf(after, p), optional });
+  }
   const ret = (n: GraphNode) => n.signature?.returnType;
   if (differs(ret(before), ret(after))) out.push({ what: "return type", from: ret(before), to: ret(after) });
   if (before.isAsync !== after.isAsync) out.push({ what: "async", from: before.isAsync ? "yes" : "no", to: after.isAsync ? "yes" : "no" });
@@ -102,7 +109,5 @@ export function describeChange(before: GraphNode, after: GraphNode): { what: str
   const mode = (n: GraphNode) => n.route?.rendering?.mode;
   if (mode(before) !== mode(after)) out.push({ what: "rendering", from: mode(before), to: mode(after) });
   if (before.typeText !== after.typeText && (before.typeText || after.typeText)) out.push({ what: "type", from: before.typeText, to: after.typeText });
-  const lines = (n: GraphNode) => (n.loc && n.endLine ? n.endLine - n.loc.line + 1 : undefined);
-  if (lines(before) !== lines(after) && lines(before) && lines(after)) out.push({ what: "lines", from: String(lines(before)), to: String(lines(after)) });
   return out;
 }

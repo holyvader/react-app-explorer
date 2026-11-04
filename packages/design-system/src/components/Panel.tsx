@@ -171,15 +171,45 @@ export interface PanelSectionProps {
   defaultOpen?: boolean;
   /** Right-aligned extra in the section header. */
   aside?: ReactNode;
+  /**
+   * Remember open / closed under this localStorage key: every section with the same key follows the
+   * user's last choice (`defaultOpen` until there is one).
+   */
+  storageKey?: string;
   children: ReactNode;
 }
 
+const readOpen = (key: string | undefined, fallback: boolean) => {
+  if (!key) return fallback;
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === "open";
+  } catch {
+    return fallback;
+  }
+};
+
 /** Collapsible section inside a Panel: chevron, title, then an aside or a count on the right. */
-export function PanelSection({ title, count, defaultOpen = true, aside, children }: PanelSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+export function PanelSection({ title, count, defaultOpen = true, aside, storageKey, children }: PanelSectionProps) {
+  const [open, setOpen] = useState(() => readOpen(storageKey, defaultOpen));
+  // another key (the same slot showing another section): its own remembered state ("adjust state during render")
+  const [keyed, setKeyed] = useState(storageKey);
+  if (keyed !== storageKey) {
+    setKeyed(storageKey);
+    setOpen(readOpen(storageKey, defaultOpen));
+  }
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    if (storageKey)
+      try {
+        localStorage.setItem(storageKey, next ? "open" : "closed");
+      } catch {
+        /* storage full or off: this session only */
+      }
+  };
   return (
     // Collapsed content isn't mounted: long sections (relation lists, render trees) cost nothing until opened.
-    <Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)} lazyMount unmountOnExit>
+    <Collapsible.Root open={open} onOpenChange={(e) => toggle(e.open)} lazyMount unmountOnExit>
       <Box borderBottomWidth="1px" borderColor="border.muted">
         <Collapsible.Trigger asChild>
           <Flex as="button" w="full" h="32px" px="3.5" align="center" gap="1.5" cursor="pointer" _hover={{ bg: "bg.subtle" }}>

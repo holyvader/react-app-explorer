@@ -32,6 +32,10 @@ src/tokens.ts         tokenVar(token) → CSS variable of any colour token
 - The shell is docked and flush: a 44px toolbar (`panel.bg`, bottom border), then file tree | canvas | details with hairlines between, no gaps, radii or shadows. `Panel` draws a side panel that way (its resize handle sits on the hairline, highlighted in `selection.solid`). `PanelBar` is a panel's 34px top bar (uppercase label + icon actions), `PanelHeader` the title block, `PanelSection` a 32px collapsible row (chevron, `sectionLabel`, count in mono on the right). `collapse={{ collapsed, strip }}` folds a panel to a `PANEL_STRIP` (40px) strip: the width animates (200ms, `cubic-bezier(0.22, 1, 0.36, 1)`; never while dragging), the content keeps its full width and fades out, the strip fades in; the hidden side is `inert`.
 - Motion: nodes instant, re-layout glide 220ms, panels 200ms, popovers/menus/tooltips 140ms (tooltip delay 600ms), dialogs 180ms.
 
+- `PanelSection` `storageKey`: remembers open / closed in localStorage (`defaultOpen` until the user chooses);
+  the viewer's `Section` (components/Section.tsx) keys it by title (`rae.section:<title>` or `id`), so a
+  section collapsed for one element is collapsed for all.
+
 ## Tokens
 - Neutrals (Chakra's own `bg`, `bg.panel|subtle|muted|emphasized`, `fg`, `fg.muted|subtle|disabled`, `border`, `border.muted|emphasized`, so stock components fit), plus `shell.*`, `panel.bg`, `canvas.{bg,grid,dot}`, `card.{bg,bgSelected,border,frame}`.
 - `selection.{solid,related,ring,rowBg,treeRow}`: **blue (hue 262) is reserved for selection**; no kind or relation may use hues 240–280. `colorPalette="accent"` (the same blue) is for the one primary action (Add, Scan a project, Add to diagram), switches and checkboxes.

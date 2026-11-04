@@ -32,7 +32,8 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
 ## Rules
 1. **Bump `EXTRACT_VERSION` in `cache.ts`** whenever the `FileExtract` shape or semantics change, or users get stale cache data.
 2. oxc offsets are UTF-16 and match what tsgo positions expect. Pass `node.start` directly.
-3. tsgo: collect all positions per file and send **one** `checker.getTypeAtPosition(file, positions[])`. Pipeline follow-ups with `Promise.all`; never `await` in a per-node loop. Clip type strings (`MAX_TYPE`).
+3. tsgo prints types with `FORMAT` (TypeScript's defaults + `NoTruncation`: no `... N more ...`), clipped at `MAX_TYPE` (2000).
+3b. tsgo: collect all positions per file and send **one** `checker.getTypeAtPosition(file, positions[])`. Pipeline follow-ups with `Promise.all`; never `await` in a per-node loop. Clip type strings (`MAX_TYPE`).
 4. Keep the extractor syntactic and worker-safe: plain serializable output, no closures, no class instances.
 5. **Type declarations** (interface / type alias / enum) are declarations of kind `type`. `typeText`
    is the declaration as written (`SourceText.raw`, the UI's preview) and `typeKind` says which kind.

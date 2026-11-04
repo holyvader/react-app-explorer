@@ -1,0 +1,16 @@
+/* Code colours, shared by the details panel, tooltips and the code diff (syntax.* tokens). */
+.rae-code { font-family: var(--chakra-fonts-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rae-code[data-block] { display: block; }
+.rae-tok--keyword { color: var(--chakra-colors-syntax-keyword); }
+.rae-tok--primitive { color: var(--chakra-colors-syntax-keyword); }
+.rae-tok--type, .rae-tok--tag { color: var(--chakra-colors-syntax-type); }
+.rae-tok--name, .rae-tok--attr { color: var(--chakra-colors-syntax-name); }
+.rae-tok--fn { color: var(--chakra-colors-syntax-name); font-weight: 500; }
+.rae-tok--literal, .rae-tok--value { color: var(--chakra-colors-syntax-literal); }
+.rae-tok--punct { color: var(--chakra-colors-syntax-punct); }
+.rae-tok--comment { color: var(--chakra-colors-fg-subtle); font-style: italic; }
+.rae-tok--plain { color: inherit; }
+/* names that resolve to a project type or library: links that add it to the diagram */
+.rae-tok--link { text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.rae-tok--link:hover { text-decoration-style: solid; color: var(--chakra-colors-kind-type-fg); }
+.rae-tok--link:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; border-radius: 2px; }

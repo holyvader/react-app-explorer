@@ -8,7 +8,6 @@ import {
   KindTile,
   Panel,
   PanelHeader,
-  PanelSection,
   Stack,
   TagChip,
   Text,
@@ -21,6 +20,7 @@ import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { DetailsStrip } from "./DetailsStrip.tsx";
 import { useExplorer, SIDEBAR_WIDTH } from "../store.ts";
+import { Section } from "./Section.tsx";
 
 /** Rows listed before "+N more" (the rest stays reachable via "Show the files inside"). */
 const MAX_FILES = 120;
@@ -115,7 +115,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
         </Flex>
       </PanelHeader>
 
-      <PanelSection title="Contains">
+      <Section title="Contains">
         <Wrap gap="1.5">
           {KIND_ORDER.filter((k) => c.countsByKind[k]).map((k) => {
             const Icon = KIND_META[k].icon;
@@ -127,10 +127,10 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
             );
           })}
         </Wrap>
-      </PanelSection>
+      </Section>
 
       {c.subfolders.length > 0 && (
-        <PanelSection
+        <Section
           title="Folders"
           count={c.subfolders.length}
           aside={
@@ -166,10 +166,10 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
               </TagChip>
             ))}
           </Wrap>
-        </PanelSection>
+        </Section>
       )}
 
-      <PanelSection title="Files" count={c.files.length} defaultOpen={c.files.length <= 60}>
+      <Section title="Files" count={c.files.length} defaultOpen={c.files.length <= 60}>
         <Stack gap="0.5">
           {c.files.slice(0, MAX_FILES).map((f) => {
             const Icon = KIND_META.module.icon;
@@ -213,7 +213,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
             </Text>
           )}
         </Stack>
-      </PanelSection>
+      </Section>
     </Panel>
   );
 }
