@@ -1,6 +1,12 @@
+import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import type { GitBranch, GitRepo, GitRequest } from "@rae/schema";
+
+export type RepoInfo = Omit<GitRepo, "dirty">;
+export type BranchRef = GitBranch;
+export type RequestRef = GitRequest;
 
 /*
  * Git, through plain `git` commands only (no GitHub / GitLab CLI): the repo a folder is in, its
@@ -11,25 +17,22 @@ import { dirname, join, relative } from "node:path";
 
 export class GitError extends Error {}
 
-/** Runs git in `cwd`; resolves to stdout, rejects with git's message. Arguments are passed as a list, never through a shell. */
-export async function git(cwd: string, args: string[], env?: Record<string, string>): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env }, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
-  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-  if (code !== 0) throw new GitError(err.trim() || `git ${args[0]} failed (${code})`);
-  return out;
+/** Runs git in `cwd`; resolves to stdout, rejects with git's message. Arguments are passed as a list, never through a shell. Works under Node and Bun. */
+export function git(cwd: string, args: string[], env?: Record<string, string>, timeoutMs = 120_000): Promise<string> {
+  return new Promise((ok, fail) => {
+    execFile(
+      "git",
+      args,
+      { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env }, maxBuffer: 512 * 1024 * 1024, timeout: timeoutMs, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (!err) return ok(stdout);
+        const why = (err as NodeJS.ErrnoException).code === "ENOENT" ? "git isn't installed (or not on PATH)" : err.killed ? `git ${args[0]} timed out` : String(stderr).trim() || `git ${args[0]} failed`;
+        fail(new GitError(why));
+      },
+    );
+  });
 }
 
-export interface RepoInfo {
-  /** The repo's top folder (real path). */
-  root: string;
-  /** The checked-out commit and branch (undefined when detached). */
-  head: string;
-  branch?: string;
-  /** origin's default branch (`origin/HEAD`), else `main` / `master` when they exist. */
-  defaultBranch?: string;
-  /** Where origin points, and which host publishes its pull / merge request refs. */
-  remote?: { name: string; url: string; provider?: "github" | "gitlab" };
-}
 
 /** The git repo `dir` is in, or undefined when it isn't in one. */
 export async function repoOf(dir: string): Promise<RepoInfo | undefined> {
@@ -73,15 +76,6 @@ export async function commitInfo(root: string, sha: string): Promise<{ subject: 
   return { subject, date, author };
 }
 
-export interface BranchRef {
-  name: string;
-  /** Full ref: refs/heads/x or refs/remotes/origin/x. */
-  ref: string;
-  sha: string;
-  remote: boolean;
-  subject: string;
-  date: string;
-}
 
 /** Local and remote-tracking branches, most recent commit first. */
 export async function listBranches(root: string): Promise<BranchRef[]> {
@@ -96,14 +90,6 @@ export async function listBranches(root: string): Promise<BranchRef[]> {
     .filter((b) => !b.ref.endsWith("/HEAD"));
 }
 
-export interface RequestRef {
-  /** `!12` style number. */
-  number: number;
-  provider: "github" | "gitlab";
-  /** The remote ref: refs/pull/12/head or refs/merge-requests/12/head. */
-  ref: string;
-  sha: string;
-}
 
 /**
  * Open pull / merge requests, from the refs the host publishes (`git ls-remote`, a network call).
@@ -111,7 +97,7 @@ export interface RequestRef {
  * host for a while, and titles aren't in git: label them by their head commit once fetched.
  */
 export async function listRequests(root: string, remote = "origin"): Promise<RequestRef[]> {
-  const out = await git(root, ["ls-remote", remote, "refs/pull/*/head", "refs/merge-requests/*/head"]);
+  const out = await git(root, ["ls-remote", remote, "refs/pull/*/head", "refs/merge-requests/*/head"], undefined, 20_000);
   const list: RequestRef[] = [];
   for (const line of out.split("\n")) {
     const [sha, ref] = line.split("\t");

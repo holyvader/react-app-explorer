@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Snapshot } from "@rae/schema";
 import { scanDiff } from "../src/diffScan.ts";
+import { gitOverview, gitRequests, parseDiffRequest } from "../src/gitApi.ts";
+import { runScanJob, type ScanEvent } from "../src/job.ts";
 import { changedFiles, exportCommit, fetchRequest, git, listBranches, listRequests, mergeBase, repoOf, resolveRef } from "../src/git.ts";
 
 // A small React repo with history: main, a feature branch off it, and main moving on after the branch.
@@ -199,5 +201,73 @@ describe("scanDiff: a monorepo app using a workspace package", () => {
     expect(s.nodes["../../packages/ui/src/Button.tsx"]?.kind).toBe("component");
     expect(s.diff!.nodes["../../packages/ui/src/Button.tsx"]).toBe("changed");
     expect(s.diff!.nodes["src/main.tsx"]).toBeUndefined();
+  });
+});
+
+describe("the scan dialog's git API", () => {
+  test("overview: repo, branches, dirty checkout; folders outside a repo", async () => {
+    const o = await gitOverview(join(repo, "src/App.tsx")); // a file: its folder's repo
+    expect(o.repo).toMatchObject({ root: repo, branch: "feature", defaultBranch: "main", dirty: false });
+    expect(o.branches.map((b) => b.name).sort()).toEqual(["feature", "main"]);
+    writeFileSync(join(repo, "src/Header.tsx"), "export const x = 1;\n");
+    expect((await gitOverview(repo)).repo!.dirty).toBe(true);
+    await sh(["checkout", "-q", "--", "src/Header.tsx"]);
+    expect(await gitOverview(tmp)).toEqual({ repo: null, branches: [] });
+  });
+
+  test("requests: none without a remote (an explanation instead)", async () => {
+    expect(await gitRequests(repo)).toEqual({ requests: [], error: "No origin remote" });
+  });
+
+  test("diff requests are checked: refs are never options, request refs only of their form", () => {
+    expect(parseDiffRequest(undefined)).toBeUndefined();
+    expect(parseDiffRequest({ base: "main", head: "feature/x", against: "base" })).toEqual({ base: "main", head: "feature/x", request: undefined, against: "base" });
+    expect(parseDiffRequest({ base: "main", head: "HEAD~2" })!.head).toBe("HEAD~2");
+    expect(parseDiffRequest({ request: "refs/pull/12/head" })!.request).toBe("refs/pull/12/head");
+    for (const bad of [{ base: "--output=/tmp/x" }, { head: "a b" }, { head: "a..b" }, { head: "x\u0000" }, { base: 3 }, { request: "refs/heads/main" }, "main"]) {
+      expect(() => parseDiffRequest(bad)).toThrow();
+    }
+  });
+
+  test("a diff scan as a job: the diff snapshot, then done", async () => {
+    const out = join(tmp, "snaps");
+    const events: ScanEvent[] = [];
+    await runScanJob(repo, { outDir: out, types: false, cache: false, treesDir: trees, diff: { base: "main", head: "feature" } } as Parameters<typeof runScanJob>[1], (e) => events.push(e));
+    const kinds = events.map((e) => e.type);
+    expect(kinds).toContain("result");
+    expect(kinds.at(-1)).toBe("done");
+    const result = events.find((e) => e.type === "result") as Extract<ScanEvent, { type: "result" }>;
+    expect(result.typesPending).toBe(false);
+    const snap = JSON.parse(readFileSync(join(out, result.file), "utf8")) as Snapshot;
+    expect(snap.diff!.head.ref).toBe("feature");
+    const index = JSON.parse(readFileSync(join(out, "index.json"), "utf8"));
+    expect(index[0].diff).toMatchObject({ base: `main ${baseSha.slice(0, 7)}`, head: `feature ${featureSha.slice(0, 7)}` });
+  });
+
+  test("a bad ref fails the job with git's reason", async () => {
+    const events: ScanEvent[] = [];
+    await runScanJob(repo, { outDir: join(tmp, "snaps"), types: false, cache: false, diff: { base: "nope" } }, (e) => events.push(e));
+    expect(events.at(-1)).toMatchObject({ type: "error", message: "Unknown ref: nope" });
+  });
+});
+
+describe("scanDiff: a pull request fetched from origin", () => {
+  test("its head is fetched (FETCH_HEAD), compared with the base, named by its ref", async () => {
+    const host = join(tmp, "host-pr.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, "main", `${featureSha}:refs/pull/9/head`]);
+    await sh(["remote", "add", "origin", host]);
+    try {
+      const s = await scanDiff(repo, { base: "main", request: "refs/pull/9/head", types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+      expect(s.diff!.head).toMatchObject({ ref: "refs/pull/9/head", sha: featureSha });
+      expect(s.diff!.nodes["src/Footer.tsx#Footer"]).toBe("added");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("the checkout is named by its branch", async () => {
+    const s = await scanDiff(repo, { base: "main", types: false, cache: false, treesDir: trees });
+    expect(s.diff!.head.ref).toBe("feature");
   });
 });

@@ -1,4 +1,4 @@
-import type { ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import type { GitOverview, GitRequest, ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
 import { applyDiff } from "./diff.ts";
 
 export interface SnapshotList {
@@ -72,14 +72,32 @@ export async function listDir(path?: string): Promise<FsListing> {
 export interface ScanSettings {
   types: boolean;
   merge: boolean;
+  /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
+  diff?: { base?: string; head?: string; request?: string; against?: "merge-base" | "base" };
 }
 
-export async function runScan(path: string, { types, merge }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
+/** The git repo a folder is in, with its branches. */
+export async function fetchGit(path: string): Promise<GitOverview> {
+  const res = await fetch(`/api/git?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "git info failed");
+  return data;
+}
+
+/** Open pull / merge requests on origin (from the refs GitHub / GitLab publish; a network call). */
+export async function fetchGitRequests(path: string): Promise<{ requests: GitRequest[]; error?: string }> {
+  const res = await fetch(`/api/git/requests?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "listing requests failed");
+  return data;
+}
+
+export async function runScan(path: string, { types, merge, diff }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/api/scan", {
     signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, types, merge }),
+    body: JSON.stringify({ path, types, merge, diff }),
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));

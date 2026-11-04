@@ -14,12 +14,15 @@ export interface SelectProps {
   placeholder?: string;
   size?: "xs" | "sm" | "md";
   width?: string;
+  /** Accessible name (when no visible label is tied to it). */
+  label?: string;
+  disabled?: boolean;
 }
 
-export function Select({ value, onValueChange, options, placeholder, size = "sm", width }: SelectProps) {
+export function Select({ value, onValueChange, options, placeholder, size = "sm", width, label, disabled }: SelectProps) {
   return (
-    <NativeSelect.Root size={size} width={width}>
-      <NativeSelect.Field value={value} placeholder={placeholder} onChange={(e) => onValueChange(e.currentTarget.value)}>
+    <NativeSelect.Root size={size} width={width} disabled={disabled}>
+      <NativeSelect.Field value={value} placeholder={placeholder} aria-label={label} onChange={(e) => onValueChange(e.currentTarget.value)}>
         {groupsOf(options).map(([group, items]) => {
           const rows = items.map((o) => (
             <option key={o.value} value={o.value}>

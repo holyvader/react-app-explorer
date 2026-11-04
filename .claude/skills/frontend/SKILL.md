@@ -152,5 +152,8 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 - Files panel: the Changes view (`ChangesList`, file by file as git lists them, plus elements whose file didn't
   change); the tree marks rows A/M/D and folders holding changes. Details: "In this diff" (`describeChange`
   over `diff.before`). Toolbar: the `base ← head` chip.
+- Scan dialog: `CompareOptions` (shown when the folder is in a git repo): base branch, what to compare
+  (the checkout, a branch, or a PR / MR listed on demand by "PRs / MRs"), from the merge-base or the
+  base's tip; warns when the checkout is dirty. It sends `diff` with the scan (`ScanSettings.diff`).
 - Try it: `bun run scan packages/viewer --base <ref> --head <ref> --out <dir>` and a dev server with
   `RAE_SNAPSHOTS=<dir>`; swap base and head (`--against-tip`) for removals to look at.

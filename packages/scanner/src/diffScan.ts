@@ -2,25 +2,30 @@ import { realpathSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { Snapshot, SnapshotDiff } from "@rae/schema";
 import { diffSnapshots } from "./diff.ts";
-import { changedFiles, commitInfo, exportCommit, GitError, mergeBase, repoOf, resolveRef } from "./git.ts";
-import { scan, type ScanOptions } from "./scan.ts";
+import { changedFiles, commitInfo, exportCommit, fetchRequest, GitError, mergeBase, repoOf, resolveRef } from "./git.ts";
+import { addTypes, scan, type ScanOptions, scanStructure } from "./scan.ts";
 
 export interface DiffScanOptions extends ScanOptions {
   /** The base: a branch (`main`), tag or sha. Default: the repo's default branch. */
   base?: string;
-  /** What's compared: a branch, sha or fetched request (`FETCH_HEAD`). Default: `HEAD`. */
+  /** What's compared: a branch or sha. Default: `HEAD`. */
   head?: string;
+  /** Or a pull / merge request's ref (`refs/pull/12/head`, `refs/merge-requests/3/head`): fetched from origin first. */
+  request?: string;
   /** Compare against the merge-base of base and head (default, what a pull / merge request shows), or the base's tip. */
   against?: SnapshotDiff["against"];
   /** Where exported commits are kept (default: the OS temp folder). */
   treesDir?: string;
+  /** Called with the diff snapshot before the head's type pass (UIs show it right away); the typed one is returned. */
+  onStructure?: (snapshot: Snapshot) => void;
 }
 
 /**
  * Scans a folder at two commits and returns the head's snapshot with `diff`. Each commit is exported
- * to a folder of its own (`exportCommit`), so the checkout isn't touched. The base is scanned without
- * types (only structure is compared); the head as asked. Paths are the project's (`rootDir` is the
- * folder asked for); when the head is the checked-out commit, files open from the checkout.
+ * to a folder of its own (`exportCommit`), so the checkout isn't touched. Both sides are compared
+ * without types (types would differ only because one side has them); the head then gets its type
+ * pass as asked, with the same diff. Paths are the project's (`rootDir` is the folder asked for);
+ * when the head is the checked-out commit, files open from the checkout.
  */
 export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promise<Snapshot> {
   const dir = realpathSync(input);
@@ -28,11 +33,16 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   if (!repo) throw new GitError(`Not in a git repository: ${dir}`);
   const baseRef = opts.base ?? repo.defaultBranch;
   if (!baseRef) throw new GitError("No base branch: pass one (no origin/HEAD, main or master)");
-  const headRef = opts.head ?? "HEAD";
-  const [baseTip, headSha] = await Promise.all([resolveRef(repo.root, baseRef), resolveRef(repo.root, headRef)]);
+  // the checkout is named by its branch (when it's on one)
+  const asked = opts.request ?? opts.head ?? "HEAD";
+  const headRef = asked === "HEAD" && repo.branch ? repo.branch : asked;
+  opts.onProgress?.(opts.request ? `fetching ${opts.request}` : `resolving ${headRef}`);
+  const headSha = opts.request ? await fetchRequest(repo.root, { ref: opts.request }) : await resolveRef(repo.root, asked);
+  const baseTip = await resolveRef(repo.root, baseRef);
   const against = opts.against ?? "merge-base";
   const compared = against === "merge-base" ? await mergeBase(repo.root, baseTip, headSha) : baseTip;
   opts.onProgress?.(`diff ${baseRef} (${compared.slice(0, 8)}) → ${headRef} (${headSha.slice(0, 8)})`);
+  opts.signal?.throwIfAborted();
 
   // the scanned folder inside the repo ("" for the repo itself)
   const sub = relative(repo.root, dir).split(sep).join("/");
@@ -46,9 +56,10 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   ]);
   opts.signal?.throwIfAborted();
 
-  const { base: _b, head: _h, against: _a, treesDir: _t, ...scanOpts } = opts;
-  const baseSnap = await scan(at(baseTree), { ...scanOpts, types: false });
-  const headSnap = await scan(at(headTree), scanOpts);
+  const { base: _b, head: _h, request: _r, against: _a, treesDir: _t, onStructure, ...scanOpts } = opts;
+  // progress counts follow the head's scan (the one the UI waits on)
+  const baseSnap = await scan(at(baseTree), { ...scanOpts, types: false, onCount: undefined });
+  const head = await scanStructure(at(headTree), { ...scanOpts, types: false });
 
   // changed files under the scanned folder, relative to it
   const prefix = sub ? `${sub}/` : "";
@@ -57,7 +68,7 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
     .filter((f) => inside(f.path) || (f.from && inside(f.from)))
     .map((f) => ({ ...f, path: f.path.slice(prefix.length), from: f.from?.slice(prefix.length) }));
 
-  const diff = diffSnapshots(baseSnap, headSnap, files, {
+  const diff = diffSnapshots(baseSnap, head.snapshot, files, {
     base: { ref: baseRef, sha: baseTip, subject: baseInfo.subject },
     head: { ref: headRef, sha: headSha, subject: headInfo.subject },
     against,
@@ -65,10 +76,13 @@ export async function scanDiff(input: string, opts: DiffScanOptions = {}): Promi
   });
 
   // the project's paths: the checkout when it is the head, else the exported copy (what the head has)
-  const fromCheckout = headSha === repo.head;
   const headRoot = at(headTree);
-  if (fromCheckout) {
-    for (const n of Object.values(headSnap.nodes)) if (n.absPath?.startsWith(headRoot)) n.absPath = dir + n.absPath.slice(headRoot.length);
-  }
-  return { ...headSnap, rootDir: dir, diff };
+  const finish = (s: Snapshot): Snapshot => {
+    if (headSha === repo.head) for (const n of Object.values(s.nodes)) if (n.absPath?.startsWith(headRoot)) n.absPath = dir + n.absPath.slice(headRoot.length);
+    return { ...s, rootDir: dir, diff };
+  };
+  const structure = finish(head.snapshot);
+  onStructure?.(structure);
+  if (opts.types === false) return structure;
+  return finish(await addTypes(head, scanOpts));
 }

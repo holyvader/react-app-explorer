@@ -383,3 +383,43 @@ export type ScanEvent =
   /** Stopped on request. A structure snapshot already written stays (untyped). */
   | { type: "cancelled" }
   | { type: "done" };
+
+/** GET /api/git?path=…: the repo a folder is in, and its branches (for diff scans). */
+export interface GitOverview {
+  /** Null when the folder isn't in a repo (or git is missing: see `error`). */
+  repo: GitRepo | null;
+  /** Local and remote-tracking branches, most recent first. */
+  branches: GitBranch[];
+  error?: string;
+}
+
+export interface GitRepo {
+  /** The repo's top folder (real path). */
+  root: string;
+  /** The checked-out commit, and branch (undefined when detached). */
+  head: string;
+  branch?: string;
+  /** origin's default branch (`origin/HEAD`), else `main` / `master` when they exist. */
+  defaultBranch?: string;
+  remote?: { name: string; url: string; provider?: "github" | "gitlab" };
+  /** Uncommitted changes to tracked files (a diff compares commits: they aren't in it). */
+  dirty?: boolean;
+}
+
+export interface GitBranch {
+  name: string;
+  /** refs/heads/x or refs/remotes/origin/x. */
+  ref: string;
+  sha: string;
+  remote: boolean;
+  subject: string;
+  date: string;
+}
+
+/** An open pull / merge request, from the refs GitHub (refs/pull/N/head) and GitLab (refs/merge-requests/N/head) publish. */
+export interface GitRequest {
+  number: number;
+  provider: "github" | "gitlab";
+  ref: string;
+  sha: string;
+}

@@ -18,6 +18,7 @@ const { values, positionals } = parseArgs({
     "no-merge": { type: "boolean", default: false },
     base: { type: "string" },
     head: { type: "string" },
+    request: { type: "string" },
     "against-tip": { type: "boolean", default: false },
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
@@ -40,6 +41,7 @@ Options:
   --no-merge          keep files that declare one exported thing as file + declaration
   --base <ref>        diff mode: compare against this branch / sha (default: the repo's default branch)
   --head <ref>        diff mode: what to compare (default: HEAD); either flag turns diff mode on
+  --request <ref>     diff mode: a pull / merge request (refs/pull/N/head, refs/merge-requests/N/head), fetched from origin
   --against-tip       diff mode: compare with the base's tip instead of the merge-base
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
@@ -68,6 +70,10 @@ if (values.events) {
       mergeSingleExport: !values["no-merge"],
       maxWorkers: values.workers ? Number(values.workers) : undefined,
       signal: controller.signal,
+      diff:
+        values.base || values.head || values.request
+          ? { base: values.base, head: values.head, request: values.request, against: values["against-tip"] ? "base" : "merge-base" }
+          : undefined,
     },
     (e) => process.stdout.write(JSON.stringify(e) + "\n"),
   );
@@ -75,8 +81,8 @@ if (values.events) {
 }
 
 const warnings: string[] = [];
-const diffMode = !!(values.base || values.head);
-const snapshot = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(input, o))({
+const diffMode = !!(values.base || values.head || values.request);
+const snapshot = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, request: values.request, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(input, o))({
   tsconfig: values.tsconfig,
   include: values.include,
   exclude: values.exclude,

@@ -11,6 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { gitOverview, gitRequests, parseDiffRequest } from "@rae/scanner/git";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -235,6 +236,13 @@ async function api(req: Request, url: URL): Promise<Response> {
     return new Response(Bun.file(full), { headers: { "Content-Type": "application/json" } });
   }
 
+  // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)
+  if (path === "/api/git" || path === "/api/git/requests") {
+    const q = url.searchParams.get("path");
+    if (!q) return json({ error: "path is required" }, 400);
+    return json(path === "/api/git" ? await gitOverview(resolve(q)) : await gitRequests(resolve(q)));
+  }
+
   if (path === "/api/fs") {
     const q = url.searchParams.get("path");
     const dir = q ? resolve(q) : homedir();
@@ -250,11 +258,13 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
     if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
-    let body: { path?: string; types?: boolean; merge?: boolean };
+    let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown };
+    let diff: ReturnType<typeof parseDiffRequest>;
     try {
       body = await req.json();
-    } catch {
-      return json({ error: "Invalid JSON body" }, 400);
+      diff = parseDiffRequest(body.diff);
+    } catch (e) {
+      return json({ error: e instanceof SyntaxError ? "Invalid JSON body" : (e as Error).message }, 400);
     }
     const target = body.path ? resolve(body.path) : "";
     if (!target || !existsSync(target)) return json({ error: `Path not found: ${target || "(empty)"}` }, 400);
@@ -283,6 +293,7 @@ async function api(req: Request, url: URL): Promise<Response> {
             outDir: snapshotsDir,
             types: body.types !== false,
             mergeSingleExport: body.merge !== false,
+            diff,
             signal: job.abort.signal,
             onWarn: (m) => log(`warn: ${m}`),
             onProgress: (m) => log(`scan: ${m}`),

@@ -120,6 +120,15 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
 - Changes: ids match (after git's renames map `old#X` → `new#X`); `changed` = different `hash`
   (declaration source; for files and merged nodes the whole file) or kind / boundary / role / route
   rendering. Edges compare by kind + ends + importType. Removed nodes are kept in `diff.removed`.
+- UIs: `runScanJob(dir, { diff: { base, head | request, against } })` streams it like a scan (the untyped
+  diff snapshot, then the typed one with the **same diff** — computed from both sides untyped, so types
+  never show as changes). `--request refs/pull/N/head` fetches a PR / MR first. The checkout (`HEAD`)
+  is named by its branch.
+- `gitApi.ts` (Node- and Bun-safe: `git()` is `execFile`): `gitOverview` (repo, dirty, branches) and
+  `gitRequests` (ls-remote, 20s timeout) behind `GET /api/git` and `/api/git/requests` in both the
+  desktop server and the Vite dev plugin; `parseDiffRequest` checks a scan body's `diff` (refs never
+  start with `-`: the dev plugin passes them to the CLI as `--base=<ref>`). Types: `GitOverview`,
+  `GitRepo`, `GitBranch`, `GitRequest` in @rae/schema.
 - Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
   refs, a monorepo with a workspace link).
 
