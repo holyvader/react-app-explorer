@@ -103,6 +103,56 @@ The viewer treats `file: true` nodes as files (`isFileNode` / `fileIdOf` in grap
 frames, route frames, the tree (a decl row where the file was) and the card's role / boundary badges.
 Tests that check file → declaration structure pass `mergeSingleExport: false`.
 
+## Diff mode (`git.ts`, `diff.ts`, `diffScan.ts`)
+`rae-scan <dir> --base main [--head feature] [--against-tip]` / `scanDiff(dir, { base, head })`:
+the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
+- **Plain git only** (no gh / glab): `for-each-ref` (branches), `ls-remote origin refs/pull/*/head
+  refs/merge-requests/*/head` (GitHub PRs / GitLab MRs, no titles), `fetch origin <that ref>` (into
+  FETCH_HEAD only), `merge-base`, `diff -z -M --name-status/--numstat`. Arguments as a list, refs
+  checked with `rev-parse --verify --end-of-options`. **Never change the user's repo**: no checkout,
+  worktree, branch or ref.
+- Each commit is exported with a temporary index (`read-tree` + `checkout-index --prefix`) into
+  `$TMPDIR/rae-trees/<sha>` (reused). Its node_modules are the checkout's, linked package by package;
+  workspace links (into the repo, outside node_modules) become **relative** links into the exported
+  tree, so a monorepo's own packages are read at that commit and get the same ids as a normal scan.
+- Compared against the merge-base by default (what the PR / MR shows). The base is scanned without
+  types. When the head is the checked-out commit, `absPath`s point at the checkout.
+- Changes: ids match (after git's renames map `old#X` → `new#X`); `changed` = different `hash`
+  (declaration source; for files and merged nodes the whole file) or kind / boundary / role / route
+  rendering. Edges compare by kind + ends + importType. Removed nodes are kept in `diff.removed`.
+- UIs: `runScanJob(dir, { diff: { base, head | request, against } })` streams it like a scan (the untyped
+  diff snapshot, then the typed one with the **same diff** — computed from both sides untyped, so types
+  never show as changes). `--request refs/pull/N/head` fetches a PR / MR first. The checkout (`HEAD`)
+  is named by its branch.
+- `gitApi.ts` (Node- and Bun-safe: `git()` is `execFile`): `gitOverview` (repo, dirty, branches) and
+  `gitRequests` (ls-remote, 20s timeout) behind `GET /api/git` and `/api/git/requests` in both the
+  desktop server and the Vite dev plugin; `parseDiffRequest` checks a scan body's `diff` (refs never
+  start with `-`: the dev plugin passes them to the CLI as `--base=<ref>`). Types: `GitOverview`,
+  `GitRepo`, `GitBranch`, `GitRequest` in @rae/schema.
+- Finding git (`gitPath`): `RAE_GIT`, Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`), PATH, then
+  `/usr/bin/git` — on macOS only when the Command Line Tools / Xcode are installed (else that shim
+  pops up their installer). Missing → `GIT_MISSING` (what to install), shown in the scan dialog; the
+  desktop server logs `git: <path>`. Finder-started apps get PATH=/usr/bin:/bin:…, hence the list.
+- `worktree: true` (`--worktree`): the head is the checkout with uncommitted changes, scanned in place;
+  `changedFiles(root, base)` diffs against the working tree and adds untracked (not ignored) files.
+- Exported commits are pruned on each new export (`pruneTrees`): unused for 7 days, past the 12 most
+  recently used, or half-done for over an hour; reuse touches a tree's mtime.
+- GitLab: verified on gitlab.com (ls-remote ~0.7s for 1.6k MRs; fetching one ~4s). Request refs list
+  open **and** closed requests (git can't tell); the dialog says so.
+- **Host CLIs** (`hostCli.ts`, optional): `gh` / `glab` list **open** PRs / MRs with title, author,
+  draft, target branch, link (`gh pr list -R host/owner/repo --json …`, `glab mr list -R https://host/path
+  --output json`); commits are still fetched with git. Found like git (`RAE_GH` / `RAE_GLAB`, Homebrew,
+  PATH); `toolStatus` = installed + `auth status --hostname <host>` (cached 60s; `refreshTools()`).
+  `gitRequests(path, source)`: `auto` (default) = the host's CLI (github → gh, gitlab → glab, other hosts:
+  whichever is logged in) when installed and logged in, else git with `fallback` saying why; `git`;
+  or an explicit CLI (errors reported, no fallback). `GET /api/git/tools`, `/api/git/requests?source=`.
+  The host comes from `remote.origin.url` as configured (not `insteadOf`-rewritten). The request's
+  title / author / link travel as `diff.requestInfo` (cleaned by `parseDiffRequest`; links must pass
+  `isRequestUrl`: https PR / MR pages) → `diff.head.request`. The desktop `/api/open` also opens
+  `isRequestUrl` links. Verified with real gh on pmndrs/zustand (3 PRs listed in ~0.9s, a PR diffed in ~1.8s).
+- Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
+  refs, a monorepo with a workspace link).
+
 ## Adding things
 - **New condition kind**: add to `ConditionKind` (schema) → push in `JsxAnalyzer` → `formatCondition` / `CONDITION_LABEL` in `packages/viewer/src/lib/conditions.ts` → test.
 - Relations: `imports`, `declares`, `renders`, `usesHook`, `invokes` (calls, `new`, handler references, module-level calls), `invokesAction` (invokes a server action). Schema v1 called the last two `calls`/`callsAction`; the viewer upgrades old snapshots in `normalizeSnapshot`.

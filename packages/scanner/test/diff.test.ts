@@ -1,0 +1,460 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import type { Snapshot } from "@rae/schema";
+import { scanDiff } from "../src/diffScan.ts";
+import { gitOverview, gitRequests, parseDiffRequest } from "../src/gitApi.ts";
+import { runScanJob, type ScanEvent } from "../src/job.ts";
+import { changedFiles, exportCommit, fetchRequest, git, gitPath, listBranches, listRequests, mergeBase, pruneTrees, repoOf, resetGitPath, resolveRef } from "../src/git.ts";
+
+// A small React repo with history: main, a feature branch off it, and main moving on after the branch.
+const ENV = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+let tmp: string;
+let repo: string;
+let trees: string;
+const sh = (args: string[], cwd = repo) => git(cwd, args, ENV);
+const write = (files: Record<string, string>) => {
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
+    writeFileSync(join(repo, path), text);
+  }
+};
+const commit = async (msg: string) => {
+  await sh(["add", "-A"]);
+  await sh(["commit", "-q", "-m", msg]);
+  return (await sh(["rev-parse", "HEAD"])).trim();
+};
+
+let baseSha: string;
+let featureSha: string;
+beforeAll(async () => {
+  tmp = realpathSync(mkdtempSync(join(tmpdir(), "rae-diff-")));
+  repo = join(tmp, "repo");
+  trees = join(tmp, "trees");
+  mkdirSync(repo);
+  await sh(["init", "-q", "-b", "main"]);
+  write({
+    "package.json": `{ "name": "demo" }`,
+    "src/main.tsx": `import { App } from "./App";\nexport function main() { return <App />; }\n`,
+    "src/App.tsx": `import { Header } from "./Header";\nimport { Old } from "./Old";\nexport function App() {\n  return <div><Header /><Old /></div>;\n}\n`,
+    "src/Header.tsx": `export function Header() {\n  return <h1>Hi</h1>;\n}\n`,
+    "src/Old.tsx": `export function Old() {\n  return <p>old</p>;\n}\n`,
+    "src/util/format.ts": `export function format(s: string) {\n  return s.trim();\n}\nexport function same(n: number) {\n  return n;\n}\n`,
+  });
+  baseSha = await commit("base");
+  await sh(["checkout", "-q", "-b", "feature"]);
+  rmSync(join(repo, "src/Old.tsx"));
+  renameSync(join(repo, "src/util/format.ts"), join(repo, "src/util/text.ts"));
+  write({
+    "src/App.tsx": `import { Header } from "./Header";\nimport { Footer } from "./Footer";\nexport function App() {\n  return <div><Header /><Footer /></div>;\n}\n`,
+    "src/Header.tsx": `export function Header({ title }: { title: string }) {\n  return <h1>{title}</h1>;\n}\n`,
+    "src/Footer.tsx": `import { format } from "./util/text";\nexport function Footer() {\n  return <footer>{format(" bye ")}</footer>;\n}\n`,
+    "src/util/text.ts": `export function format(s: string) {\n  return s.trim();\n}\nexport function same(n: number) {\n  return n;\n}\n`,
+  });
+  featureSha = await commit("feature: footer, header title");
+  // main moves on: a change the feature's diff must not show (compared against the merge-base)
+  await sh(["checkout", "-q", "main"]);
+  write({ "src/Late.tsx": `export function Late() {\n  return null;\n}\n` });
+  await commit("later on main");
+  await sh(["checkout", "-q", "feature"]);
+});
+afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+
+describe("git, plain commands", () => {
+  test("repo, refs, merge-base, branches", async () => {
+    const info = (await repoOf(join(repo, "src")))!;
+    expect(info.root).toBe(repo);
+    expect(info.branch).toBe("feature");
+    expect(info.defaultBranch).toBe("main");
+    expect(info.head).toBe(featureSha);
+    expect(await resolveRef(repo, "feature")).toBe(featureSha);
+    expect(resolveRef(repo, "--output=x")).rejects.toThrow();
+    expect(resolveRef(repo, "nope")).rejects.toThrow("Unknown ref");
+    expect(await mergeBase(repo, "main", "feature")).toBe(baseSha);
+    expect((await listBranches(repo)).map((b) => b.name).sort()).toEqual(["feature", "main"]);
+    expect(await repoOf(tmp)).toBeUndefined();
+  });
+
+  test("changed files: renames, line counts", async () => {
+    const files = await changedFiles(repo, baseSha, featureSha);
+    const by = Object.fromEntries(files.map((f) => [f.path, f]));
+    expect(by["src/util/text.ts"]).toMatchObject({ status: "renamed", from: "src/util/format.ts" });
+    expect(by["src/Old.tsx"]!.status).toBe("deleted");
+    expect(by["src/Footer.tsx"]).toMatchObject({ status: "added", additions: 4, deletions: 0 });
+    expect(by["src/Header.tsx"]).toMatchObject({ status: "modified", additions: 2, deletions: 2 });
+  });
+
+  test("exporting a commit leaves the repo as it was", async () => {
+    const before = await sh(["status", "--porcelain"]);
+    const dir = await exportCommit(repo, baseSha, trees);
+    expect(readdirSync(join(dir, "src")).sort()).toEqual(["App.tsx", "Header.tsx", "Old.tsx", "main.tsx", "util"]);
+    expect(await exportCommit(repo, baseSha, trees)).toBe(dir); // reused
+    expect(await sh(["status", "--porcelain"])).toBe(before);
+    expect((await sh(["worktree", "list"])).trim().split("\n")).toHaveLength(1);
+  });
+
+  test("pull / merge request refs from a remote (ls-remote, fetch into FETCH_HEAD)", async () => {
+    // a bare "host" that publishes request refs as GitHub and GitLab do
+    const host = join(tmp, "host.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, "main", `${featureSha}:refs/pull/7/head`, `${featureSha}:refs/merge-requests/3/head`]);
+    await sh(["remote", "add", "origin", host]);
+    const requests = await listRequests(repo);
+    expect(requests.map((r) => `${r.provider} ${r.number}`)).toEqual(["github 7", "gitlab 3"]);
+    expect(await fetchRequest(repo, requests[0]!)).toBe(featureSha);
+    expect(fetchRequest(repo, { ref: "refs/heads/main" })).rejects.toThrow();
+    // no branch or ref was created
+    expect((await sh(["for-each-ref", "--format=%(refname)", "refs/heads", "refs/pull"])).trim().split("\n")).toEqual(["refs/heads/feature", "refs/heads/main"]);
+    await sh(["remote", "remove", "origin"]);
+  });
+});
+
+describe("scanDiff: a branch against main", () => {
+  let s: Snapshot;
+  beforeAll(async () => {
+    s = await scanDiff(repo, { base: "main", head: "feature", types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+  });
+
+  test("sides: merge-base by default, the project's root", () => {
+    const d = s.diff!;
+    expect(d.compared).toBe(baseSha);
+    expect(d.against).toBe("merge-base");
+    expect(d.head).toMatchObject({ ref: "feature", sha: featureSha, subject: "feature: footer, header title" });
+    expect(d.base.subject).toBe("later on main");
+    expect(s.rootDir).toBe(repo);
+    // the head is checked out: files open from the checkout
+    expect(s.nodes["src/Header.tsx#Header"]!.absPath).toBe(join(repo, "src/Header.tsx"));
+  });
+
+  test("added, removed, changed; unchanged and later-on-main left out", () => {
+    const d = s.diff!;
+    expect(d.nodes["src/Footer.tsx#Footer"]).toBe("added");
+    expect(d.nodes["src/Footer.tsx"]).toBe("added");
+    expect(d.nodes["src/Old.tsx#Old"]).toBe("removed");
+    expect(d.removed["src/Old.tsx#Old"]!.name).toBe("Old");
+    expect(d.nodes["src/Header.tsx#Header"]).toBe("changed");
+    expect(d.nodes["src/App.tsx#App"]).toBe("changed");
+    expect(d.nodes["src/main.tsx#main"]).toBeUndefined();
+    expect(Object.keys(d.nodes).some((id) => id.includes("Late"))).toBe(false);
+  });
+
+  test("renamed files: their declarations match, unchanged", () => {
+    const d = s.diff!;
+    expect(d.renamed["src/util/format.ts#format"]).toBe("src/util/text.ts#format");
+    expect(d.nodes["src/util/text.ts#format"]).toBeUndefined();
+    expect(d.nodes["src/util/text.ts#same"]).toBeUndefined();
+    expect(d.files.find((f) => f.path === "src/util/text.ts")).toMatchObject({ status: "renamed", from: "src/util/format.ts" });
+  });
+
+  test("edges: added and removed relations", () => {
+    const d = s.diff!;
+    const has = (list: typeof d.edges.added, kind: string, from: string, to: string) => list.some((e) => e.kind === kind && e.from === from && e.to === to);
+    expect(has(d.edges.added, "renders", "src/App.tsx#App", "src/Footer.tsx#Footer")).toBe(true);
+    expect(has(d.edges.added, "invokes", "src/Footer.tsx#Footer", "src/util/text.ts#format")).toBe(true);
+    expect(has(d.edges.removed, "renders", "src/App.tsx#App", "src/Old.tsx#Old")).toBe(true);
+    // the renamed file's edges aren't reported as removed + added
+    expect(has(d.edges.removed, "declares", "src/util/text.ts", "src/util/text.ts#same")).toBe(false);
+  });
+
+  test("against the base's tip: main's later commit shows as removed", async () => {
+    const tip = await scanDiff(repo, { base: "main", head: "feature", against: "base", types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+    expect(tip.diff!.nodes["src/Late.tsx#Late"]).toBe("removed");
+  });
+
+  test("a sub-folder of the repo, merged files", async () => {
+    const sub = await scanDiff(join(repo, "src"), { base: "main", head: "feature", types: false, cache: false, treesDir: trees });
+    expect(sub.rootDir).toBe(join(repo, "src"));
+    expect(sub.diff!.files.map((f) => f.path).sort()).toEqual(["App.tsx", "Footer.tsx", "Header.tsx", "Old.tsx", "util/text.ts"]);
+    // merged: Footer.tsx is just Footer, under the file's id
+    expect(sub.diff!.nodes["Footer.tsx"]).toBe("added");
+    expect(sub.diff!.nodes["Header.tsx"]).toBe("changed");
+  });
+});
+
+describe("scanDiff: a monorepo app using a workspace package", () => {
+  test("the package is read as it is at each commit (not from the checkout)", async () => {
+    const mono = join(tmp, "mono");
+    mkdirSync(mono);
+    const m = (args: string[]) => git(mono, args, ENV);
+    const put = (path: string, text: string) => {
+      mkdirSync(dirname(join(mono, path)), { recursive: true });
+      writeFileSync(join(mono, path), text);
+    };
+    await m(["init", "-q", "-b", "main"]);
+    put(".gitignore", "node_modules\n");
+    put("packages/ui/package.json", `{ "name": "@demo/ui", "exports": { "./*": "./src/*.tsx" } }`);
+    put("packages/ui/src/Button.tsx", `export function Button() {\n  return <button />;\n}\n`);
+    put("apps/web/package.json", `{ "name": "web" }`);
+    put("apps/web/src/main.tsx", `import { Button } from "@demo/ui/Button";\nexport function Main() {\n  return <Button />;\n}\n`);
+    // installed workspace link, as bun / pnpm / npm create it (relative, not committed)
+    mkdirSync(join(mono, "apps/web/node_modules/@demo"), { recursive: true });
+    symlinkSync("../../../../packages/ui", join(mono, "apps/web/node_modules/@demo/ui"));
+    await m(["add", "-A"]);
+    await m(["commit", "-q", "-m", "base"]);
+    await m(["checkout", "-q", "-b", "feature"]);
+    put("packages/ui/src/Button.tsx", `export function Button({ big }: { big?: boolean }) {\n  return <button data-big={big} />;\n}\n`);
+    await m(["commit", "-qam", "bigger button"]);
+
+    const s = await scanDiff(join(mono, "apps/web"), { base: "main", types: false, cache: false, treesDir: trees });
+    expect(Object.keys(s.nodes).some((id) => id.includes(tmp.slice(1)))).toBe(false); // no ids into the temp folders
+    expect(s.nodes["../../packages/ui/src/Button.tsx"]?.kind).toBe("component");
+    expect(s.diff!.nodes["../../packages/ui/src/Button.tsx"]).toBe("changed");
+    expect(s.diff!.nodes["src/main.tsx"]).toBeUndefined();
+  });
+});
+
+describe("the scan dialog's git API", () => {
+  test("overview: repo, branches, dirty checkout; folders outside a repo", async () => {
+    const o = await gitOverview(join(repo, "src/App.tsx")); // a file: its folder's repo
+    expect(o.repo).toMatchObject({ root: repo, branch: "feature", defaultBranch: "main", dirty: false });
+    expect(o.branches.map((b) => b.name).sort()).toEqual(["feature", "main"]);
+    writeFileSync(join(repo, "src/Header.tsx"), "export const x = 1;\n");
+    expect((await gitOverview(repo)).repo!.dirty).toBe(true);
+    await sh(["checkout", "-q", "--", "src/Header.tsx"]);
+    expect(await gitOverview(tmp)).toEqual({ repo: null, branches: [] });
+  });
+
+  test("requests: none without a remote (an explanation instead)", async () => {
+    expect(await gitRequests(repo)).toMatchObject({ requests: [], source: "git", error: "No origin remote" });
+  });
+
+  test("diff requests are checked: refs are never options, request refs only of their form", () => {
+    expect(parseDiffRequest(undefined)).toBeUndefined();
+    expect(parseDiffRequest({ base: "main", head: "feature/x", against: "base" })).toEqual({ base: "main", head: "feature/x", request: undefined, against: "base" });
+    expect(parseDiffRequest({ base: "main", head: "HEAD~2" })!.head).toBe("HEAD~2");
+    expect(parseDiffRequest({ request: "refs/pull/12/head" })!.request).toBe("refs/pull/12/head");
+    for (const bad of [{ base: "--output=/tmp/x" }, { head: "a b" }, { head: "a..b" }, { head: "x\u0000" }, { base: 3 }, { request: "refs/heads/main" }, "main"]) {
+      expect(() => parseDiffRequest(bad)).toThrow();
+    }
+  });
+
+  test("a diff scan as a job: the diff snapshot, then done", async () => {
+    const out = join(tmp, "snaps");
+    const events: ScanEvent[] = [];
+    await runScanJob(repo, { outDir: out, types: false, cache: false, treesDir: trees, diff: { base: "main", head: "feature" } } as Parameters<typeof runScanJob>[1], (e) => events.push(e));
+    const kinds = events.map((e) => e.type);
+    expect(kinds).toContain("result");
+    expect(kinds.at(-1)).toBe("done");
+    const result = events.find((e) => e.type === "result") as Extract<ScanEvent, { type: "result" }>;
+    expect(result.typesPending).toBe(false);
+    const snap = JSON.parse(readFileSync(join(out, result.file), "utf8")) as Snapshot;
+    expect(snap.diff!.head.ref).toBe("feature");
+    const index = JSON.parse(readFileSync(join(out, "index.json"), "utf8"));
+    expect(index[0].diff).toMatchObject({ base: `main ${baseSha.slice(0, 7)}`, head: `feature ${featureSha.slice(0, 7)}` });
+  });
+
+  test("a bad ref fails the job with git's reason", async () => {
+    const events: ScanEvent[] = [];
+    await runScanJob(repo, { outDir: join(tmp, "snaps"), types: false, cache: false, diff: { base: "nope" } }, (e) => events.push(e));
+    expect(events.at(-1)).toMatchObject({ type: "error", message: "Unknown ref: nope" });
+  });
+});
+
+describe("scanDiff: a pull request fetched from origin", () => {
+  test("its head is fetched (FETCH_HEAD), compared with the base, named by its ref", async () => {
+    const host = join(tmp, "host-pr.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, "main", `${featureSha}:refs/pull/9/head`]);
+    await sh(["remote", "add", "origin", host]);
+    try {
+      const s = await scanDiff(repo, { base: "main", request: "refs/pull/9/head", types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+      expect(s.diff!.head).toMatchObject({ ref: "refs/pull/9/head", sha: featureSha });
+      expect(s.diff!.nodes["src/Footer.tsx#Footer"]).toBe("added");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("the checkout is named by its branch", async () => {
+    const s = await scanDiff(repo, { base: "main", types: false, cache: false, treesDir: trees });
+    expect(s.diff!.head.ref).toBe("feature");
+  });
+});
+
+describe("phase 4: finding git, the working tree, pruning exports", () => {
+  test("RAE_GIT picks the git to run", async () => {
+    const real = gitPath()!;
+    expect(existsSync(real)).toBe(true);
+    const was = process.env.RAE_GIT;
+    process.env.RAE_GIT = real;
+    resetGitPath();
+    expect(gitPath()).toBe(real);
+    process.env.RAE_GIT = join(tmp, "no-git-here");
+    resetGitPath();
+    expect(gitPath()).not.toBe(join(tmp, "no-git-here")); // missing: the next place is used
+    if (was === undefined) delete process.env.RAE_GIT;
+    else process.env.RAE_GIT = was;
+    resetGitPath();
+  });
+
+  test("the checkout with uncommitted changes: edits and untracked files count", async () => {
+    writeFileSync(join(repo, "src/Header.tsx"), "export function Header() {\n  return <h2>edited</h2>;\n}\n");
+    writeFileSync(join(repo, "src/Draft.tsx"), "export function Draft() {\n  return null;\n}\n");
+    try {
+      const files = await changedFiles(repo, baseSha);
+      const by = Object.fromEntries(files.map((f) => [f.path, f]));
+      expect(by["src/Draft.tsx"]).toMatchObject({ status: "added", additions: 3 });
+      expect(by["src/Header.tsx"]!.status).toBe("modified");
+      const s = await scanDiff(repo, { base: "main", worktree: true, types: false, cache: false, treesDir: trees, mergeSingleExport: false });
+      expect(s.diff!.head).toMatchObject({ ref: "feature", sha: featureSha, worktree: true });
+      expect(s.diff!.nodes["src/Draft.tsx#Draft"]).toBe("added");
+      expect(s.diff!.nodes["src/Header.tsx#Header"]).toBe("changed");
+      // scanned in place: files open from the checkout
+      expect(s.nodes["src/Draft.tsx#Draft"]!.absPath).toBe(join(repo, "src/Draft.tsx"));
+    } finally {
+      rmSync(join(repo, "src/Draft.tsx"));
+      await sh(["checkout", "-q", "--", "src/Header.tsx"]);
+    }
+  });
+
+  test("pruning: unused for a week, past the most recent N, half-done exports; nothing else", () => {
+    const dir = join(tmp, "prune");
+    mkdirSync(dir);
+    const now = Date.now();
+    const make = (name: string, ageMs: number) => {
+      mkdirSync(join(dir, name));
+      const t = new Date(now - ageMs);
+      utimesSync(join(dir, name), t, t);
+    };
+    const sha = (i: number) => i.toString(16).padStart(40, "a");
+    for (let i = 0; i < 5; i++) make(sha(i), i * 60_000); // 0 newest … 4 oldest
+    make(sha(9), 8 * 24 * 3600_000); // a week+ unused
+    make("aaaaaaaaaaaa-old", 2 * 3600_000); // half-done, 2h old
+    make("aaaaaaaaaaaa-new", 60_000); // half-done, in progress
+    make("not-a-tree", 9 * 24 * 3600_000); // someone else's
+    const removed = pruneTrees(dir, 3, 7 * 24 * 3600_000, now).map((p) => p.slice(dir.length + 1)).sort();
+    expect(removed).toEqual([sha(3), sha(4), sha(9), "aaaaaaaaaaaa-old"].sort());
+    expect(readdirSync(dir).sort()).toEqual([sha(0), sha(1), sha(2), "aaaaaaaaaaaa-new", "not-a-tree"].sort());
+  });
+});
+
+describe("phase 5: pull / merge requests from the GitHub / GitLab CLIs", () => {
+  // fake CLIs: they log their arguments and answer like gh / glab do
+  const fake = (name: string, script: string) => {
+    const path = join(tmp, `fake-${name}`);
+    writeFileSync(path, `#!/bin/sh\necho "$@" >> ${join(tmp, `${name}.log`)}\n${script}\n`, { mode: 0o755 });
+    return path;
+  };
+  const ghJson = () => JSON.stringify([
+    { number: 12, title: "Footer, and a title on Header", author: { login: "alice" }, headRefOid: featureSha, headRefName: "feature", baseRefName: "main", isDraft: false, url: "https://github.com/acme/demo/pull/12", updatedAt: "2026-11-01T10:00:00Z" },
+    { number: 11, title: "Draft thing", author: { login: "bob" }, headRefOid: baseSha, headRefName: "draft", baseRefName: "develop", isDraft: true, url: "https://github.com/acme/demo/pull/11", updatedAt: "2026-10-30T10:00:00Z" },
+  ]);
+  const env = { gh: process.env.RAE_GH, glab: process.env.RAE_GLAB };
+  const use = async (gh?: string, glab?: string) => {
+    process.env.RAE_GH = gh ?? join(tmp, "no-gh");
+    process.env.RAE_GLAB = glab ?? join(tmp, "no-glab");
+    const { refreshTools } = await import("../src/gitApi.ts");
+    refreshTools();
+  };
+  afterAll(async () => {
+    for (const [k, v] of [["RAE_GH", env.gh], ["RAE_GLAB", env.glab]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    (await import("../src/gitApi.ts")).refreshTools();
+  });
+
+  test("remote URLs → host and project path", async () => {
+    const { remoteRepo } = await import("../src/hostCli.ts");
+    expect(remoteRepo("https://github.com/acme/demo.git")).toEqual({ host: "github.com", path: "acme/demo" });
+    expect(remoteRepo("git@gitlab.com:group/sub/proj.git")).toEqual({ host: "gitlab.com", path: "group/sub/proj" });
+    expect(remoteRepo("ssh://git@git.example.com:2222/team/app")).toEqual({ host: "git.example.com", path: "team/app" });
+    expect(remoteRepo("not a url")).toBeUndefined();
+  });
+
+  test("Auto: gh when it's logged in; titles, authors, target branches; the repo named explicitly", async () => {
+    const { gitRequests, gitTools } = await import("../src/gitApi.ts");
+    await use(fake("gh", `case "$1" in --version) echo "gh version 2.101.0";; auth) exit 0;; pr) echo '${ghJson()}';; esac`));
+    await sh(["remote", "add", "origin", "https://github.com/acme/demo.git"]);
+    try {
+      const tools = await gitTools(repo);
+      expect(tools).toMatchObject({ host: "github.com", auto: "gh", gh: { installed: true, authed: true, version: "2.101.0" }, glab: { installed: false } });
+      const list = await gitRequests(repo); // auto
+      expect(list.source).toBe("gh");
+      expect(list.requests[0]).toMatchObject({ number: 12, ref: "refs/pull/12/head", sha: featureSha, title: "Footer, and a title on Header", author: "alice", baseBranch: "main", draft: false, state: "open", source: "gh" });
+      expect(list.requests[1]!.draft).toBe(true);
+      const log = readFileSync(join(tmp, "gh.log"), "utf8");
+      expect(log).toContain("auth status --hostname github.com");
+      expect(log).toContain("pr list -R github.com/acme/demo --state open");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("Auto falls back to git when the CLI isn't logged in (and says why); an explicit CLI reports the error", async () => {
+    const { gitRequests, gitTools } = await import("../src/gitApi.ts");
+    await use(undefined, fake("glab", `case "$1" in --version) echo "glab 1.50.0";; auth) echo "not logged in" >&2; exit 1;; esac`));
+    const host = join(tmp, "host-gl.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, `${featureSha}:refs/merge-requests/5/head`]);
+    // a GitLab-looking remote that is the local bare repo underneath (git's insteadOf), so ls-remote works offline
+    await sh(["remote", "add", "origin", "https://gitlab.example.com/team/app.git"]);
+    await sh(["config", `url.${host}.insteadOf`, "https://gitlab.example.com/team/app.git"]);
+    try {
+      expect((await gitTools(repo)).auto).toBe("git");
+      const list = await gitRequests(repo, "auto");
+      expect(list.source).toBe("git");
+      expect(list.fallback).toContain("isn't logged in to gitlab.example.com");
+      expect(list.requests.map((r) => r.ref)).toEqual(["refs/merge-requests/5/head"]);
+      const explicit = await gitRequests(repo, "glab");
+      expect(explicit).toMatchObject({ source: "glab", requests: [] });
+      expect(explicit.error).toBeDefined();
+      expect((await gitRequests(repo, "nope" as never)).error).toContain("Unknown source");
+    } finally {
+      await sh(["config", "--unset", `url.${host}.insteadOf`]);
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("glab: merge requests of a self-hosted GitLab, named by the project's URL", async () => {
+    const { gitRequests } = await import("../src/gitApi.ts");
+    const MRS = JSON.stringify([{ iid: 7, title: "Ship it", author: { username: "carol" }, sha: featureSha, source_branch: "feature", target_branch: "main", draft: false, web_url: "https://gitlab.example.com/team/app/-/merge_requests/7", updated_at: "2026-11-02T08:00:00Z" }]);
+    await use(undefined, fake("glab", `case "$1" in --version) echo "glab 1.50.0";; auth) exit 0;; mr) echo '${MRS}';; esac`));
+    await sh(["remote", "add", "origin", "git@gitlab.example.com:team/app.git"]);
+    try {
+      const list = await gitRequests(repo, "auto"); // unknown host: whichever CLI is logged in there
+      expect(list.source).toBe("glab");
+      expect(list.requests[0]).toMatchObject({ number: 7, provider: "gitlab", ref: "refs/merge-requests/7/head", title: "Ship it", author: "carol", baseBranch: "main" });
+      expect(readFileSync(join(tmp, "glab.log"), "utf8")).toContain("mr list -R https://gitlab.example.com/team/app --per-page 100 --output json");
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+
+  test("request links: PR / MR pages only; request info cleaned up", async () => {
+    const { isRequestUrl } = await import("../src/gitApi.ts");
+    expect(isRequestUrl("https://github.com/acme/demo/pull/12")).toBe(true);
+    expect(isRequestUrl("https://gitlab.example.com/team/app/-/merge_requests/7")).toBe(true);
+    for (const bad of ["http://github.com/acme/demo/pull/12", "https://github.com/acme/demo", "file:///etc/passwd", "https://u:p@github.com/a/b/pull/1", "javascript:alert(1)"]) expect(isRequestUrl(bad)).toBe(false);
+    const d = parseDiffRequest({ request: "refs/pull/12/head", requestInfo: { title: "a\u0007b", author: "x", url: "https://evil.example/steal" } })!;
+    expect(d.requestInfo).toEqual({ title: "a b", author: "x", url: undefined });
+  });
+
+  test("the diff keeps what the CLI said about its request", async () => {
+    const host = join(tmp, "host-pr5.git");
+    await git(tmp, ["init", "-q", "--bare", host], ENV);
+    await sh(["push", "-q", host, `${featureSha}:refs/pull/12/head`]);
+    await sh(["remote", "add", "origin", host]);
+    try {
+      const s = await scanDiff(repo, { base: "main", request: "refs/pull/12/head", requestInfo: { title: "Footer", author: "alice", url: "https://github.com/acme/demo/pull/12" }, types: false, cache: false, treesDir: trees });
+      expect(s.diff!.head.request).toEqual({ number: 12, provider: "github", title: "Footer", author: "alice", url: "https://github.com/acme/demo/pull/12" });
+    } finally {
+      await sh(["remote", "remove", "origin"]);
+    }
+  });
+});
+
+describe("the code diff's source endpoint", () => {
+  test("a file at a commit, in the working tree; missing files; nothing outside the repo", async () => {
+    const { gitSource } = await import("../src/gitApi.ts");
+    expect(await gitSource(repo, baseSha, "src/Old.tsx")).toEqual({ text: "export function Old() {\n  return <p>old</p>;\n}\n" });
+    expect(await gitSource(repo, featureSha, "src/Old.tsx")).toEqual({ text: "", missing: true });
+    expect(await gitSource(repo, "worktree", "src/Footer.tsx")).toMatchObject({ text: expect.stringContaining("function Footer") });
+    // relative to the scanned folder, climbing out of it but not out of the repo
+    expect(await gitSource(join(repo, "src/util"), featureSha, "../Header.tsx")).toMatchObject({ text: expect.stringContaining("title") });
+    for (const [sha, file] of [["HEAD", "src/App.tsx"], ["--output=x", "src/App.tsx"], [baseSha, "../../etc/passwd"], [baseSha, "/etc/passwd"], ["worktree", "../outside.txt"], [baseSha, ""]]) {
+      expect(await gitSource(repo, sha!, file!)).toHaveProperty("error");
+    }
+  });
+});

@@ -3,6 +3,7 @@ import { IconFile, IconFolder, IconParentDir, IconScan } from "@rae/design-syste
 import { useEffect, useState } from "react";
 import { type FsListing, listDir } from "../lib/api.ts";
 import { isScanning, startScan } from "../lib/scanJob.ts";
+import { type CompareChoice, CompareOptions } from "./CompareOptions.tsx";
 import { useExplorer } from "../store.ts";
 
 const LAST_PATH_KEY = "rae.scanPath";
@@ -21,6 +22,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   const [types, setTypes] = useState(true);
   // remembered: whether files declaring one exported thing become that declaration (default on)
   const [merge, setMerge] = useState(() => localStorage.getItem(MERGE_KEY) !== "off");
+  const [diff, setDiff] = useState<CompareChoice>();
   const [listing, setListing] = useState<FsListing>();
   const [browseError, setBrowseError] = useState<string>();
   // progress, cancelling and errors live in the panel over the canvas (ScanProgress)
@@ -51,7 +53,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
     const target = path.trim();
     localStorage.setItem(LAST_PATH_KEY, target);
     localStorage.setItem(MERGE_KEY, merge ? "on" : "off");
-    void startScan(target, { types, merge }, onScanned);
+    void startScan(target, { types, merge, diff }, onScanned);
     onOpenChange(false); // progress (and Cancel) show over the canvas: nothing blocks while it runs
   };
 
@@ -68,7 +70,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
             Close
           </Button>
           <Button colorPalette="accent" onClick={scan} disabled={!path.trim() || scanning} title={scanning ? "A scan is running — cancel it in the progress panel first" : undefined}>
-            {scanning ? <Spinner size="xs" /> : <IconScan size={16} />} {scanning ? "Scanning…" : "Scan"}
+            {scanning ? <Spinner size="xs" /> : <IconScan size={16} />} {scanning ? "Scanning…" : diff ? "Compare" : "Scan"}
           </Button>
         </HStack>
       }
@@ -141,6 +143,8 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
             ))}
           </Box>
         </Box>
+
+        <CompareOptions path={path} onChange={setDiff} />
 
         <Stack gap="2.5" borderWidth="1px" borderColor="border" rounded="md" px="3" py="2.5">
           <Option

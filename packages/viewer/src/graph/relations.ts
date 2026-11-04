@@ -1,4 +1,5 @@
 import type { Edge, EdgeKind, NodeKind, Snapshot } from "@rae/schema";
+import { edgeChange } from "../lib/diff.ts";
 import { isFiltered, type LibraryFilter } from "./packages.ts";
 
 /** Edge groups the user can toggle in the toolbar. */
@@ -74,6 +75,7 @@ const isChildEdge = (s: Snapshot, e: Edge, f: RelationFilter) => {
     !!from &&
     (CHILD_KINDS[from.kind].has(e.kind) || (!!from.file && CHILD_KINDS.module.has(e.kind))) &&
     f.enabled[EDGE_GROUP_OF[e.kind]] &&
+    !(f.libraries.hideRemoved && edgeChange(e) === "removed") &&
     !isFiltered(s.nodes[e.to], f.libraries) &&
     !isFiltered(from, f.libraries)
   );

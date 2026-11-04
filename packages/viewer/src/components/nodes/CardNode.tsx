@@ -1,6 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
+import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
 import { KIND_META, duration, fileNote, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -46,7 +47,12 @@ function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
   const extras = [fileNote(node), node.cache ? `cached${node.cache.revalidate ? ` ${duration(node.cache.revalidate)}` : ""}` : undefined, fileBadges ? undefined : node.nextRole, node.isAsync && !node.cache ? "async" : undefined].filter(Boolean);
   const boundary = !fileBadges && node.moduleType && element.parent === null && node.moduleType !== "server" ? node.moduleType : undefined;
   return (
-    <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined}>
+    <div className="rae-card" data-kind={node.kind} data-missing={node.missing || undefined} data-change={data.change}>
+      {data.change && (
+        <span className="rae-change" data-change={data.change} title={`${CHANGE_WORD[data.change]} in this diff`}>
+          {CHANGE_LETTER[data.change]}
+        </span>
+      )}
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
       <div className="rae-card__body">
         <span className="rae-card__tile" aria-hidden>

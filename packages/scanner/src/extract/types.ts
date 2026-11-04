@@ -84,6 +84,9 @@ export interface DeclExtract {
   loc: Loc;
   /** Offset of the name identifier (or the function start) for type queries. */
   pos: number;
+  /** Last line of the declaration, and a hash of its source (a diff compares them). */
+  endLine: number;
+  hash: string;
   params: ParamDef[];
   returnType?: string;
   props?: PropDef[];
@@ -117,6 +120,8 @@ export interface DeclExtract {
 export interface FileExtract {
   absPath: string;
   stamp: string;
+  /** Hash of the file's text (diffs tell changed files by it). */
+  hash: string;
   directives: string[];
   serverOnly: boolean;
   clientOnly: boolean;

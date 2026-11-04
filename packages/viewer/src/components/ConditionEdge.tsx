@@ -6,7 +6,7 @@ import { formatCondition, summarize } from "../lib/conditions.ts";
 import { relationWord } from "../lib/relationWords.ts";
 
 /** `lane` (px) and `step` (its position among them): relations between the same two nodes, side by side. */
-export type ConditionEdgeData = { edge: GraphEdge; related?: boolean; lane?: number; step?: number };
+export type ConditionEdgeData = { edge: GraphEdge; related?: boolean; lane?: number; step?: number; change?: "added" | "removed" };
 
 /** Labels of side-by-side relations: this far apart, one under another (px). */
 const LABEL_STEP = 24;
@@ -43,10 +43,12 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
           className="rae-edge-label nodrag nopan"
           data-kind={edge.kind}
           data-related={data.related || undefined}
+          data-change={data.change}
           style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
           title={title}
         >
           <b>
+            {data.change === "added" ? "+ " : data.change === "removed" ? "− " : ""}
             {relationWord(edge)}
             {variants > 1 ? ` (+${variants - 1})` : ""}
           </b>

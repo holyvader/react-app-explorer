@@ -6,6 +6,7 @@ import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
+import { changesToShow } from "./lib/diff.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
 /** Expansions above this size ask for confirmation first. */
@@ -75,6 +76,8 @@ interface ExplorerState {
   routes: boolean;
   /** Asset files (CSS, images, JSON) on the canvas and in lists; off by default. */
   showAssets: boolean;
+  /** Diff snapshots: show what changed (colours, badges, removed elements as ghosts). */
+  diffOverlay: boolean;
   /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
@@ -143,6 +146,9 @@ interface ExplorerState {
   toggleGroup: (g: EdgeGroup) => void;
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
   setShowAssets: (on: boolean) => void;
+  setDiffOverlay: (on: boolean) => void;
+  /** Diff snapshots: puts the changes on the canvas (declarations and their files, up to a limit). */
+  showChanges: () => void;
   setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
   setTreeOpen: (open: boolean) => void;
@@ -164,7 +170,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -174,9 +180,9 @@ const readJson = <T,>(key: string, fallback: T): T => {
   }
 };
 
-export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets">): RelationFilter => ({
+export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
-  libraries: { excluded: new Set(s.excluded), hideAll: s.hideAllLibraries, showAssets: s.showAssets },
+  libraries: { excluded: new Set(s.excluded), hideAll: s.hideAllLibraries, showAssets: s.showAssets, hideRemoved: s.diffOverlay === false },
 });
 
 const EMPTY: DrawnGraph = { elements: [], relations: [] };
@@ -242,6 +248,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),
+    diffOverlay: readJson(KEYS.diffOverlay, true),
     // Folders and routes are nodes of their own (added from the tree / picker), not automatic
     // frames around files: both frame modes stay off (the toolbar toggles are gone).
     routes: false,
@@ -271,8 +278,18 @@ export const useExplorer = create<ExplorerState>((set, get) => {
         future: [],
       });
       // The diagram last drawn for this project comes back.
-      const saved = loadDiagram(snapshot.rootDir);
+      // A diff (not opened before) opens with its changes on the canvas.
+      const saved = loadDiagram(diagramKey(snapshot));
       if (saved) restore(saved);
+      else if (snapshot.diff) get().showChanges();
+    },
+
+    showChanges: () => {
+      const s = get();
+      if (!s.snapshot?.diff) return;
+      const ids = changesToShow(s.snapshot);
+      if (!s.diffOverlay) set({ diffOverlay: true });
+      get().addNodes(ids, { fit: true });
     },
 
     updateSnapshot: (snapshot, name) => {
@@ -477,6 +494,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       redraw({ showAssets: on }, null);
     },
 
+    setDiffOverlay: (on) => {
+      localStorage.setItem(KEYS.diffOverlay, JSON.stringify(on));
+      redraw({ diffOverlay: on }, null);
+    },
+
     setLibraryFilter: ({ excluded, hideAllLibraries }) => {
       if (excluded) localStorage.setItem(KEYS.excluded, JSON.stringify(excluded));
       if (hideAllLibraries !== undefined) localStorage.setItem(KEYS.hideAll, JSON.stringify(hideAllLibraries));
@@ -552,10 +574,11 @@ useExplorer.subscribe((s, prev) => {
 
 // ---- storing the current diagram (per project) -------------------------------------------
 
-const diagramKey = (rootDir: string) => `rae.diagram:${rootDir}`;
+/** Per project; a diff (base → head) keeps a diagram of its own. */
+const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}${s.diff.head.worktree ? "+wt" : ""}` : ""}`;
 
-function loadDiagram(rootDir: string): DiagramState | undefined {
-  const saved = readJson<DiagramState | null>(diagramKey(rootDir), null);
+function loadDiagram(key: string): DiagramState | undefined {
+  const saved = readJson<DiagramState | null>(key, null);
   return saved && Array.isArray(saved.visible) && Array.isArray(saved.placed) ? saved : undefined;
 }
 
@@ -571,7 +594,7 @@ useExplorer.subscribe((s, prev) => {
   clearTimeout(saveTimer);
   pendingSave = () => {
     pendingSave = undefined;
-    const key = diagramKey(s.snapshot!.rootDir);
+    const key = diagramKey(s.snapshot!);
     try {
       if (!s.visible.length) localStorage.removeItem(key);
       else localStorage.setItem(key, JSON.stringify({ visible: s.visible, placed: s.placed, selectedId: s.selectedId } satisfies DiagramState));

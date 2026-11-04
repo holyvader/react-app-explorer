@@ -1,0 +1,44 @@
+/* The code diff dialog: split (side by side) or inline (− / +), plain CSS (files can be long). */
+.rae-cdiff {
+  border: 1px solid var(--chakra-colors-border-muted);
+  border-radius: 8px;
+  overflow: auto;
+  max-height: calc(100dvh - 220px);
+  background: var(--chakra-colors-syntax-bg);
+  font: 12px/1.55 var(--chakra-fonts-mono);
+  color: var(--chakra-colors-fg);
+}
+.rae-cdiff table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+.rae-cdiff[data-mode="inline"] table { table-layout: auto; }
+.rae-cdiff td { padding: 0 10px; vertical-align: top; }
+.rae-cdiff__numcol { width: 52px; }
+.rae-cdiff__num {
+  width: 1%;
+  min-width: 40px;
+  text-align: right;
+  color: var(--chakra-colors-fg-subtle);
+  user-select: none;
+  white-space: nowrap;
+  padding: 0 8px !important;
+}
+.rae-cdiff__sign { width: 1%; color: var(--chakra-colors-fg-subtle); user-select: none; padding: 0 2px 0 4px !important; }
+.rae-cdiff__code { white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2; }
+/* split: the two sides apart */
+.rae-cdiff[data-mode="split"] td:nth-child(3) { border-left: 1px solid var(--chakra-colors-border-muted); }
+.rae-cdiff [data-type="del"] { background: color-mix(in oklab, var(--chakra-colors-diff-removed-subtle) 85%, transparent); }
+.rae-cdiff [data-type="add"] { background: color-mix(in oklab, var(--chakra-colors-diff-added-subtle) 85%, transparent); }
+.rae-cdiff td.rae-cdiff__num[data-type="del"], .rae-cdiff tr[data-type="del"] .rae-cdiff__num, .rae-cdiff tr[data-type="del"] .rae-cdiff__sign { color: var(--chakra-colors-diff-removed-fg); }
+.rae-cdiff td.rae-cdiff__num[data-type="add"], .rae-cdiff tr[data-type="add"] .rae-cdiff__num, .rae-cdiff tr[data-type="add"] .rae-cdiff__sign { color: var(--chakra-colors-diff-added-fg); }
+.rae-cdiff [data-type="empty"] { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in oklab, var(--chakra-colors-border-muted) 45%, transparent) 6px 7px); }
+.rae-cdiff__fold td { padding: 0 !important; background: var(--chakra-colors-bg-subtle); }
+.rae-cdiff__fold button {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 3px 12px;
+  cursor: pointer;
+  color: var(--chakra-colors-fg-muted);
+  font: 11.5px var(--chakra-fonts-mono);
+}
+.rae-cdiff__fold button:hover { background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg); }
+.rae-cdiff__fold button:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1.5px; }

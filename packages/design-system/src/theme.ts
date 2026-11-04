@@ -130,6 +130,12 @@ const config = defineConfig({
           client: { solid: v(ok(0.6, 0.1, 215), ok(0.76, 0.1, 215)), subtle: v(ok(0.95, 0.04, 215), ok(0.3, 0.05, 215)), muted: v(ok(0.86, 0.05, 215), ok(0.42, 0.07, 215)), fg: v(ok(0.42, 0.09, 215), ok(0.86, 0.08, 215)) },
           shared: { solid: v(ok(0.6, 0.13, 355), ok(0.76, 0.12, 355)), subtle: v(ok(0.96, 0.025, 355), ok(0.3, 0.06, 355)), muted: v(ok(0.86, 0.05, 355), ok(0.42, 0.08, 355)), fg: v(ok(0.48, 0.13, 355), ok(0.86, 0.08, 355)) },
         },
+        // Diff mode: what a branch / pull request added (green), changed (amber), removed (red, as ghosts).
+        diff: {
+          added: { solid: v(ok(0.58, 0.15, 150), ok(0.74, 0.16, 150)), subtle: v(ok(0.95, 0.04, 150), ok(0.3, 0.06, 150)), fg: v(ok(0.45, 0.13, 150), ok(0.84, 0.13, 150)) },
+          changed: { solid: v(ok(0.68, 0.15, 80), ok(0.8, 0.15, 85)), subtle: v(ok(0.96, 0.05, 85), ok(0.32, 0.06, 80)), fg: v(ok(0.5, 0.12, 70), ok(0.86, 0.12, 85)) },
+          removed: { solid: v(ok(0.58, 0.19, 25), ok(0.7, 0.17, 25)), subtle: v(ok(0.95, 0.03, 25), ok(0.3, 0.06, 25)), fg: v(ok(0.5, 0.17, 25), ok(0.82, 0.12, 25)) },
+        },
         // Edge stroke, edge label, filter dot and details badge all use these.
         relation: {
           imports: v("#4A4844", "#AEB1B8"), // dashed when lazy; faint when type-only

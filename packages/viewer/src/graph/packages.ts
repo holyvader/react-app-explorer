@@ -1,4 +1,5 @@
 import type { GraphNode } from "@rae/schema";
+import { isGhost } from "../lib/diff.ts";
 
 /** Libraries hidden until the user opts in. */
 export const DEFAULT_EXCLUDED = ["react", "react-dom"];
@@ -16,6 +17,8 @@ export interface LibraryFilter {
   hideAll: boolean;
   /** Show the project's asset files (CSS, images, JSON); hidden by default. */
   showAssets?: boolean;
+  /** Diff overlay off: what only the base had (removed nodes) is hidden. */
+  hideRemoved?: boolean;
 }
 
 /** A non-code project file: `asset` module nodes (and `asset:` externals in old snapshots). */
@@ -24,6 +27,7 @@ export const isAsset = (node: GraphNode | undefined) => !!node && (node.asset ==
 /** Whether a node is hidden by the filter: a 3rd-party library the user hid, or an asset while assets are off. */
 export function isFiltered(node: GraphNode | undefined, filter: LibraryFilter): boolean {
   if (!node) return false;
+  if (filter.hideRemoved && isGhost(node)) return true;
   if (isAsset(node)) return !filter.showAssets;
   if (node.kind !== "external") return false;
   return filter.hideAll || filter.excluded.has(packageOf(node.filePath));

@@ -7,7 +7,8 @@ export interface ModalProps {
   title?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  /** `cover`: nearly the whole window (code, diffs). */
+  size?: "sm" | "md" | "lg" | "xl" | "cover";
   initialFocusEl?: RefObject<HTMLElement | null>;
 }
 

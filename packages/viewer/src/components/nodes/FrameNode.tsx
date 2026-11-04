@@ -1,6 +1,7 @@
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xyflow/react";
 import { memo, type MouseEvent, type PointerEvent } from "react";
+import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
 import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
@@ -79,7 +80,12 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
   const Icon = folder ? IconFolder : route ? KIND_META.route.icon : KIND_META.module.icon;
   const room = useRoomAsCanvas();
   return (
-    <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-refused={refused || undefined}>
+    <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-refused={refused || undefined} data-change={data.change}>
+      {data.change && (
+        <span className="rae-change" data-change={data.change} title={`${CHANGE_WORD[data.change]} in this diff`}>
+          {CHANGE_LETTER[data.change]}
+        </span>
+      )}
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
       <div className={`rae-frame__header ${FRAME_HANDLE}`}>
         <span className="rae-icon">

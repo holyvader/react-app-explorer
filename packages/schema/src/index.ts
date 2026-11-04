@@ -223,6 +223,9 @@ export interface GraphNode {
   specifier?: string;
   absPath?: string;
   loc?: Loc;
+  /** Declarations: their last line. Files and declarations: a hash of their source text (diffs tell changed ones by it). */
+  endLine?: number;
+  hash?: string;
   moduleType?: ModuleType;
   nextRole?: NextRole;
   /**
@@ -309,10 +312,49 @@ export interface Snapshot {
   /** Next.js settings that change how routes render (`cacheComponents` in next.config). */
   next?: { cacheComponents?: boolean };
   stats: ScanStats;
+  /** A diff snapshot: the head's graph, and what changed against the base. */
+  diff?: SnapshotDiff;
   /** How it was scanned: `mergeSingleExport` — files declaring one exported thing became that declaration. */
   options?: { mergeSingleExport?: boolean };
   nodes: Record<NodeId, GraphNode>;
   edges: Edge[];
+}
+
+export type ChangeKind = "added" | "removed" | "changed";
+
+/** A commit a diff compares: the ref as asked for (`main`, `refs/pull/12/head`), its sha and subject. */
+export interface DiffSide {
+  ref: string;
+  sha: string;
+  subject?: string;
+  /** The head is the working tree: the checkout at `sha` plus its uncommitted changes. */
+  worktree?: boolean;
+  /** The head is a pull / merge request: what the CLI said about it (when it was listed by one). */
+  request?: { number: number; provider: "github" | "gitlab"; title?: string; author?: string; url?: string };
+}
+
+/**
+ * What changed between two commits (a branch or pull / merge request against its base). The snapshot
+ * holding it is the head's; `removed` keeps what only the base had, so UIs can draw it as ghosts.
+ */
+export interface SnapshotDiff {
+  base: DiffSide;
+  head: DiffSide;
+  /** The commit compared against: the merge-base of base and head (what the request's own diff shows), or base itself. */
+  against: "merge-base" | "base";
+  compared: string;
+  /** Node id (the head's) → how it changed. Unchanged nodes aren't listed. */
+  nodes: Record<NodeId, ChangeKind>;
+  /** Nodes only the base had, as they were (ids as in the base). */
+  removed: Record<NodeId, GraphNode>;
+  /** Changed nodes as they were in the base (by head id), without their render trees: for before → after. */
+  before: Record<NodeId, GraphNode>;
+  /** Base id → head id, for nodes in renamed files. */
+  renamed: Record<NodeId, NodeId>;
+  /** Edges only the head has, and edges only the base had (base edges use head ids where renamed). */
+  edges: { added: Edge[]; removed: Edge[] };
+  /** Changed files under the scanned folder (paths relative to it). */
+  files: { path: string; status: "added" | "modified" | "deleted" | "renamed"; from?: string; additions: number; deletions: number }[];
 }
 
 export interface SnapshotIndexEntry {
@@ -323,6 +365,8 @@ export interface SnapshotIndexEntry {
   nodeCount: number;
   edgeCount: number;
   durationMs: number;
+  /** Diff snapshots: what they compare (refs and short shas), and how many nodes changed. */
+  diff?: { base: string; head: string; changes: number };
 }
 
 /**
@@ -343,3 +387,86 @@ export type ScanEvent =
   /** Stopped on request. A structure snapshot already written stays (untyped). */
   | { type: "cancelled" }
   | { type: "done" };
+
+/** GET /api/git?path=…: the repo a folder is in, and its branches (for diff scans). */
+export interface GitOverview {
+  /** Null when the folder isn't in a repo (or git is missing: see `error`). */
+  repo: GitRepo | null;
+  /** Local and remote-tracking branches, most recent first. */
+  branches: GitBranch[];
+  error?: string;
+}
+
+export interface GitRepo {
+  /** The repo's top folder (real path). */
+  root: string;
+  /** The checked-out commit, and branch (undefined when detached). */
+  head: string;
+  branch?: string;
+  /** origin's default branch (`origin/HEAD`), else `main` / `master` when they exist. */
+  defaultBranch?: string;
+  remote?: { name: string; url: string; provider?: "github" | "gitlab" };
+  /** Uncommitted changes to tracked files (a diff compares commits: they aren't in it). */
+  dirty?: boolean;
+}
+
+export interface GitBranch {
+  name: string;
+  /** refs/heads/x or refs/remotes/origin/x. */
+  ref: string;
+  sha: string;
+  remote: boolean;
+  subject: string;
+  date: string;
+}
+
+/** An open pull / merge request, from the refs GitHub (refs/pull/N/head) and GitLab (refs/merge-requests/N/head) publish. */
+export interface GitRequest {
+  number: number;
+  provider: "github" | "gitlab";
+  ref: string;
+  sha: string;
+  /** Listed by the GitHub / GitLab CLI (git's refs don't carry these): */
+  title?: string;
+  author?: string;
+  headBranch?: string;
+  /** The branch it merges into: the diff's natural base. */
+  baseBranch?: string;
+  draft?: boolean;
+  /** Git can't tell; the CLIs list open ones. */
+  state?: "open";
+  url?: string;
+  updatedAt?: string;
+  /** Who listed it: git (`ls-remote`), `gh` or `glab`. */
+  source?: Exclude<RequestSource, "auto">;
+}
+
+/** Where pull / merge requests are listed from. `auto`: the host's CLI when installed and logged in, else git. */
+export type RequestSource = "auto" | "git" | "gh" | "glab";
+
+/** A host CLI here: installed (where, which version), and logged in to the repo's host. */
+export interface GitToolStatus {
+  installed: boolean;
+  path?: string;
+  version?: string;
+  authed?: boolean;
+  /** Why it can't be used (what to run). */
+  error?: string;
+}
+
+/** GET /api/git/tools?path=…: the CLIs, and what `auto` picks for the repo. */
+export interface GitTools {
+  host?: string;
+  gh: GitToolStatus;
+  glab: GitToolStatus;
+  auto: Exclude<RequestSource, "auto">;
+}
+
+/** GET /api/git/requests?path=…&source=…: the requests, and the source that listed them. */
+export interface GitRequestList {
+  requests: GitRequest[];
+  source: Exclude<RequestSource, "auto">;
+  error?: string;
+  /** Auto fell back to git: why (not installed, not logged in, the CLI failed). */
+  fallback?: string;
+}

@@ -1,8 +1,9 @@
 import { ActionIconButton, Flex, Panel, PanelBar, Text } from "@rae/design-system";
-import { IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
+import { IconDiff, IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../graph/tree.ts";
 import { TREE_WIDTH, useExplorer } from "../store.ts";
+import { ChangesList } from "./ChangesList.tsx";
 import { ElementTree } from "./picker/ElementTree.tsx";
 
 /**
@@ -19,6 +20,9 @@ export function FileTree() {
   const { setTreeOpen, setTreeWidth } = useExplorer.getState();
   const inputRef = useRef<HTMLInputElement>(null);
   const [filtering, setFiltering] = useState(false);
+  // diff snapshots: the changes, file by file, instead of the whole tree (shown first)
+  const [changesView, setChangesView] = useState(true);
+  const showChanges = !!snapshot?.diff && changesView;
   useEffect(() => {
     if (filtering) inputRef.current?.focus();
   }, [filtering]);
@@ -47,6 +51,9 @@ export function FileTree() {
     [onDiagram],
   );
 
+  const activateId = useCallback((id: string) => activate({ key: id, id, kind: "decl", name: id, path: id, children: [] }), [activate]);
+  const drawnId = useCallback((id: string) => onDiagram.has(id), [onDiagram]);
+
   if (!snapshot) return null;
   return (
     <Panel
@@ -72,16 +79,29 @@ export function FileTree() {
       flexDirection="column"
       overflowY="hidden"
     >
-      <PanelBar label="Files">
-        <ActionIconButton
-          label={filtering ? "Stop filtering" : "Filter files"}
-          icon={<IconFilter />}
-          size="2xs"
-          color={filtering ? "fg" : "fg.subtle"}
-          bg={filtering ? "bg.muted" : undefined}
-          aria-pressed={filtering}
-          onClick={() => setFiltering(!filtering)}
-        />
+      <PanelBar label={showChanges ? "Changes" : "Files"}>
+        {snapshot.diff && (
+          <ActionIconButton
+            label={showChanges ? "Show all files" : "Show the changes"}
+            icon={<IconDiff />}
+            size="2xs"
+            color={showChanges ? "fg" : "fg.subtle"}
+            bg={showChanges ? "bg.muted" : undefined}
+            aria-pressed={showChanges}
+            onClick={() => setChangesView(!changesView)}
+          />
+        )}
+        {!showChanges && (
+          <ActionIconButton
+            label={filtering ? "Stop filtering" : "Filter files"}
+            icon={<IconFilter />}
+            size="2xs"
+            color={filtering ? "fg" : "fg.subtle"}
+            bg={filtering ? "bg.muted" : undefined}
+            aria-pressed={filtering}
+            onClick={() => setFiltering(!filtering)}
+          />
+        )}
         <ActionIconButton label="Hide the file tree" icon={<IconPanelClose />} size="2xs" color="fg.subtle" onClick={() => setTreeOpen(false)} />
       </PanelBar>
       <Flex
@@ -93,7 +113,11 @@ export function FileTree() {
           if (e.key === "Escape" && filtering) setFiltering(false);
         }}
       >
-        <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
+        {showChanges ? (
+          <ChangesList onActivate={activateId} drawn={drawnId} selectedId={selectedId} />
+        ) : (
+          <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
+        )}
       </Flex>
       {/* what was scanned, quietly */}
       <Flex align="center" h="28px" px="3" flexShrink={0} borderTopWidth="1px" borderColor="border.muted">

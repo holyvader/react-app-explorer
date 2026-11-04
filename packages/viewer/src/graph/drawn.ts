@@ -1,4 +1,5 @@
 import type { Edge, GraphNode, NodeKind, Snapshot } from "@rae/schema";
+import { edgeChange } from "../lib/diff.ts";
 import { isFiltered, type LibraryFilter } from "./packages.ts";
 import { EDGE_GROUP_OF, type EnabledGroups, type GraphIndex } from "./relations.ts";
 
@@ -130,6 +131,7 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
   const candidates = index ? [...shown].flatMap((id) => index.out.get(id) ?? []) : snapshot.edges;
   for (const e of candidates) {
     if (e.kind === "declares" || !shown.has(e.from) || !shown.has(e.to) || !opts.enabled[EDGE_GROUP_OF[e.kind]]) continue;
+    if (opts.filter.hideRemoved && edgeChange(e) === "removed") continue;
     if (e.from === e.to || inside(e.from, e.to) || inside(e.to, e.from)) continue;
     const id = `${e.kind}:${e.from}->${e.to}:${e.importType ?? ""}`;
     if (seen.has(id)) continue;

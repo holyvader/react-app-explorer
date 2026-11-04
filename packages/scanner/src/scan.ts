@@ -160,6 +160,9 @@ export async function scan(input: string, opts: ScanOptions = {}): Promise<Snaps
   return opts.types === false ? structure.snapshot : addTypes(structure, opts);
 }
 
+/** `main 1a2b3c4`; a ref that is a sha (or its start) just as the short sha. */
+const refLabel = (ref: string, sha: string) => (sha.startsWith(ref) ? sha.slice(0, 7) : `${ref} ${sha.slice(0, 7)}`);
+
 /** Writes `<out>/<timestamp>.json` and updates `<out>/index.json` (same file → replaced). Returns the snapshot path. */
 export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
   mkdirSync(outDir, { recursive: true });
@@ -184,6 +187,9 @@ export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
     nodeCount: Object.keys(snapshot.nodes).length,
     edgeCount: snapshot.edges.length,
     durationMs: snapshot.stats.durationMs,
+    ...(snapshot.diff
+      ? { diff: { base: refLabel(snapshot.diff.base.ref, snapshot.diff.compared), head: refLabel(snapshot.diff.head.ref, snapshot.diff.head.sha), changes: Object.keys(snapshot.diff.nodes).length } }
+      : {}),
   });
   writeFileSync(indexPath, JSON.stringify(index, null, 2));
   return path;

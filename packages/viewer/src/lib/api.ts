@@ -1,4 +1,5 @@
-import type { ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import type { GitOverview, GitRequestList, GitTools, RequestSource, ScanEvent, Snapshot, SnapshotIndexEntry } from "@rae/schema";
+import { applyDiff } from "./diff.ts";
 
 export interface SnapshotList {
   dir: string;
@@ -23,7 +24,7 @@ export async function fetchSnapshotList(): Promise<SnapshotList> {
   return list;
 }
 
-/** Upgrades older snapshots in place: schema v1 named invokes edges `calls` / `callsAction`. */
+/** Upgrades older snapshots in place (schema v1 named invokes edges `calls` / `callsAction`); a diff's removed nodes become ghosts. */
 export function normalizeSnapshot(s: Snapshot): Snapshot {
   if ((s.schemaVersion ?? 1) < 2) {
     for (const e of s.edges as { kind: string }[]) {
@@ -31,7 +32,7 @@ export function normalizeSnapshot(s: Snapshot): Snapshot {
       else if (e.kind === "callsAction") e.kind = "invokesAction";
     }
   }
-  return s;
+  return applyDiff(s);
 }
 
 export async function fetchSnapshot(file: string): Promise<Snapshot> {
@@ -71,14 +72,48 @@ export async function listDir(path?: string): Promise<FsListing> {
 export interface ScanSettings {
   types: boolean;
   merge: boolean;
+  /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
+  diff?: { base?: string; head?: string; request?: string; requestInfo?: { title?: string; author?: string; url?: string }; worktree?: boolean; against?: "merge-base" | "base" };
 }
 
-export async function runScan(path: string, { types, merge }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
+/** The git repo a folder is in, with its branches. */
+export async function fetchGit(path: string): Promise<GitOverview> {
+  const res = await fetch(`/api/git?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "git info failed");
+  return data;
+}
+
+/** A file's text at a commit (`sha`), or in the working tree (`"worktree"`), for the code diff. `file` is relative to `dir` (the scanned folder). */
+export async function fetchSource(dir: string, sha: string, file: string): Promise<{ text: string; truncated?: boolean; missing?: boolean }> {
+  const res = await fetch(`/api/git/source?path=${encodeURIComponent(dir)}&sha=${encodeURIComponent(sha)}&file=${encodeURIComponent(file)}`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error ?? `Couldn't read ${file}`);
+  return data;
+}
+
+/** The GitHub / GitLab CLIs here (installed, logged in) and what Auto picks; `refresh` re-checks them. */
+export async function fetchGitTools(path: string, refresh = false): Promise<GitTools> {
+  const res = await fetch(`/api/git/tools?path=${encodeURIComponent(path)}${refresh ? "&refresh=1" : ""}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "checking the CLIs failed");
+  return data;
+}
+
+/** Pull / merge requests on origin, from `source` (a network call): git's refs, or the host's CLI. */
+export async function fetchGitRequests(path: string, source: RequestSource = "auto"): Promise<GitRequestList> {
+  const res = await fetch(`/api/git/requests?path=${encodeURIComponent(path)}&source=${source}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "listing requests failed");
+  return data;
+}
+
+export async function runScan(path: string, { types, merge, diff }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/api/scan", {
     signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, types, merge }),
+    body: JSON.stringify({ path, types, merge, diff }),
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));

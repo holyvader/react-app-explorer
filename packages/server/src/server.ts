@@ -11,6 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { gitOverview, gitPath, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -57,6 +58,7 @@ const STORAGE_MAX = 32 * 1024 * 1024;
   log(`start: bun ${Bun.version}, ${process.platform} ${release()} ${arch()}, tmp ${tmpdir()}`);
   log(`snapshots: ${snapshotsDir}`);
   log(`tsgo: ${tsgo ? `${tsgo} (${existsSync(tsgo) ? "found" : "MISSING"}, lib.d.ts ${existsSync(join(dirname(tsgo), "lib.d.ts")) ? "found" : "MISSING"})` : "from the typescript package"}`);
+  log(`git: ${gitPath() ?? "not found (diff mode off)"}`);
 }
 
 // The viewer: embedded into the executable at build time, or a dist folder (development).
@@ -208,8 +210,8 @@ async function api(req: Request, url: URL): Promise<Response> {
     } catch {
       return json({ error: "Invalid URL" }, 400);
     }
-    // editors only: never hand arbitrary URLs (file:, http:, other apps) to the OS
-    if (!EDITOR_SCHEMES.has(url.protocol)) return json({ error: `Not an editor link: ${url.protocol}` }, 400);
+    // editors, and pull / merge request pages: never hand arbitrary URLs (file:, http:, other apps) to the OS
+    if (!EDITOR_SCHEMES.has(url.protocol) && !isRequestUrl(url.href)) return json({ error: `Not an editor or pull / merge request link: ${url.protocol}` }, 400);
     // no control characters or quotes in what goes to the OS (the URL is otherwise percent-encoded)
     // oxlint-disable-next-line no-control-regex -- deliberately matching control characters
     if (/[\u0000-\u001f\u007f"]/.test(url.href)) return json({ error: "Invalid characters in the editor link" }, 400);
@@ -235,6 +237,22 @@ async function api(req: Request, url: URL): Promise<Response> {
     return new Response(Bun.file(full), { headers: { "Content-Type": "application/json" } });
   }
 
+  // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)
+  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools" || path === "/api/git/source") {
+    const q = url.searchParams.get("path");
+    if (!q) return json({ error: "path is required" }, 400);
+    if (path === "/api/git/source") {
+      const r = await gitSource(resolve(q), url.searchParams.get("sha") ?? "", url.searchParams.get("file") ?? "");
+      return json(r, "error" in r ? 400 : 200);
+    }
+    if (path === "/api/git") return json(await gitOverview(resolve(q)));
+    if (path === "/api/git/tools") {
+      if (url.searchParams.get("refresh")) refreshTools();
+      return json(await gitTools(resolve(q)));
+    }
+    return json(await gitRequests(resolve(q), (url.searchParams.get("source") ?? "auto") as Parameters<typeof gitRequests>[1]));
+  }
+
   if (path === "/api/fs") {
     const q = url.searchParams.get("path");
     const dir = q ? resolve(q) : homedir();
@@ -250,11 +268,13 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
     if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
-    let body: { path?: string; types?: boolean; merge?: boolean };
+    let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown };
+    let diff: ReturnType<typeof parseDiffRequest>;
     try {
       body = await req.json();
-    } catch {
-      return json({ error: "Invalid JSON body" }, 400);
+      diff = parseDiffRequest(body.diff);
+    } catch (e) {
+      return json({ error: e instanceof SyntaxError ? "Invalid JSON body" : (e as Error).message }, 400);
     }
     const target = body.path ? resolve(body.path) : "";
     if (!target || !existsSync(target)) return json({ error: `Path not found: ${target || "(empty)"}` }, 400);
@@ -283,6 +303,7 @@ async function api(req: Request, url: URL): Promise<Response> {
             outDir: snapshotsDir,
             types: body.types !== false,
             mergeSingleExport: body.merge !== false,
+            diff,
             signal: job.abort.signal,
             onWarn: (m) => log(`warn: ${m}`),
             onProgress: (m) => log(`scan: ${m}`),

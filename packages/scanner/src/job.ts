@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import type { ScanEvent, Snapshot } from "@rae/schema";
+import { scanDiff } from "./diffScan.ts";
 import { addTypes, type ScanOptions, scanStructure, writeSnapshot } from "./scan.ts";
 
 export type { ScanEvent };
@@ -15,6 +16,20 @@ export interface ScanJobOptions extends Omit<ScanOptions, "onCount"> {
   outDir: string;
   /** Cancels the job: it emits `cancelled` and resolves. */
   signal?: AbortSignal;
+  /** Diff mode: scan the folder at two commits and compare them (see scanDiff). */
+  diff?: ScanDiffRequest;
+}
+
+/** What a UI asks to compare: a base ref, and a head ref or a pull / merge request's ref. */
+export interface ScanDiffRequest {
+  base?: string;
+  head?: string;
+  request?: string;
+  /** The checkout with its uncommitted changes. */
+  worktree?: boolean;
+  /** What the host CLI said about `request` (shown in the viewer). */
+  requestInfo?: { title?: string; author?: string; url?: string };
+  against?: "merge-base" | "base";
 }
 
 export function summary(snapshot: Snapshot): string {
@@ -47,6 +62,27 @@ export async function runScanJob(input: string, opts: ScanJobOptions, emit: (e: 
   };
   try {
     emit({ type: "progress", stage: "discover" });
+    if (opts.diff) {
+      // the diff snapshot without types first, then the typed one replacing the same file
+      let file = "";
+      const typesPending = opts.types !== false;
+      const typed = await scanDiff(input, {
+        ...scanOpts,
+        ...opts.diff,
+        onStructure: (snap) => {
+          emit({ type: "progress", stage: "graph" });
+          file = basename(writeSnapshot(snap, opts.outDir));
+          emit({ type: "result", file, stdout: summary(snap), ms: ms(), warnings, typesPending });
+          warnings = [];
+        },
+      });
+      if (typesPending) {
+        writeSnapshot(typed, opts.outDir);
+        emit({ type: "types", file, ms: ms(), typed: typed.stats.types, warnings });
+      }
+      emit({ type: "done" });
+      return;
+    }
     const structure = await scanStructure(input, scanOpts);
     emit({ type: "progress", stage: "graph" });
     const file = basename(writeSnapshot(structure.snapshot, opts.outDir));
