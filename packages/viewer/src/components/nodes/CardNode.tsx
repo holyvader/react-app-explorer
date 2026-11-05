@@ -3,7 +3,7 @@ import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { memo } from "react";
 import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
 import { KIND_META, duration, fileNote, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
-import { useLod } from "../lod.ts";
+import { isBlocks, useLod } from "../lod.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
@@ -17,7 +17,7 @@ function CardNodeImpl({ data }: NodeProps<CardFlowNode>) {
   const { node, element } = data;
   const lod = useLod();
   // zoomed far out: a block in the kind's colour with its name, large (no icon, caption, chips or actions)
-  if (lod === "overview") {
+  if (isBlocks(lod)) {
     const kind = element.kind === "folder" ? "folder" : node?.kind;
     if (!kind) return null;
     return (

@@ -18,6 +18,7 @@ import {
 } from "@xyflow/react";
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
+import { bundleRelations, collapseFrames } from "../graph/collapse.ts";
 import { folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { layoutAll } from "../graph/layout.ts";
 import { absoluteRect, type CanvasFrame, landsIn, refusingFrames } from "../graph/placement.ts";
@@ -29,7 +30,7 @@ import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
-import { LodContext, lodOf } from "./lod.ts";
+import { collapseLevelOf, type Lod, LodContext, lodOf, nextLod } from "./lod.ts";
 import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
 import { ExplorationPicker } from "./picker/ExplorationPicker.tsx";
 import { QuickAdd } from "./picker/QuickAdd.tsx";
@@ -144,8 +145,9 @@ export function Canvas() {
   const fitIds = useExplorer((s) => s.fitIds);
   const { select, consumeFocus, applyLayout, dropAt } = useExplorer.getState();
   const flow = useReactFlow();
-  // the level of detail: a bucket of the zoom, so this re-renders only when it changes
-  const lod = useStore((s) => lodOf(s.transform[2]));
+  // the level of detail: a bucket of the zoom (with some hysteresis), so this re-renders only when it changes
+  const lodRef = useRef<Lod | null>(null);
+  const lod = useStore((s) => (lodRef.current = lodRef.current ? nextLod(s.transform[2], lodRef.current) : lodOf(s.transform[2])));
   const [dragging, setDragging] = useState(false);
   const menu = useExplorer((s) => s.menu);
   const setMenu = useExplorer.getState().openMenu;
@@ -298,18 +300,33 @@ export function Canvas() {
     return { nodes, edges };
   }, [selection, graph]);
 
-  // Selection and relatedness are applied on top, so only the nodes involved are re-created.
+  // Zoomed far out, frames are blocks: what's inside is hidden (React Flow keeps the nodes and their
+  // measurements), the frame says how many it holds. Only the nodes involved are re-created.
+  const collapse = useMemo(() => collapseFrames(placed, collapseLevelOf(lod, placed.length)), [placed, lod]);
+  const shownNodes = useMemo(() => {
+    if (!collapse.frames.size) return derived;
+    return derived.map((n) => {
+      if (collapse.shownAs.has(n.id)) return { ...n, hidden: true } as ElementFlowNode;
+      const count = collapse.frames.get(n.id);
+      return count ? ({ ...n, data: { ...n.data, collapsed: count } } as ElementFlowNode) : n;
+    });
+  }, [derived, collapse]);
+
+  // Selection and relatedness are applied on top, so only the nodes involved are re-created. What's
+  // hidden in a collapsed frame shows as the frame: it's marked related.
   const selectedNodes = useMemo(() => {
-    if (!selection.length) return derived;
+    if (!selection.length) return shownNodes;
     const sel = new Set(selection);
-    return derived.map((n) =>
+    const block = (id: string) => collapse.shownAs.get(id);
+    const marked = new Set([...selection, ...related.nodes].map(block).filter((id): id is string => !!id));
+    return shownNodes.map((n) =>
       sel.has(n.id)
         ? ({ ...n, selected: true } as ElementFlowNode)
-        : related.nodes.has(n.id)
+        : related.nodes.has(n.id) || marked.has(n.id)
           ? ({ ...n, className: "rae-related" } as ElementFlowNode)
           : n,
     );
-  }, [derived, selection, related]);
+  }, [shownNodes, selection, related, collapse]);
 
   // React Flow applies drags and measurements locally; re-sync when the placement or selection
   // changes ("adjust state during render"). A node whose source didn't change keeps its local
@@ -445,14 +462,38 @@ export function Canvas() {
       });
   }, [graph, placed, showDiff]);
 
+  // Under a collapse, relations into a block connect the block, one edge per block pair (thicker
+  // for more), in the relation's colour when they're all one kind.
+  const shownEdges = useMemo<ConditionFlowEdge[]>(() => {
+    const { kept, bundles } = bundleRelations(baseEdges, collapse);
+    if (!bundles.length) return kept;
+    return [
+      ...kept,
+      ...bundles.map(({ source, target, members }) => {
+        const look = members.every((m) => m.className === members[0].className) ? members[0].className : "rae-edge rae-edge--imports";
+        return {
+          id: `bundle:${source}>${target}`,
+          source,
+          target,
+          type: "condition" as const,
+          className: `${look} rae-edge--bundle`,
+          data: { edge: members[0].data!.edge, bundle: members.map((m) => m.id) },
+          zIndex: 1,
+        };
+      }),
+    ];
+  }, [baseEdges, collapse]);
+
   const edges = useMemo<ConditionFlowEdge[]>(
     () =>
       related.edges.size
-        ? baseEdges.map((e) =>
-            related.edges.has(e.id) ? { ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } } : e,
+        ? shownEdges.map((e) =>
+            related.edges.has(e.id) || e.data?.bundle?.some((id) => related.edges.has(id))
+              ? { ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } }
+              : e,
           )
-        : baseEdges,
-    [baseEdges, related],
+        : shownEdges,
+    [shownEdges, related],
   );
 
   // Keyboard shortcuts on the diagram.

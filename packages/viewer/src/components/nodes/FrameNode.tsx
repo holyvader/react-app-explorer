@@ -4,7 +4,7 @@ import { memo, type MouseEvent, type PointerEvent } from "react";
 import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
 import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
-import { useLod } from "../lod.ts";
+import { COMPACT_BELOW, useLod } from "../lod.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
@@ -74,14 +74,37 @@ function useRoomAsCanvas() {
  * A container drawn around what it holds: a file module (its declarations inside) or a folder
  * (files inside). Dragged by its header; what it holds moves with it.
  */
-function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
+function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
   const { node, element, refused } = data;
   const folder = element.kind === "folder";
   const route = element.kind === "route" ? node?.route : undefined;
   const Icon = folder ? IconFolder : route ? KIND_META.route.icon : KIND_META.module.icon;
   const room = useRoomAsCanvas();
+  const { fitView } = useReactFlow();
   // zoomed out: the title only (larger, canvas.css), no chips or actions
   const detailed = useLod() === "full";
+  const title = !folder && !route && node ? node.filePath : element.name;
+  // zoomed far out: one block (what's inside hidden, graph/collapse.ts), selected and dragged anywhere;
+  // a double-click zooms in until it opens
+  if (data.collapsed) {
+    return (
+      <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-collapsed="" data-change={data.change}>
+        <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
+        <div
+          className={`rae-frame__block ${FRAME_HANDLE}`}
+          title={`${title}\n${data.collapsed} inside · double-click to zoom in`}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            void fitView({ nodes: [{ id }], minZoom: COMPACT_BELOW, maxZoom: 1, padding: 0.1, duration: 300 });
+          }}
+        >
+          <div className="rae-frame__block-title">{title}</div>
+          <div className="rae-frame__block-count">{data.collapsed} inside</div>
+        </div>
+        <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
+      </div>
+    );
+  }
   return (
     <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-refused={refused || undefined} data-change={data.change}>
       {data.change && (
@@ -97,7 +120,7 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
         <div className="rae-frame__title">
           {/* a file by its path, a route by its URL, a folder by its name: one mono line */}
           <div className="rae-name" title={data.path ?? node?.filePath}>
-            {!folder && !route && node ? node.filePath : element.name}
+            {title}
           </div>
           {route && <div className="rae-sub">{routeCaption(route)}</div>}
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}

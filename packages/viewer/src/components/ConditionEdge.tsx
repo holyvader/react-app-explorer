@@ -7,7 +7,15 @@ import { relationWord } from "../lib/relationWords.ts";
 import { useLod } from "./lod.ts";
 
 /** `lane` (px) and `step` (its position among them): relations between the same two nodes, side by side. */
-export type ConditionEdgeData = { edge: GraphEdge; related?: boolean; lane?: number; step?: number; change?: "added" | "removed" };
+export type ConditionEdgeData = {
+  edge: GraphEdge;
+  related?: boolean;
+  lane?: number;
+  step?: number;
+  change?: "added" | "removed";
+  /** Zoomed out: the relations this edge stands for, between collapsed frames (graph/collapse.ts). */
+  bundle?: string[];
+};
 
 /** Labels of side-by-side relations: this far apart, one under another (px). */
 const LABEL_STEP = 24;
@@ -24,6 +32,15 @@ export type ConditionFlowEdge = Edge<ConditionEdgeData, "condition">;
  * A relation edge, floating (attached where the line between the nodes crosses their borders),
  * labelled with the relation and its render conditions. Colour and dash come from canvas.css.
  */
+/** Long edges stretch their dashes; a merged edge is thicker the more it stands for (1px → 6px). */
+function strokeStyle(length: number, merged = 0): CSSProperties | undefined {
+  if (length <= DASH_LIMIT && merged < 2) return undefined;
+  return {
+    ...(length > DASH_LIMIT ? { "--ds": length / DASH_LIMIT } : {}),
+    ...(merged > 1 ? { "--ew": `${Math.min(6, 1 + Math.log2(merged))}px` } : {}),
+  } as CSSProperties;
+}
+
 function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<ConditionFlowEdge>) {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
@@ -48,7 +65,7 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
   ].join("\n");
   return (
     <>
-      <BaseEdge path={path} markerEnd={labelled ? markerEnd : undefined} style={length > DASH_LIMIT ? ({ "--ds": length / DASH_LIMIT } as CSSProperties) : undefined} />
+      <BaseEdge path={path} markerEnd={labelled ? markerEnd : undefined} style={strokeStyle(length, data.bundle?.length)} />
       {labelled && (
         <EdgeLabelRenderer>
           <div

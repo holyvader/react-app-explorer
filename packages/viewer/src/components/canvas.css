@@ -556,8 +556,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rae-canvas[data-lod="overview"] .rae-frame__header .rae-icon,
-.rae-canvas[data-lod="overview"] .rae-frame__header .rae-sub { display: none; }
-.rae-canvas[data-lod="overview"] .rae-frame__title .rae-name { font-size: 26px; line-height: 34px; font-weight: 600; }
-.rae-canvas[data-lod="overview"] .react-flow__edge.rae-edge path.react-flow__edge-path { vector-effect: non-scaling-stroke; --ew: 1px; }
-.rae-canvas[data-lod="overview"] .react-flow__edge.rae-edge--related path.react-flow__edge-path { --ew: 2px; }
+.rae-canvas:is([data-lod="overview"], [data-lod="far"]) .rae-frame__header .rae-icon,
+.rae-canvas:is([data-lod="overview"], [data-lod="far"]) .rae-frame__header .rae-sub { display: none; }
+.rae-canvas:is([data-lod="overview"], [data-lod="far"]) .rae-frame__title .rae-name { font-size: 26px; line-height: 34px; font-weight: 600; }
+.rae-canvas:is([data-lod="overview"], [data-lod="far"]) .react-flow__edge.rae-edge path.react-flow__edge-path { vector-effect: non-scaling-stroke; --ew: 1px; }
+.rae-canvas:is([data-lod="overview"], [data-lod="far"]) .react-flow__edge.rae-edge--related path.react-flow__edge-path { --ew: 2px; }
+
+/* Collapsed frames (overview / far, graph/collapse.ts): one block, its title sized to the block
+   (container units), how many it holds under it. Selected and dragged anywhere. */
+.rae-frame[data-collapsed] { background: var(--chakra-colors-card-bg); border-width: 1.5px; }
+.rae-frame[data-collapsed][data-kind="folder"] { background: var(--chakra-colors-bg-subtle); }
+.rae-frame__block {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2cqh;
+  padding: 0 6cqw;
+  cursor: grab;
+  overflow: hidden;
+}
+.rae-frame__block-title {
+  font: 600 clamp(24px, min(9cqw, 32cqh), 400px) / 1.15 var(--chakra-fonts-mono);
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* a long path keeps its end (the file name) */
+  text-align: left;
+}
+.rae-frame__block-count { font: clamp(18px, min(5cqw, 18cqh), 240px) / 1.2 var(--chakra-fonts-body); color: var(--fg-subtle); }
+.react-flow__node:hover > .rae-frame[data-collapsed] { border-color: var(--chakra-colors-border-emphasized); }

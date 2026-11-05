@@ -21,6 +21,8 @@ export type ElementNodeData = {
   undrawnContents?: number;
   /** Diff snapshots (overlay on): how it changed against the base. */
   change?: ChangeKind;
+  /** Zoomed out, a frame drawn as one block: how many drawn elements it hides (graph/collapse.ts). */
+  collapsed?: number;
   /** Frame refuses the card being dragged over it. */
   refused?: boolean;
 };
