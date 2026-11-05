@@ -3,31 +3,21 @@
  * at the zoomed-out fit, at 0.5× and at 1×, timing frames (requestAnimationFrame intervals) in the page.
  * Prereq: a big snapshot (e2e/benchSnapshot.ts) and a dev server on it:
  *   RAE_SNAPSHOTS=<out dir> node_modules/.bin/vite --port 5199 --strictPort
- * Run: bun packages/viewer/e2e/bench.ts [chromium|webkit|firefox] [snapshot file] [screenshot dir]
- * Browser: PW_CHROMIUM_PATH=<chromium binary> for chromium; webkit from Playwright's install (once:
- * `playwright-core install webkit`); firefox is the installed Firefox over WebDriver BiDi (channel
- * `moz-firefox`, PW_FIREFOX_CHANNEL to change it): Playwright's own Firefox build doesn't start on macOS 27.
+ * Run: bun packages/viewer/e2e/bench.ts [chromium|webkit] [snapshot file] [screenshot dir]
+ * Browser: PW_CHROMIUM_PATH=<chromium binary> for chromium; webkit from Playwright's install.
  */
-import { chromium, firefox, webkit } from "playwright-core";
+import { chromium, webkit } from "playwright-core";
 
 const url = process.env.VIEWER_URL ?? "http://localhost:5199/";
 const [engine = "chromium", file, shots] = process.argv.slice(2);
-const browser = engine === "webkit" ? await webkit.launch() : engine === "firefox" ? await firefox.launch({ channel: process.env.PW_FIREFOX_CHANNEL ?? "moz-firefox" }) : await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH });
+const browser = engine === "webkit" ? await webkit.launch() : await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 const errors = new Map<string, number>();
 page.on("pageerror", (e) => {
   if (!errors.has(e.message)) console.error("page error:", e.stack?.split("\n").slice(0, 6).join("\n"));
   errors.set(e.message, (errors.get(e.message) ?? 0) + 1);
 });
-// (about:blank first: Firefox refuses localStorage there)
-if (file)
-  await page.addInitScript((f) => {
-    try {
-      localStorage.setItem("rae.lastSnapshot", f);
-    } catch {
-      /* not the viewer's page yet */
-    }
-  }, file);
+if (file) await page.addInitScript((f) => localStorage.setItem("rae.lastSnapshot", f), file);
 // Frame timestamps from the page's own start, in its own world: frames() reads the ones in its span.
 await page.addInitScript(() => {
   const w = window as any;
@@ -115,24 +105,26 @@ const zoom = async () => {
   for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 120);
 };
 
+// BENCH_STAGES: which to run (fit, zoom, mid, full; default all)
+const stages = new Set((process.env.BENCH_STAGES ?? "fit,zoom,mid,full").split(","));
 const results: Record<string, unknown> = { engine, file: file ?? "(last)", placeMs };
 results.fitDom = await dom();
 if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-fit.png` });
-results.fitPan = await frames(pan);
-results.fitZoom = await frames(zoom);
+if (stages.has("fit")) results.fitPan = await frames(pan);
+if (stages.has("zoom")) results.fitZoom = await frames(zoom);
 // 0.5×, centred: the readable middle
 await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
 for (let i = 0; i < 40 && (await dom()).zoom < 0.5; i++) await page.mouse.wheel(0, -100);
 await page.waitForTimeout(800);
 results.midDom = await dom();
 if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-mid.png` });
-results.midPan = await frames(pan);
+if (stages.has("mid")) results.midPan = await frames(pan);
 // 1×: full detail (labels, dashes, arrows)
 for (let i = 0; i < 40 && (await dom()).zoom < 1; i++) await page.mouse.wheel(0, -100);
 await page.waitForTimeout(800);
 results.fullDom = await dom();
 if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-full.png` });
-results.fullPan = await frames(pan);
+if (stages.has("full")) results.fullPan = await frames(pan);
 if (errors.size) results.errors = Object.fromEntries(errors);
 console.log(JSON.stringify(results));
 await browser.close();
