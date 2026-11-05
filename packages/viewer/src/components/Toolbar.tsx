@@ -80,8 +80,8 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
     <Flex align="center" gap="2.5" pl="3.5" pr="3" h="44px" flexShrink={0} minW="0" bg="panel.bg" borderBottomWidth="1px" borderColor="border">
       <Flex align="center" gap="9px" flexShrink={0}>
         <BrandMark size={22} />
-        <Text fontSize={textPx(13)} fontWeight="semibold">
-          Explorer
+        <Text fontSize={textPx(13)} fontWeight="bold" letterSpacing="0.04em" color="fg" aria-label="React App Explorer" title="React App Explorer">
+          RAE
         </Text>
       </Flex>
       <Divider />
