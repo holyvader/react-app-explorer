@@ -589,3 +589,13 @@
 }
 .rae-frame__block-count { font: clamp(18px, min(5cqw, 18cqh), 240px) / 1.2 var(--chakra-fonts-body); color: var(--fg-subtle); }
 .react-flow__node:hover > .rae-frame[data-collapsed] { border-color: var(--chakra-colors-border-emphasized); }
+/* Far out, a small block's title is a pixel or two on screen, and painting hundreds of them was most
+   of a pan's cost in WebKit (23 → 48 fps): only blocks big enough to read keep a title (the
+   native tooltip still names every block). */
+.rae-canvas[data-lod="far"] .rae-frame__block-count,
+.rae-canvas[data-lod="far"] .rae-frame__block-title { display: none; }
+@container (min-width: 1200px) {
+  .rae-canvas[data-lod="far"] .rae-frame__block-title { display: block; }
+}
+/* far out a border is a fraction of a pixel: blocks read by their fill */
+.rae-canvas[data-lod="far"] .rae-frame[data-collapsed] { background: var(--chakra-colors-bg-emphasized); }

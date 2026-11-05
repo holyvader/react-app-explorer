@@ -6,6 +6,7 @@ import type { DrawnElement, DrawnGraph } from "./drawn.ts";
  * they hold. Positions are relative to the container, as React Flow reads them.
  * Incremental changes and drags are handled by ./placement.ts; ELK runs for the
  * first placement, "Re-layout", and whenever a local placement can't settle.
+ * Big diagrams (PACK_FROM elements) pack their top level instead: see packedLayout.
  */
 
 export interface PlacedElement {
@@ -47,10 +48,15 @@ const LAYERED = {
   "elk.layered.spacing.nodeNodeBetweenLayers": "64",
 };
 
-export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
+/** From this many drawn elements (with frames among them), the top level is packed (packedLayout). */
+export const PACK_FROM = 300;
+
+const framePadding = `[top=${PADDING.top},left=${PADDING.left},bottom=${PADDING.bottom},right=${PADDING.right}]`;
+
+/** ELK nodes for elements and what they hold, each frame laid out layered around its contents. */
+function elkNodes(graph: DrawnGraph) {
   const kids = new Map<string | null, DrawnElement[]>();
   for (const e of graph.elements) kids.set(e.parent, [...(kids.get(e.parent) ?? []), e]);
-
   const nodeOf = (e: DrawnElement): ElkNode => {
     const inside = kids.get(e.id) ?? [];
     if (!inside.length) return { id: e.id, width: cardWidthOf(e), height: CARD_HEIGHT };
@@ -58,7 +64,7 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
       id: e.id,
       layoutOptions: {
         ...LAYERED,
-        "elk.padding": `[top=${PADDING.top},left=${PADDING.left},bottom=${PADDING.bottom},right=${PADDING.right}]`,
+        "elk.padding": framePadding,
         // Laying out downwards, ELK reads the pair as (height,width).
         "elk.nodeSize.minimum": `(${CARD_HEIGHT},${frameWidthOf(e.name)})`,
         "elk.nodeSize.constraints": "MINIMUM_SIZE",
@@ -66,7 +72,39 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
       children: inside.map(nodeOf),
     };
   };
+  return { kids, nodeOf };
+}
 
+/** ELK's result as placed elements (container-relative); `lift` moves a synthetic group's contents to the top level. */
+function placedFrom(graph: DrawnGraph, nodes: ElkNode[] = [], lift?: string): PlacedElement[] {
+  const byId = new Map(graph.elements.map((e) => [e.id, e]));
+  const out: PlacedElement[] = [];
+  const walk = (list: ElkNode[] = [], dx = 0, dy = 0) => {
+    for (const n of list) {
+      if (n.id === lift) {
+        walk(n.children, n.x ?? 0, n.y ?? 0);
+        continue;
+      }
+      const element = byId.get(n.id);
+      if (!element) continue;
+      out.push({
+        element,
+        holds: (n.children?.length ?? 0) > 0,
+        x: (n.x ?? 0) + dx,
+        y: (n.y ?? 0) + dy,
+        width: n.width ?? cardWidthOf(element),
+        height: n.height ?? CARD_HEIGHT,
+      });
+      walk(n.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}
+
+export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
+  if (graph.elements.length >= PACK_FROM && graph.elements.some((e) => e.parent)) return packedLayout(graph);
+  const { kids, nodeOf } = elkNodes(graph);
   const placed = await (await loadElk()).layout({
     id: "root",
     layoutOptions: {
@@ -78,26 +116,68 @@ export async function layoutAll(graph: DrawnGraph): Promise<PlacedElement[]> {
     children: (kids.get(null) ?? []).map(nodeOf),
     edges: [...graph.relations.map(({ id, source, target }) => ({ id, sources: [source], targets: [target] })), ...gridEdges(graph)],
   });
+  return placedFrom(graph, placed.children);
+}
 
-  const byId = new Map(graph.elements.map((e) => [e.id, e]));
-  const out: PlacedElement[] = [];
-  const walk = (nodes: ElkNode[] = []) => {
-    for (const n of nodes) {
-      const element = byId.get(n.id);
-      if (!element) continue;
-      out.push({
-        element,
-        holds: (n.children?.length ?? 0) > 0,
-        x: n.x ?? 0,
-        y: n.y ?? 0,
-        width: n.width ?? cardWidthOf(element),
-        height: n.height ?? CARD_HEIGHT,
-      });
-      walk(n.children);
-    }
+/** The synthetic group holding a packed layout's loose top-level cards (never drawn). */
+const LOOSE = "\u0000loose";
+
+/**
+ * A big diagram, packed: laid out as one layered graph, its layers became rows of hundreds of
+ * nodes (2,800 elements: 263,000 × 40,000 px, ~10 s). Instead each top-level frame is laid out
+ * layered on its own (its relations inside), the loose top-level cards together in one layered
+ * group (so they keep their flow), and those blocks are packed in file-path order — a folder's
+ * files side by side — to about the viewport's shape (28,000 × 14,000 px, ~1 s). Relations
+ * between blocks don't place them.
+ */
+async function packedLayout(graph: DrawnGraph): Promise<PlacedElement[]> {
+  const { kids, nodeOf } = elkNodes(graph);
+  const parentOf = new Map(graph.elements.map((e) => [e.id, e.parent]));
+  const topOf = (id: string) => {
+    let top = id;
+    for (let p = parentOf.get(top); p; p = parentOf.get(top)) top = p;
+    return top;
   };
-  walk(placed.children);
-  return out;
+  const tops = kids.get(null) ?? [];
+  const loose = new Set(tops.filter((e) => !kids.has(e.id)).map((e) => e.id));
+  const blockOf = (id: string) => {
+    const top = topOf(id);
+    return loose.has(top) ? LOOSE : top;
+  };
+  // each relation goes into the block holding both its ends; between blocks it's left out
+  const edgesIn = new Map<string, { id: string; sources: string[]; targets: string[] }[]>();
+  for (const r of [...graph.relations.map(({ id, source, target }) => ({ id, sources: [source], targets: [target] })), ...gridEdges(graph)]) {
+    const block = blockOf(r.sources[0]!);
+    if (block === blockOf(r.targets[0]!)) edgesIn.set(block, [...(edgesIn.get(block) ?? []), r]);
+  }
+  const frames = tops
+    .filter((e) => !loose.has(e.id))
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((e) => {
+      const n = nodeOf(e);
+      return { ...n, layoutOptions: { ...n.layoutOptions, "elk.hierarchyHandling": "INCLUDE_CHILDREN", "elk.spacing.nodeNode": String(SPACING) }, edges: edgesIn.get(e.id) ?? [] };
+    });
+  const group: ElkNode[] = loose.size
+    ? [
+        {
+          id: LOOSE,
+          layoutOptions: { ...LAYERED, "elk.spacing.nodeNode": String(SPACING), "elk.spacing.componentComponent": "48" },
+          children: tops.filter((e) => loose.has(e.id)).map(nodeOf),
+          edges: edgesIn.get(LOOSE) ?? [],
+        },
+      ]
+    : [];
+  const placed = await (await loadElk()).layout({
+    id: "root",
+    layoutOptions: {
+      "elk.algorithm": "rectpacking",
+      "elk.hierarchyHandling": "SEPARATE_CHILDREN",
+      "elk.aspectRatio": "1.6",
+      "elk.spacing.nodeNode": "48",
+    },
+    children: [...group, ...frames],
+  });
+  return placedFrom(graph, placed.children, LOOSE);
 }
 
 /**

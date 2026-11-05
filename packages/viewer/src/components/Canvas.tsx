@@ -484,17 +484,15 @@ export function Canvas() {
     ];
   }, [baseEdges, collapse]);
 
-  const edges = useMemo<ConditionFlowEdge[]>(
-    () =>
-      related.edges.size
-        ? shownEdges.map((e) =>
-            related.edges.has(e.id) || e.data?.bundle?.some((id) => related.edges.has(id))
-              ? { ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } }
-              : e,
-          )
-        : shownEdges,
-    [shownEdges, related],
-  );
+  // Far out (a big diagram's whole map), only the selection's edges: thousands of lines across the
+  // map read as nothing, and cost the most to draw.
+  const mapOnly = lod === "far" && collapse.frames.size > 0;
+  const edges = useMemo<ConditionFlowEdge[]>(() => {
+    const isRelated = (e: ConditionFlowEdge) => related.edges.has(e.id) || !!e.data?.bundle?.some((id) => related.edges.has(id));
+    const mark = (e: ConditionFlowEdge) => ({ ...e, className: `${e.className} rae-edge--related`, zIndex: 2, data: { ...e.data!, related: true } });
+    if (mapOnly) return shownEdges.filter(isRelated).map(mark);
+    return related.edges.size ? shownEdges.map((e) => (isRelated(e) ? mark(e) : e)) : shownEdges;
+  }, [shownEdges, related, mapOnly]);
 
   // Keyboard shortcuts on the diagram.
   useEffect(() => {
@@ -635,7 +633,7 @@ export function Canvas() {
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={() => select(undefined)}
-          minZoom={0.05}
+          minZoom={0.02}
           maxZoom={2}
           fitView
           fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}

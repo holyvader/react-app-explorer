@@ -3,21 +3,42 @@
  * at the zoomed-out fit, at 0.5× and at 1×, timing frames (requestAnimationFrame intervals) in the page.
  * Prereq: a big snapshot (e2e/benchSnapshot.ts) and a dev server on it:
  *   RAE_SNAPSHOTS=<out dir> node_modules/.bin/vite --port 5199 --strictPort
- * Run: bun packages/viewer/e2e/bench.ts [chromium|webkit] [snapshot file] [screenshot dir]
- * Browser: PW_CHROMIUM_PATH=<chromium binary> for chromium; webkit from Playwright's install.
+ * Run: bun packages/viewer/e2e/bench.ts [chromium|webkit|firefox] [snapshot file] [screenshot dir]
+ * Browser: PW_CHROMIUM_PATH=<chromium binary> for chromium; webkit from Playwright's install (once:
+ * `playwright-core install webkit`); firefox is the installed Firefox over WebDriver BiDi (channel
+ * `moz-firefox`, PW_FIREFOX_CHANNEL to change it): Playwright's own Firefox build doesn't start on macOS 27.
  */
-import { chromium, webkit } from "playwright-core";
+import { chromium, firefox, webkit } from "playwright-core";
 
 const url = process.env.VIEWER_URL ?? "http://localhost:5199/";
 const [engine = "chromium", file, shots] = process.argv.slice(2);
-const browser = engine === "webkit" ? await webkit.launch() : await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH });
+const browser = engine === "webkit" ? await webkit.launch() : engine === "firefox" ? await firefox.launch({ channel: process.env.PW_FIREFOX_CHANNEL ?? "moz-firefox" }) : await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 const errors = new Map<string, number>();
 page.on("pageerror", (e) => {
   if (!errors.has(e.message)) console.error("page error:", e.stack?.split("\n").slice(0, 6).join("\n"));
   errors.set(e.message, (errors.get(e.message) ?? 0) + 1);
 });
-if (file) await page.addInitScript((f) => localStorage.setItem("rae.lastSnapshot", f), file);
+// (about:blank first: Firefox refuses localStorage there)
+if (file)
+  await page.addInitScript((f) => {
+    try {
+      localStorage.setItem("rae.lastSnapshot", f);
+    } catch {
+      /* not the viewer's page yet */
+    }
+  }, file);
+// Frame timestamps from the page's own start, in its own world: frames() reads the ones in its span.
+await page.addInitScript(() => {
+  const w = window as any;
+  w.__benchFrames = [];
+  const tick = (t: number) => {
+    w.__benchFrames.push(t);
+    if (w.__benchFrames.length > 20000) w.__benchFrames.splice(0, 10000);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+});
 // BENCH_CSS: extra CSS for experiments (what costs what)
 if (process.env.BENCH_CSS) await page.addInitScript((css) => addEventListener("DOMContentLoaded", () => document.head.append(Object.assign(document.createElement("style"), { textContent: css }))), process.env.BENCH_CSS);
 await page.goto(url);
@@ -46,26 +67,16 @@ const dom = () =>
 
 /** Frame intervals while `act` runs (and 300 ms after, for what it left to render). */
 async function frames(act: () => Promise<void>) {
-  await page.evaluate(() => {
-    const w = window as any;
-    w.__frames = [];
-    let last = performance.now();
-    w.__benchOn = true;
-    const tick = (t: number) => {
-      w.__frames.push(t - last);
-      last = t;
-      if (w.__benchOn) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
+  const from: number = await page.evaluate(() => performance.now());
   const start = Date.now();
   await act();
   await page.waitForTimeout(300);
   const ms = Date.now() - start;
-  const f: number[] = await page.evaluate(() => {
-    (window as any).__benchOn = false;
-    return (window as any).__frames.slice(1);
-  });
+  const f: number[] = await page.evaluate((t0) => {
+    const ts: number[] = ((window as any).__benchFrames ?? []).filter((t: number) => t >= t0);
+    return ts.slice(1).map((t, i) => t - ts[i]!);
+  }, from);
+  if (!f.length) return { fps: 0, ms, p50: 0, p95: 0, worst: 0, over50: 0, note: "no animation frames recorded" };
   const sorted = [...f].sort((a, b) => a - b);
   const mean = f.reduce((a, b) => a + b, 0) / f.length;
   return {
