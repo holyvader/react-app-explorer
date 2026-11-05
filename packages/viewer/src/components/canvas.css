@@ -103,10 +103,10 @@
 .rae-card[data-kind="folder"] .rae-card__tile,
 .rae-card[data-kind="module"] .rae-card__tile { color: var(--fg-subtle); }
 .rae-card__text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.rae-card .rae-name { font-size: 13.5px; font-weight: 600; line-height: 18px; }
+.rae-card .rae-name { font-size: 15px; font-weight: 600; line-height: 20px; }
 .rae-card__caption {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 12.5px;
+  line-height: 16px;
   color: var(--k-fg);
   white-space: nowrap;
   overflow: hidden;
@@ -149,8 +149,8 @@
 .rae-icon { color: var(--k); flex-shrink: 0; display: inline-flex; }
 .rae-name {
   font-weight: 600;
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 14.5px;
+  line-height: 20px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -158,7 +158,7 @@
 }
 .rae-sub {
   font-family: var(--chakra-fonts-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--fg-subtle);
   white-space: nowrap;
   overflow: hidden;
@@ -169,13 +169,13 @@
 .rae-badge,
 .rae-chip {
   flex-shrink: 0;
-  font-size: 10.5px;
-  line-height: 18px;
+  font-size: 11.5px;
+  line-height: 19px;
   padding: 0 6px;
   border-radius: 4px;
   white-space: nowrap;
   color: var(--chakra-colors-fg-muted);
-  box-shadow: inset 0 0 0 1px var(--chakra-colors-border-emphasized);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 /* a file's Next.js role (page, layout…): the route's colour */
 .rae-badge--role { color: var(--chakra-colors-kind-route-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-kind-route-muted); }
@@ -234,7 +234,7 @@
 .rae-frame__header .rae-icon { color: var(--fg-subtle); }
 .rae-frame[data-kind="route"] .rae-frame__header .rae-icon { color: var(--k); }
 .rae-frame__title { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
-.rae-frame__title .rae-name { font-family: var(--chakra-fonts-mono); font-size: 11.5px; font-weight: 400; flex-shrink: 1; }
+.rae-frame__title .rae-name { font-family: var(--chakra-fonts-mono); font-size: 13px; font-weight: 400; flex-shrink: 1; }
 .rae-frame__title .rae-sub { flex-shrink: 10; }
 .rae-frame__header .rae-actions { visibility: hidden; padding: 2px; border-radius: 6px; background: var(--chakra-colors-bg-emphasized); }
 .rae-frame__header:hover .rae-actions,
@@ -282,7 +282,7 @@
   background: var(--canvas);
   border-radius: 2px;
   padding: 0 3px;
-  font: 10.5px/14px var(--chakra-fonts-mono);
+  font: 11.5px/16px var(--chakra-fonts-mono);
   color: var(--e);
   max-width: 240px;
   white-space: nowrap;
@@ -385,7 +385,7 @@
   border: 1px solid var(--chakra-colors-border-emphasized);
   border-radius: 8px;
   box-shadow: 0 12px 24px -8px rgb(0 0 0 / 0.6);
-  font: 12px/1.45 var(--chakra-fonts-body);
+  font: 13px/1.45 var(--chakra-fonts-body);
   animation: rae-tip-in 140ms ease-out;
 }
 @keyframes rae-tip-in {
@@ -395,8 +395,8 @@
 .rae-tip__head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 0; }
 .rae-tip__tile svg { width: 17px; height: 17px; }
 .rae-tip__titles { min-width: 0; }
-.rae-tip__title { font-weight: 600; font-size: 13.5px; line-height: 18px; }
-.rae-tip__caption { color: var(--k-fg); font-size: 11px; line-height: 14px; }
+.rae-tip__title { font-weight: 600; font-size: 15px; line-height: 20px; }
+.rae-tip__caption { color: var(--k-fg); font-size: 12px; line-height: 16px; }
 .rae-tip__path {
   margin: 8px 14px 0;
   font: 11px/1.5 var(--chakra-fonts-mono);
@@ -409,7 +409,7 @@
 .rae-tip__section { margin-top: 9px; }
 .rae-tip__label { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--chakra-colors-kind-module-fg); margin-bottom: 4px; }
 .rae-tip__code {
-  font: 11.5px/19px var(--chakra-fonts-mono);
+  font: 12.5px/20px var(--chakra-fonts-mono);
   background: var(--chakra-colors-syntax-bg);
   border: 1px solid var(--chakra-colors-border-muted);
   border-radius: 6px;

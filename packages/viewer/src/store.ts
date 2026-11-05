@@ -95,6 +95,11 @@ interface ExplorerState {
   /** Draw folders as frames around file modules. */
   folders: boolean;
   editor: EditorKind;
+  /**
+   * The editors installed here (`fetchEditors`): `undefined` until asked, `null` when the OS couldn't
+   * tell (all offered). Empty: none, so "Open in editor" is hidden.
+   */
+  editors?: EditorKind[] | null;
   searchOpen: boolean;
   /** Where nodes picked in search go (right-click on the canvas); viewport centre otherwise. */
   searchAnchor?: CanvasPoint;
@@ -163,6 +168,8 @@ interface ExplorerState {
   dropAt: (id: string, to: CanvasPoint) => void;
   arrange: (id: string) => Promise<void>;
   setEditor: (e: EditorKind) => void;
+  /** The installed editors; the chosen one falls back to the first of them when it isn't one (not stored). */
+  setEditors: (editors: EditorKind[] | null) => void;
   setSearchOpen: (open: boolean, anchor?: CanvasPoint) => void;
   setQuickAdd: (q: ExplorerState["quickAdd"]) => void;
   openMenu: (menu: ExplorerState["menu"]) => void;
@@ -557,6 +564,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setEditor: (editor) => {
       localStorage.setItem(KEYS.editor, editor);
       set({ editor });
+    },
+    setEditors: (editors) => {
+      const { editor } = get();
+      set({ editors, ...(editors?.length && !editors.includes(editor) ? { editor: editors[0] } : {}) });
     },
 
     setSearchOpen: (searchOpen, searchAnchor) => set({ searchOpen, ...(searchOpen ? { searchAnchor } : {}) }),

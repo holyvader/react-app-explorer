@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "vite";
+import { installedEditors } from "../scanner/src/editors.ts";
 import { gitOverview, gitRequests, gitSource, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
 
 const SOURCE_FILE = /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/;
@@ -50,6 +51,7 @@ function json(res: ServerResponse, status: number, body: unknown) {
  *   GET /api/fs?path=…        → directory listing for the scan folder picker
  *   POST /api/scan {path, types, merge, diff?} → runs the scanner CLI (under Bun), snapshot lands in the
  *                                                snapshots dir (diff: base / head / request refs)
+ *   GET /api/editors          → { editors: ["idea", "vscode"…] | null } (null: the OS couldn't be asked)
  *   GET /api/git?path=…, /api/git/requests?path=… → repo, branches; open pull / merge requests
  * Directory comes from RAE_SNAPSHOTS (absolute, or relative to the repo root).
  * Dev-only and local: it exposes the filesystem to the page, so never deploy this server.
@@ -121,6 +123,11 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
       server.middlewares.use("/api", (req, res, next) => {
         if (!isTrusted(req)) return json(res, 403, { error: "Forbidden: the snapshot API only serves the local viewer" });
         next();
+      });
+
+      // the editors the OS can open files with (their URL schemes), for "Open in editor"
+      server.middlewares.use("/api/editors", async (req, res) => {
+        json(res, 200, await installedEditors(new URL(req.url ?? "/", "http://x").searchParams.has("refresh")));
       });
 
       // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)

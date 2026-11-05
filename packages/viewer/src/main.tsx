@@ -1,4 +1,4 @@
-import { applyStoredColorMode, DesignSystemProvider } from "@rae/design-system";
+import { applyStoredColorMode, applyStoredTextSize, DesignSystemProvider } from "@rae/design-system";
 import "@xyflow/react/dist/style.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -13,6 +13,7 @@ if (/AppleWebKit/.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) document.docume
 // is loaded after, because the store reads its settings from localStorage as it loads.
 await syncStorage();
 applyStoredColorMode();
+applyStoredTextSize();
 const [{ App }, { useExplorer }] = await Promise.all([import("./App.tsx"), import("./store.ts"), import("./lib/selectionHistory.ts")]);
 
 // Dev-only handle for debugging and headless tests.

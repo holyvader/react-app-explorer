@@ -1,4 +1,4 @@
-import { ActionIconButton, Flex, Panel, PanelBar, Text } from "@rae/design-system";
+import { ActionIconButton, Flex, Panel, PanelBar, Text, textPx } from "@rae/design-system";
 import { IconDiff, IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../graph/tree.ts";
@@ -118,7 +118,7 @@ export function FileTree() {
       </Flex>
       {/* what was scanned, quietly */}
       <Flex align="center" h="28px" px="3" flexShrink={0} borderTopWidth="1px" borderColor="border.muted">
-        <Text fontFamily="mono" fontSize="10.5px" color="fg.subtle" truncate>
+        <Text fontFamily="mono" fontSize={textPx(10.5)} color="fg.subtle" truncate>
           {snapshot.stats.files} files · {Object.keys(snapshot.nodes).length} el · types {snapshot.stats.types ? "✓" : "–"} · {Math.round(snapshot.stats.durationMs)}ms
         </Text>
       </Flex>

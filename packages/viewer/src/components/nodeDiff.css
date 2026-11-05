@@ -5,7 +5,7 @@
   overflow: auto;
   max-height: calc(100dvh - 220px);
   background: var(--chakra-colors-syntax-bg);
-  font: 12px/1.55 var(--chakra-fonts-mono);
+  font: calc(12px * var(--rae-text-scale, 1))/1.55 var(--chakra-fonts-mono);
   color: var(--chakra-colors-fg);
 }
 .rae-cdiff table { border-collapse: collapse; width: 100%; table-layout: fixed; }
@@ -38,7 +38,7 @@
   padding: 3px 12px;
   cursor: pointer;
   color: var(--chakra-colors-fg-muted);
-  font: 11.5px var(--chakra-fonts-mono);
+  font: calc(11.5px * var(--rae-text-scale, 1)) var(--chakra-fonts-mono);
 }
 .rae-cdiff__fold button:hover { background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg); }
 .rae-cdiff__fold button:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1.5px; }

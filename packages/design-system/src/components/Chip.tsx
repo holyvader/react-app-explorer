@@ -1,7 +1,8 @@
 import { Badge, type BadgeProps } from "@chakra-ui/react";
 import type { BoundaryToken, NodeKindToken } from "../theme.ts";
+import { textPx } from "../textSize.ts";
 
-const CHIP = { rounded: "l1", px: "7px", h: "20px", fontSize: "11px", fontWeight: "normal", textTransform: "none" } as const;
+const CHIP = { rounded: "l1", px: "7px", h: "20px", fontSize: textPx(11), fontWeight: "normal", textTransform: "none" } as const;
 
 /** Chip coloured by graph node kind. */
 export function KindChip({ kind, children, ...rest }: { kind: NodeKindToken } & BadgeProps) {

@@ -1,4 +1,5 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
+import { textPx } from "./textSize.ts";
 
 /**
  * Design tokens for Explorer ("Explorer Final" in Claude Design: Graphite shell, Paper light mode).
@@ -8,15 +9,16 @@ import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
  * Note: no token may be called `value` (Chakra reads any object with a `value` key as a token).
  */
 const ok = (l: number, c: number, h: number, a?: number) => `oklch(${l} ${c} ${h}${a != null ? ` / ${a}` : ""})`;
+const scaled = (size: string) => `calc(${size} * var(--rae-text-scale, 1))`;
 const v = (light: string, dark: string) => ({ value: { _light: light, _dark: dark } });
 
 const HUE = { component: 210, hook: 300, serverAction: 55, function: 175, type: 140, route: 355, external: 90 } as const;
 
 const kind = (h: number) => ({
-  solid: v(ok(0.6, 0.12, h), ok(0.76, 0.12, h)),
-  subtle: v(ok(0.965, 0.02, h), ok(0.3, 0.05, h)),
-  muted: v(ok(0.86, 0.04, h), ok(0.45, 0.07, h)),
-  fg: v(ok(0.45, 0.1, h), ok(0.84, 0.09, h)),
+  solid: v(ok(0.53, 0.14, h), ok(0.76, 0.12, h)),
+  subtle: v(ok(0.96, 0.025, h), ok(0.3, 0.05, h)),
+  muted: v(ok(0.8, 0.06, h), ok(0.45, 0.07, h)),
+  fg: v(ok(0.4, 0.11, h), ok(0.84, 0.09, h)),
 });
 
 /** A Chakra colour palette (solid, contrast, fg, muted, subtle, emphasized, focusRing), for `colorPalette`. */
@@ -57,6 +59,15 @@ const config = defineConfig({
         heading: { value: "'IBM Plex Sans Variable', 'IBM Plex Sans', system-ui, -apple-system, sans-serif" },
         mono: { value: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, Menlo, monospace" },
       },
+      fontSizes: {
+        "2xs": { value: scaled("0.625rem") },
+        xs: { value: scaled("0.75rem") },
+        sm: { value: scaled("0.875rem") },
+        md: { value: scaled("1rem") },
+        lg: { value: scaled("1.125rem") },
+        xl: { value: scaled("1.25rem") },
+        "2xl": { value: scaled("1.5rem") },
+      },
       durations: {
         panel: { value: "200ms" },
         popover: { value: "140ms" },
@@ -67,14 +78,20 @@ const config = defineConfig({
         standard: { value: "cubic-bezier(0.22, 1, 0.36, 1)" },
       },
     },
+    // Every size follows the interface text size (`--rae-text-scale`, textSize.ts).
     textStyles: {
-      panelTitle: { value: { fontSize: "18px", lineHeight: "24px", fontWeight: 600, letterSpacing: "-0.01em" } },
-      cardName: { value: { fontSize: "13.5px", lineHeight: "18px", fontWeight: 600 } },
-      body: { value: { fontSize: "12.5px", lineHeight: "18px", fontWeight: 400 } },
-      sectionLabel: { value: { fontSize: "11.5px", lineHeight: "16px", fontWeight: 600, letterSpacing: "0.02em" } },
-      panelLabel: { value: { fontSize: "11px", lineHeight: "14px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" } },
-      caption: { value: { fontSize: "11px", lineHeight: "14px", fontWeight: 400 } },
-      code: { value: { fontFamily: "mono", fontSize: "11.5px", lineHeight: "19px" } },
+      "2xs": { value: { fontSize: "2xs", lineHeight: scaled("0.75rem") } },
+      xs: { value: { fontSize: "xs", lineHeight: scaled("1rem") } },
+      sm: { value: { fontSize: "sm", lineHeight: scaled("1.25rem") } },
+      md: { value: { fontSize: "md", lineHeight: scaled("1.5rem") } },
+      lg: { value: { fontSize: "lg", lineHeight: scaled("1.75rem") } },
+      panelTitle: { value: { fontSize: textPx(18), lineHeight: textPx(24), fontWeight: 600, letterSpacing: "-0.01em" } },
+      cardName: { value: { fontSize: textPx(13.5), lineHeight: textPx(18), fontWeight: 600 } },
+      body: { value: { fontSize: textPx(12.5), lineHeight: textPx(18), fontWeight: 400 } },
+      sectionLabel: { value: { fontSize: textPx(12.5), lineHeight: textPx(17), fontWeight: 600, letterSpacing: "0.02em" } },
+      panelLabel: { value: { fontSize: textPx(11), lineHeight: textPx(14), fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" } },
+      caption: { value: { fontSize: textPx(11), lineHeight: textPx(14), fontWeight: 400 } },
+      code: { value: { fontFamily: "mono", fontSize: textPx(11.5), lineHeight: textPx(19) } },
       edgeLabel: { value: { fontFamily: "mono", fontSize: "10.5px", lineHeight: "14px" } },
     },
     semanticTokens: {
@@ -101,12 +118,12 @@ const config = defineConfig({
         },
         shell: { bg: v("#EFEEEA", "#141518"), border: v("#E2E0DA", "#26282D") },
         panel: { bg: v("#FFFFFF", "#18191D") },
-        canvas: { bg: v("#FCFBF9", "#121316"), grid: v("#ECEAE4", "#1B1C20"), dot: v("#DAD7CF", "#26282D") },
-        card: { bg: v("#FFFFFF", "#1B1C20"), bgSelected: v("#FFFFFF", "#1E2025"), border: v("#E2E0DA", "#2C2E34"), frame: v("#FAF9F7", "#17181C") },
+        canvas: { bg: v("#F6F5F1", "#121316"), grid: v("#EDEBE5", "#1B1C20"), dot: v("#CFCBC2", "#26282D") },
+        card: { bg: v("#FFFFFF", "#1B1C20"), bgSelected: v("#FFFFFF", "#1E2025"), border: v("#C9C5BC", "#2C2E34"), frame: v("#FCFBF9", "#17181C") },
         // Selection (selected and related nodes, the selected tree row, the primary action).
         selection: {
           solid: v(ok(0.56, 0.2, 262), ok(0.7, 0.15, 262)),
-          related: v(ok(0.78, 0.09, 262), ok(0.48, 0.1, 262)),
+          related: v(ok(0.7, 0.12, 262), ok(0.48, 0.1, 262)),
           ring: v(ok(0.56, 0.2, 262, 0.18), ok(0.7, 0.15, 262, 0.22)),
           rowBg: v(ok(0.94, 0.035, 262), ok(0.24, 0.03, 262)),
           treeRow: v(ok(0.9, 0.06, 262), ok(0.3, 0.06, 262)),
@@ -116,7 +133,7 @@ const config = defineConfig({
         // Kept for `colorPalette="component"` (progress bars).
         component: palette(HUE.component, [ok(0.6, 0.12, HUE.component), ok(0.76, 0.12, HUE.component)], ["#FFFFFF", "#0E1015"]),
         kind: {
-          module: { solid: v("#8A877F", "#AEB1B8"), subtle: v("#EEEDE9", "#26282D"), muted: v("#D9D6CE", "#33353B"), fg: v("#4A4844", "#C7C9CE") },
+          module: { solid: v("#6F6C66", "#AEB1B8"), subtle: v("#EEEDE9", "#26282D"), muted: v("#B9B5AC", "#33353B"), fg: v("#3D3B37", "#C7C9CE") },
           component: kind(HUE.component),
           hook: kind(HUE.hook),
           serverAction: kind(HUE.serverAction),
@@ -138,20 +155,20 @@ const config = defineConfig({
         },
         // Edge stroke, edge label, filter dot and details badge all use these.
         relation: {
-          imports: v("#4A4844", "#AEB1B8"), // dashed when lazy; faint when type-only
-          importsMuted: v("#A3A097", "#6E727A"),
-          declares: v("#8A877F", "#8A8D94"),
-          renders: v(ok(0.6, 0.12, HUE.component), ok(0.76, 0.12, HUE.component)),
-          usesHook: v(ok(0.6, 0.13, HUE.hook), ok(0.76, 0.12, HUE.hook)),
-          invokes: v(ok(0.6, 0.11, HUE.function), ok(0.76, 0.11, HUE.function)),
-          invokesAction: v(ok(0.64, 0.14, HUE.serverAction), ok(0.78, 0.13, HUE.serverAction)),
-          usesType: v(ok(0.6, 0.13, HUE.type), ok(0.76, 0.13, HUE.type)),
-          navigates: v(ok(0.6, 0.15, HUE.route), ok(0.76, 0.13, HUE.route)),
-          fetches: v(ok(0.58, 0.1, 195), ok(0.78, 0.1, 195)), // dash 6 3
-          revalidates: v("#8A877F", "#8A8D94"), // dash 1 3
-          invalidates: v(ok(0.5, 0.13, HUE.hook), ok(0.76, 0.12, HUE.hook)), // dash 1 3
-          routeFile: v(ok(0.72, 0.1, 355), ok(0.7, 0.1, 355)), // dash 3 3
-          runsBefore: v(ok(0.56, 0.18, 25), ok(0.72, 0.16, 25)),
+          imports: v("#3D3B37", "#AEB1B8"), // dashed when lazy; faint when type-only
+          importsMuted: v("#8A877F", "#6E727A"),
+          declares: v("#6F6C66", "#8A8D94"),
+          renders: v(ok(0.5, 0.14, HUE.component), ok(0.76, 0.12, HUE.component)),
+          usesHook: v(ok(0.5, 0.16, HUE.hook), ok(0.76, 0.12, HUE.hook)),
+          invokes: v(ok(0.5, 0.12, HUE.function), ok(0.76, 0.11, HUE.function)),
+          invokesAction: v(ok(0.54, 0.15, HUE.serverAction), ok(0.78, 0.13, HUE.serverAction)),
+          usesType: v(ok(0.5, 0.14, HUE.type), ok(0.76, 0.13, HUE.type)),
+          navigates: v(ok(0.5, 0.17, HUE.route), ok(0.76, 0.13, HUE.route)),
+          fetches: v(ok(0.5, 0.11, 195), ok(0.78, 0.1, 195)), // dash 6 3
+          revalidates: v("#6F6C66", "#8A8D94"), // dash 1 3
+          invalidates: v(ok(0.45, 0.15, HUE.hook), ok(0.76, 0.12, HUE.hook)), // dash 1 3
+          routeFile: v(ok(0.6, 0.12, 355), ok(0.7, 0.1, 355)), // dash 3 3
+          runsBefore: v(ok(0.52, 0.19, 25), ok(0.72, 0.16, 25)),
         },
         // Code tokens (props, signatures, hooks): shared by the node tooltip and the sidebar.
         syntax: {

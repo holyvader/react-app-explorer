@@ -12,6 +12,7 @@ import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { gitOverview, gitPath, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
+import { installedEditors } from "@rae/scanner/editors";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
 
 const { values } = parseArgs({
@@ -126,7 +127,7 @@ function listDir(path: string) {
 }
 
 /** The running scan: its snapshot file (once written) and how to stop it. */
-const EDITOR_SCHEMES = new Set(["idea:", "webstorm:", "vscode:", "cursor:"]);
+const EDITOR_SCHEMES = new Set(["idea:", "webstorm:", "vscode:", "cursor:", "zed:"]);
 
 type ScanJob = { file?: string; abort: AbortController };
 let scanning: ScanJob | undefined;
@@ -200,6 +201,8 @@ async function api(req: Request, url: URL): Promise<Response> {
     return json({ ok: true });
   }
 
+  // the editors the OS can open files with (their URL schemes), for "Open in editor"
+  if (path === "/api/editors") return json(await installedEditors(url.searchParams.has("refresh")));
   // Open a file in an editor: the app's web view won't follow other apps' URL schemes, so the OS does.
   if (path === "/api/open") {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);

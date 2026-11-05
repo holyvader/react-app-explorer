@@ -1,13 +1,32 @@
 import { serverIsDesktop } from "./api.ts";
 
-export type EditorKind = "idea" | "webstorm" | "vscode" | "cursor";
+export type EditorKind = "idea" | "webstorm" | "vscode" | "cursor" | "zed";
 
 export const EDITORS: { value: EditorKind; label: string }[] = [
   { value: "idea", label: "IntelliJ IDEA" },
   { value: "webstorm", label: "WebStorm" },
   { value: "vscode", label: "VS Code" },
   { value: "cursor", label: "Cursor" },
+  { value: "zed", label: "Zed" },
 ];
+
+/**
+ * The editors installed here (the server asks the OS which apps handle their URL schemes), or
+ * `null` when it couldn't tell: then every editor is offered.
+ */
+/** Whether there is an editor to open files in (unknown counts as yes). */
+export const canOpenEditor = (editors: EditorKind[] | null | undefined) => editors == null || editors.length > 0;
+
+export async function fetchEditors(): Promise<EditorKind[] | null> {
+  try {
+    const res = await fetch("/api/editors");
+    if (!res.ok) return null;
+    const { editors } = (await res.json()) as { editors: string[] | null };
+    return editors ? EDITORS.map((e) => e.value).filter((v) => editors.includes(v)) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function editorUrl(editor: EditorKind, absPath: string, line = 1, col = 1): string {
   const file = encodeURI(absPath);
@@ -16,6 +35,8 @@ export function editorUrl(editor: EditorKind, absPath: string, line = 1, col = 1
       return `vscode://file${file}:${line}:${col}`;
     case "cursor":
       return `cursor://file${file}:${line}:${col}`;
+    case "zed":
+      return `zed://file${file}:${line}:${col}`;
     case "webstorm":
       return `webstorm://open?file=${encodeURIComponent(absPath)}&line=${line}&column=${col}`;
     case "idea":

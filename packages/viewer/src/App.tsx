@@ -13,6 +13,7 @@ import { ScanProgress } from "./components/ScanProgress.tsx";
 import { SnapshotsModal } from "./components/SnapshotsModal.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
+import { fetchEditors } from "./lib/editor.ts";
 import { useExplorer } from "./store.ts";
 
 const LAST_SNAPSHOT_KEY = "rae.lastSnapshot";
@@ -62,6 +63,10 @@ export function App() {
   useEffect(() => {
     void refreshList();
   }, [refreshList]);
+  // which editors "Open in editor" can use (asked once)
+  useEffect(() => {
+    void fetchEditors().then((e) => useExplorer.getState().setEditors(e));
+  }, []);
 
   // After deleting snapshots: if the loaded one went, load the newest left (or show nothing loaded).
   const afterDelete = useCallback(

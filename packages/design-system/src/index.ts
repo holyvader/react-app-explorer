@@ -1,5 +1,6 @@
 export * from "./primitives.ts";
 export { DesignSystemProvider } from "./provider.tsx";
+export { applyStoredTextSize, getTextSize, setTextSize, TEXT_SIZES, textPx, useTextSize, type TextSize } from "./textSize.ts";
 export { applyStoredColorMode, getColorMode, setColorMode, useColorMode, type ColorMode } from "./colorMode.ts";
 export { system, type BoundaryToken, type NodeKindToken } from "./theme.ts";
 export { ActionIconButton, type ActionIconButtonProps } from "./components/ActionIconButton.tsx";

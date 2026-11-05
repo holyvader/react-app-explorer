@@ -1,25 +1,5 @@
 import type { Edge, GraphNode, ParamDef } from "@rae/schema";
-import {
-  ActionIconButton,
-  BoundaryChip,
-  Box,
-  CodeChip,
-  KindChip,
-  Button,
-  Code,
-  CodeToken,
-  Eyebrow,
-  Flex,
-  HStack,
-  KindTile,
-  Panel,
-  PanelBar,
-  PanelHeader,
-  Stack,
-  TagChip,
-  Text,
-  Wrap,
-} from "@rae/design-system";
+import { ActionIconButton, BoundaryChip, Box, Button, Code, CodeChip, CodeToken, Eyebrow, Flex, HStack, KindChip, KindTile, Panel, PanelBar, PanelHeader, Stack, TagChip, Text, textPx, Wrap } from "@rae/design-system";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -38,7 +18,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { childEdges, parentEdges } from "../graph/relations.ts";
 import { formatCondition } from "../lib/conditions.ts";
 import { CHANGE_WORD, type ParamSide, type SignatureChange, signatureChanges } from "../lib/diff.ts";
-import { EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
+import { canOpenEditor, EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
 import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
@@ -74,6 +54,7 @@ export function DetailsPanel() {
   const showAssets = useExplorer((s) => s.showAssets);
   const diffOverlay = useExplorer((s) => s.diffOverlay);
   const editor = useExplorer((s) => s.editor);
+  const hasEditor = useExplorer((s) => canOpenEditor(s.editors));
   const { select, expand, addNodes, inspect } = useExplorer.getState();
   // closing a file-tree inspection goes back to the diagram's selection (if any)
   const closeDetails = () => (useExplorer.getState().inspectedId ? inspect(undefined) : select(undefined));
@@ -102,7 +83,7 @@ export function DetailsPanel() {
       .filter((h) => h.targetId && snapshot?.nodes[h.targetId]?.kind === "hook" && h.targetId !== node.id)
       .reduce((m, h) => m.set(h.targetId!, (m.get(h.targetId!) ?? 0) + 1), new Map<string, number>()),
   ].map(([id, count]) => ({ id, count }));
-  const open = node.absPath ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
+  const open = node.absPath && hasEditor ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
   const change = diffOverlay ? snapshot?.diff?.nodes[node.id] : undefined;
   const kindWord = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
   const tags = [fileNote(node), node.isAsync ? "async" : undefined].filter((t): t is string => !!t);
@@ -171,7 +152,7 @@ export function DetailsPanel() {
         </Wrap>
 
         <Flex mt="2.5" align="center" gap="2" minW="0">
-          <Text fontFamily="mono" fontSize="11.5px" color="fg.muted" truncate flex="1" title={node.filePath}>
+          <Text fontFamily="mono" fontSize={textPx(11.5)} color="fg.muted" truncate flex="1" title={node.filePath}>
             {node.filePath}
             {node.loc && node.kind !== "module" && (
               <Text as="span" color="fg.subtle">
@@ -190,7 +171,7 @@ export function DetailsPanel() {
               variant="outline"
               borderColor="border.emphasized"
               rounded="5px"
-              fontSize="11.5px"
+              fontSize={textPx(11.5)}
               fontWeight="normal"
               flexShrink={0}
               onClick={() => void openInEditor(open).catch((e: Error) => useExplorer.getState().notify(e.message))}
@@ -208,7 +189,7 @@ export function DetailsPanel() {
         )}
         {node.moduleId && (
           <Wrap gap="1.5" mt="2.5" align="center">
-            <Text fontSize="11.5px" color="fg.subtle">
+            <Text fontSize={textPx(11.5)} color="fg.subtle">
               in
             </Text>
             <NodeChip id={node.moduleId} anchor={node.id} />
@@ -910,7 +891,7 @@ function DiffLines({ node }: { node: GraphNode }) {
   const { diff } = useNodeDiff(snapshot, node, hasCode);
   if (!diff) return null;
   return (
-    <Text as="span" fontFamily="mono" fontSize="10.5px" title={`${diff.removed} line${diff.removed === 1 ? "" : "s"} removed, ${diff.added} added`}>
+    <Text as="span" fontFamily="mono" fontSize={textPx(10.5)} title={`${diff.removed} line${diff.removed === 1 ? "" : "s"} removed, ${diff.added} added`}>
       <Text as="span" color="diff.removed.fg">
         −{diff.removed}
       </Text>
@@ -927,7 +908,7 @@ function DiffLines({ node }: { node: GraphNode }) {
 /** One side of a change, like a diff line: − on red, + on green; `~` on amber for modified in place. */
 function ChangeRow({ sign, change, title, children }: { sign: string; change: "added" | "removed" | "changed"; title?: string; children: ReactNode }) {
   return (
-    <Flex align="baseline" gap="2" px="2" py="0.5" mb="1px" rounded="l1" bg={`diff.${change}.subtle`} fontFamily="mono" fontSize="11.5px" lineHeight="1.6" minW="0" title={title}>
+    <Flex align="baseline" gap="2" px="2" py="0.5" mb="1px" rounded="l1" bg={`diff.${change}.subtle`} fontFamily="mono" fontSize={textPx(11.5)} lineHeight="1.6" minW="0" title={title}>
       <Text as="span" color={`diff.${change}.fg`} flexShrink={0} userSelect="none">
         {sign}
       </Text>
@@ -959,7 +940,7 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
   const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
   const word = (it: Extract<SignatureChange, { kind: "param" }>) => `${it.isProp ? "prop" : "parameter"} ${it.what}`;
   return (
-    <Stack gap="2" fontSize="12.5px">
+    <Stack gap="2" fontSize={textPx(12.5)}>
       <Flex align="center" gap="2">
         <Text color="fg.muted" flex="1">
           {change === "added"
@@ -974,7 +955,7 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
       </Flex>
       {shown.map((it, i) => (
         <Box key={i} minW="0">
-          <Text fontSize="11.5px" color="fg.subtle" mb="1">
+          <Text fontSize={textPx(11.5)} color="fg.subtle" mb="1">
             {it.kind === "param" ? word(it) : it.kind === "returned" ? "return value changed" : "return type"}
           </Text>
           {it.kind === "param" ? (

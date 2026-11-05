@@ -1,4 +1,4 @@
-import { Button, Flex, Text } from "@rae/design-system";
+import { Button, Flex, Text, textPx } from "@rae/design-system";
 import { useRef } from "react";
 import type { TreeNode } from "../graph/tree.ts";
 import { useExplorer } from "../store.ts";
@@ -26,7 +26,7 @@ export function ChangesList({ onActivate, drawn, onAdd, selectedId }: ChangesLis
   for (const c of Object.values(diff.nodes)) counts[c]++;
   return (
     <>
-      <Flex align="center" gap="2" px="3" py="2" borderBottomWidth="1px" borderColor="border.muted" fontSize="12px">
+      <Flex align="center" gap="2" px="3" py="2" borderBottomWidth="1px" borderColor="border.muted" fontSize={textPx(12)}>
         <Text color="fg.muted" flex="1" truncate>
           {diff.files.length} files ·{" "}
           <Text as="span" color="diff.added.fg">

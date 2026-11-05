@@ -1,3 +1,4 @@
+import { useTextSize } from "@rae/design-system";
 import { type RefObject, useLayoutEffect, useRef, useState } from "react";
 
 const charWidths = new Map<string, number>();
@@ -18,10 +19,11 @@ function charWidth(el: Element): number {
 
 /**
  * How many characters fit from where `ref` starts to its container's right edge (its row in the
- * details panel), kept up to date as the panel is resized. `fallback` until it's measured.
+ * details panel), kept up to date as the panel is resized or the text size changes. `fallback` until it's measured.
  */
 export function useColumns(ref: RefObject<HTMLElement | null>, fallback = 60): number {
   const [cols, setCols] = useState(fallback);
+  const textSize = useTextSize();
   useLayoutEffect(() => {
     const el = ref.current;
     const box = el?.parentElement;
@@ -47,7 +49,7 @@ export function useColumns(ref: RefObject<HTMLElement | null>, fallback = 60): n
       live = false;
       ro.disconnect();
     };
-  }, [ref]);
+  }, [ref, textSize]);
   return cols;
 }
 

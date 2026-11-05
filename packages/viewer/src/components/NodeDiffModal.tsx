@@ -1,4 +1,4 @@
-import { Alert, Button, Flex, HStack, Modal, Spinner, Text } from "@rae/design-system";
+import { Alert, Button, Flex, HStack, Modal, Spinner, Text, textPx } from "@rae/design-system";
 import { IconInline, IconSplit } from "@rae/design-system/icons";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, useMemo, useState } from "react";
@@ -64,14 +64,14 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   const title = (
     <Flex align="baseline" gap="2" minW="0">
       <Text truncate>{node.name}</Text>
-      <Text as="span" fontFamily="mono" fontSize="12px" color="fg.subtle" fontWeight="normal" truncate>
+      <Text as="span" fontFamily="mono" fontSize={textPx(12)} color="fg.subtle" fontWeight="normal" truncate>
         {before && after && before.node.filePath !== after.node.filePath ? `${before.node.filePath} → ${after.node.filePath}` : node.filePath}
       </Text>
     </Flex>
   );
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} size="cover">
-      <Flex align="center" gap="3" mb="2.5" fontSize="12px" wrap="wrap">
+      <Flex align="center" gap="3" mb="2.5" fontSize={textPx(12)} wrap="wrap">
         <Text fontFamily="mono" color="diff.removed.fg">
           − {before?.label ?? "(new)"}
         </Text>

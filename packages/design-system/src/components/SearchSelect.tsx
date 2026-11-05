@@ -1,6 +1,7 @@
 import { Combobox, createListCollection } from "@chakra-ui/react";
 import { useMemo, useState } from "react";
 import type { SelectOption } from "./Select.tsx";
+import { textPx } from "../textSize.ts";
 
 export interface SearchSelectProps {
   value: string;
@@ -73,7 +74,7 @@ export function SearchSelect({ value, onValueChange, options, placeholder, size 
           {collection.group().map(([group, items]) => (
             <Combobox.ItemGroup key={group}>
               {group && (
-                <Combobox.ItemGroupLabel fontFamily="mono" fontSize="11px" color="fg.subtle">
+                <Combobox.ItemGroupLabel fontFamily="mono" fontSize={textPx(11)} color="fg.subtle">
                   {group}
                 </Combobox.ItemGroupLabel>
               )}

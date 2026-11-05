@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { NodeKindToken } from "../theme.ts";
 
 import { tokenVar } from "../tokens.ts";
+import { textPx } from "../textSize.ts";
 
 /**
  * A node kind's icon, in the kind's colour: the same mark as on the canvas cards and in the file
@@ -42,7 +43,7 @@ export function TagChip({ color, children, mono, onClick, title }: { color: stri
       px="7px"
       h="20px"
       rounded="l1"
-      fontSize="11px"
+      fontSize={textPx(11)}
       fontFamily={mono ? "mono" : undefined}
       whiteSpace="nowrap"
       cursor={onClick ? "pointer" : "default"}

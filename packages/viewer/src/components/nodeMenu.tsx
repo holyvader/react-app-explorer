@@ -20,7 +20,7 @@ import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts"
 import { folderContents, folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { hasUndrawn } from "../graph/relations.ts";
-import { editorUrl, openInEditor } from "../lib/editor.ts";
+import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
 
@@ -87,7 +87,7 @@ function relationMenu(label: string, edges: Edge[], side: "from" | "to", anchor:
 /** Everything that can be done to a node, for its right-click menu. */
 export function nodeMenuEntries(id: string): MenuEntry[] {
   const st = useExplorer.getState();
-  const { snapshot: s, index, editor } = st;
+  const { snapshot: s, index, editor, editors } = st;
   if (!s || !index) return [];
   const { expand, hideNode, hideNodes, arrange, addNodes } = st;
   const node = s.nodes[id];
@@ -132,13 +132,14 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   const multi = st.selection.length > 1 && st.selection.includes(id);
   entries.push({ type: "item", value: "select", label: "Select", icon: <IconSelect size={I} />, onSelect: () => st.selectMany([id]) });
   if (node.absPath) {
-    entries.push({
-      type: "item",
-      value: "open",
-      label: "Open in editor",
-      icon: <IconOpen size={I} />,
-      onSelect: () => void openInEditor(editorUrl(editor, node.absPath!, node.loc?.line, node.loc?.col)).catch((e: Error) => useExplorer.getState().notify(e.message)),
-    });
+    if (canOpenEditor(editors))
+      entries.push({
+        type: "item",
+        value: "open",
+        label: "Open in editor",
+        icon: <IconOpen size={I} />,
+        onSelect: () => void openInEditor(editorUrl(editor, node.absPath!, node.loc?.line, node.loc?.col)).catch((e: Error) => useExplorer.getState().notify(e.message)),
+      });
     entries.push({
       type: "item",
       value: "copy",

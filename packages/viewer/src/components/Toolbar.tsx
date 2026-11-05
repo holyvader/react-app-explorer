@@ -1,22 +1,4 @@
-import {
-  ActionIconButton,
-  Box,
-  BrandMark,
-  Button,
-  ContextMenu,
-  Flex,
-  type MenuEntry,
-  Popover,
-  Select,
-  Stack,
-  Switch,
-  SwitchField,
-  Text,
-  ToolGroup,
-  Tooltip,
-  setColorMode,
-  useColorMode,
-} from "@rae/design-system";
+import { ActionIconButton, Box, BrandMark, Button, ContextMenu, Flex, Popover, Select, setColorMode, setTextSize, Stack, Switch, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useTextSize } from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
 import {
   IconBranch,
@@ -98,7 +80,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
     <Flex align="center" gap="2.5" pl="3.5" pr="3" h="44px" flexShrink={0} minW="0" bg="panel.bg" borderBottomWidth="1px" borderColor="border">
       <Flex align="center" gap="9px" flexShrink={0}>
         <BrandMark size={22} />
-        <Text fontSize="13px" fontWeight="semibold">
+        <Text fontSize={textPx(13)} fontWeight="semibold">
           Explorer
         </Text>
       </Flex>
@@ -113,7 +95,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           h="30px"
           px="9px"
           rounded="l2"
-          fontSize="12.5px"
+          fontSize={textPx(12.5)}
           minW="0"
           flexShrink={1}
           cursor="pointer"
@@ -129,7 +111,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
             {snapshot ? projectName(snapshot.rootDir) : snapshots.length ? "Open a snapshot" : "No project"}
           </Text>
           {currentEntry && (
-            <Text as="span" color="fg.subtle" fontFamily="mono" fontSize="11.5px" whiteSpace="nowrap">
+            <Text as="span" color="fg.subtle" fontFamily="mono" fontSize={textPx(11.5)} whiteSpace="nowrap">
               · {when(currentEntry.createdAt)}
             </Text>
           )}
@@ -162,7 +144,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         <ViewOptions onLibraries={onLibraries} />
       </ToolGroup>
       <Divider />
-      <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize="12.5px" fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Scan a project…">
+      <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize={textPx(12.5)} fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Scan a project…">
         <IconScan size={14} /> Scan
       </Button>
     </Flex>
@@ -179,7 +161,9 @@ function BarIcon(props: { label: string; icon: React.ReactNode; onClick?: () => 
 function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
   const [open, setOpen] = useState(false);
   const mode = useColorMode();
+  const textSize = useTextSize();
   const editor = useExplorer((s) => s.editor);
+  const editors = useExplorer((s) => s.editors);
   const excluded = useExplorer((s) => s.excluded);
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
@@ -191,17 +175,20 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
       onOpenChange={setOpen}
       label="View options"
       placement="bottom"
-      width="280px"
+      width="310px"
       trigger={
         <Box display="inline-flex">
           <BarIcon label="View options" icon={<IconViewOptions />} />
         </Box>
       }
     >
-      <Stack gap="0" fontSize="12.5px">
+      <Stack gap="0" fontSize={textPx(12.5)}>
         <Text textStyle="panelLabel" color="fg.subtle" px="3.5" pt="3" pb="2">
           View
         </Text>
+        <Row label="Text size" hint="Panels and toolbar">
+          <Select value={textSize} onValueChange={(v) => setTextSize(v as TextSize)} options={TEXT_SIZES} width="130px" size="xs" label="Text size" />
+        </Row>
         <SwitchField size="xs" px="3.5" minH="36px" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
         <SwitchField size="xs" px="3.5" minH="36px" label="Asset files" hint="CSS, images, JSON" checked={showAssets} onCheckedChange={setShowAssets} />
         <Row label="Libraries" hint={hideAllLibraries ? "all hidden" : excluded.length ? `${excluded.length} hidden` : "all shown"}>
@@ -217,9 +204,20 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
             <IconLibrary size={12} /> Choose…
           </Button>
         </Row>
-        <Row label="Open files in">
-          <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={EDITORS} width="130px" size="xs" />
-        </Row>
+        {editors && !editors.length ? (
+          <Box pb="2">
+            <Row label="Open files in">
+              <Select value="" onValueChange={() => {}} options={[]} placeholder="No editor found" width="130px" size="xs" label="Open files in" disabled />
+            </Row>
+            <Text px="3.5" fontSize={textPx(11)} color="fg.subtle">
+              To open files from here, install IntelliJ IDEA, WebStorm, VS Code, Cursor or Zed (then restart the app).
+            </Text>
+          </Box>
+        ) : (
+          <Row label="Open files in">
+            <Select value={editor} onValueChange={(v) => setEditor(v as EditorKind)} options={editors ? EDITORS.filter((e) => editors.includes(e.value)) : EDITORS} width="130px" size="xs" label="Open files in" />
+          </Row>
+        )}
         <Box borderTopWidth="1px" borderColor="border.muted" mt="1" p="2">
           <Button
             size="xs"
@@ -248,7 +246,7 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
       <Box flex="1" minW="0">
         <Text>{label}</Text>
         {hint && (
-          <Text fontSize="11px" color="fg.subtle">
+          <Text fontSize={textPx(11)} color="fg.subtle">
             {hint}
           </Text>
         )}
@@ -263,7 +261,7 @@ function DiffOverlaySwitch() {
   const diffOverlay = useExplorer((s) => s.diffOverlay);
   return (
     <Tooltip content="Diff overlay: what changed in colour, removed elements as ghosts">
-      <Flex align="center" gap="1.5" flexShrink={0} fontSize="12px" color="fg.muted">
+      <Flex align="center" gap="1.5" flexShrink={0} fontSize={textPx(12)} color="fg.muted">
         <Switch size="xs" checked={diffOverlay} onCheckedChange={useExplorer.getState().setDiffOverlay}>
           Diff overlay
         </Switch>
@@ -286,7 +284,7 @@ function DiffChip({ diff }: { diff: SnapshotDiff }) {
   return (
     <Flex align="center" gap="0.5" flexShrink={1} minW="0">
       <Tooltip content={tip}>
-        <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" minW="0" fontFamily="mono" fontSize="11px" color="diff.changed.fg" bg="diff.changed.subtle">
+        <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" minW="0" fontFamily="mono" fontSize={textPx(11)} color="diff.changed.fg" bg="diff.changed.subtle">
           <IconBranch size={12} />
           <Text as="span" truncate maxW="360px">
             {sideLabel(diff.base.ref, diff.compared).split(" ")[0]} ← {head}

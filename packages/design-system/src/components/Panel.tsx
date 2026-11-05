@@ -1,6 +1,7 @@
 import { Box, Collapsible, Flex, Text, type BoxProps } from "@chakra-ui/react";
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { textPx } from "../textSize.ts";
 
 export interface PanelResize {
   width: number;
@@ -133,13 +134,13 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
   );
 }
 
-/** A panel's 34px top bar: its uppercase label (FILES, DETAILS) and actions on the right. */
+/** A panel's top bar (34px at 1× text): its uppercase label (FILES, DETAILS) and actions on the right. */
 export function PanelBar({ label, children, sticky }: { label: ReactNode; children?: ReactNode; sticky?: boolean }) {
   return (
     <Flex
       align="center"
       gap="1"
-      h="34px"
+      minH={textPx(34)}
       pl="3.5"
       pr="1.5"
       flexShrink={0}
@@ -189,7 +190,7 @@ const readOpen = (key: string | undefined, fallback: boolean) => {
   }
 };
 
-/** Collapsible section inside a Panel: chevron, title, then an aside or a count on the right. */
+/** Collapsible section inside a Panel: chevron, title, then an aside or a count on the right; all of it follows the text size. */
 export function PanelSection({ title, count, defaultOpen = true, aside, storageKey, children }: PanelSectionProps) {
   const [open, setOpen] = useState(() => readOpen(storageKey, defaultOpen));
   // another key (the same slot showing another section): its own remembered state ("adjust state during render")
@@ -212,8 +213,8 @@ export function PanelSection({ title, count, defaultOpen = true, aside, storageK
     <Collapsible.Root open={open} onOpenChange={(e) => toggle(e.open)} lazyMount unmountOnExit>
       <Box borderBottomWidth="1px" borderColor="border.muted">
         <Collapsible.Trigger asChild>
-          <Flex as="button" w="full" h="32px" px="3.5" align="center" gap="1.5" cursor="pointer" _hover={{ bg: "bg.subtle" }}>
-            <Box color="fg.subtle" display="inline-flex" transform={open ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 140ms ease">
+          <Flex as="button" w="full" minH={textPx(32)} py="1" px="3.5" align="center" gap="1.5" cursor="pointer" _hover={{ bg: "bg.subtle" }}>
+            <Box color="fg.subtle" display="inline-flex" css={{ "& svg": { width: textPx(12), height: textPx(12) } }} transform={open ? "rotate(0deg)" : "rotate(-90deg)"} transition="transform 140ms ease">
               <ChevronDown size={12} />
             </Box>
             <Text textStyle="sectionLabel" color="kind.module.fg">
@@ -222,7 +223,7 @@ export function PanelSection({ title, count, defaultOpen = true, aside, storageK
             <Box flex="1" />
             {aside}
             {count !== undefined && (
-              <Text as="span" fontFamily="mono" fontSize="10.5px" color="fg.subtle">
+              <Text as="span" fontFamily="mono" fontSize={textPx(11)} color="fg.subtle">
                 {count}
               </Text>
             )}

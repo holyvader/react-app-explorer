@@ -15,6 +15,7 @@
     ".": "./src/scan.ts",
     "./scan": "./src/scan.ts",
     "./job": "./src/job.ts",
-    "./git": "./src/gitApi.ts"
+    "./git": "./src/gitApi.ts",
+    "./editors": "./src/editors.ts"
   }
 }

@@ -1,5 +1,6 @@
 import { Portal, Tooltip as ChakraTooltip } from "@chakra-ui/react";
 import type { ReactElement, ReactNode } from "react";
+import { textPx } from "../textSize.ts";
 
 export interface TooltipProps {
   content: ReactNode;
@@ -19,7 +20,7 @@ export function Tooltip({ content, children, disabled, placement = "top" }: Tool
       <ChakraTooltip.Trigger asChild>{children}</ChakraTooltip.Trigger>
       <Portal>
         <ChakraTooltip.Positioner>
-          <ChakraTooltip.Content maxW="md" fontSize="11.5px" bg="bg.emphasized" color="fg" rounded="l2" shadow="popover">
+          <ChakraTooltip.Content maxW="md" fontSize={textPx(11.5)} bg="bg.emphasized" color="fg" rounded="l2" shadow="popover">
             {content}
           </ChakraTooltip.Content>
         </ChakraTooltip.Positioner>
