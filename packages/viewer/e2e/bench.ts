@@ -1,0 +1,127 @@
+/**
+ * Canvas performance with a big diagram: every node of a snapshot drawn, then pan and wheel-zoom
+ * at the zoomed-out fit, at 0.5× and at 1×, timing frames (requestAnimationFrame intervals) in the page.
+ * Prereq: a big snapshot (e2e/benchSnapshot.ts) and a dev server on it:
+ *   RAE_SNAPSHOTS=<out dir> node_modules/.bin/vite --port 5199 --strictPort
+ * Run: bun packages/viewer/e2e/bench.ts [chromium|webkit] [snapshot file] [screenshot dir]
+ * Browser: PW_CHROMIUM_PATH=<chromium binary> for chromium; webkit from Playwright's install.
+ */
+import { chromium, webkit } from "playwright-core";
+
+const url = process.env.VIEWER_URL ?? "http://localhost:5199/";
+const [engine = "chromium", file, shots] = process.argv.slice(2);
+const browser = engine === "webkit" ? await webkit.launch() : await chromium.launch({ executablePath: process.env.PW_CHROMIUM_PATH });
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+const errors = new Map<string, number>();
+page.on("pageerror", (e) => {
+  if (!errors.has(e.message)) console.error("page error:", e.stack?.split("\n").slice(0, 6).join("\n"));
+  errors.set(e.message, (errors.get(e.message) ?? 0) + 1);
+});
+if (file) await page.addInitScript((f) => localStorage.setItem("rae.lastSnapshot", f), file);
+// BENCH_CSS: extra CSS for experiments (what costs what)
+if (process.env.BENCH_CSS) await page.addInitScript((css) => addEventListener("DOMContentLoaded", () => document.head.append(Object.assign(document.createElement("style"), { textContent: css }))), process.env.BENCH_CSS);
+await page.goto(url);
+await page.waitForFunction(() => (window as any).__rae?.getState().snapshot, null, { timeout: 60000 });
+await page.waitForTimeout(1000);
+
+const t0 = Date.now();
+await page.evaluate(() => {
+  const s = (window as any).__rae.getState();
+  s.clear();
+  s.addNodes(Object.keys(s.snapshot.nodes), { fit: true });
+});
+await page.waitForFunction(() => (window as any).__rae.getState().placed.length > 0, null, { timeout: 120000 });
+await page.waitForTimeout(2500);
+const placeMs = Date.now() - t0;
+
+const pane = (await page.locator(".react-flow").boundingBox())!;
+const dom = () =>
+  page.evaluate(() => ({
+    elements: document.querySelectorAll(".react-flow *").length,
+    nodes: document.querySelectorAll(".react-flow__node").length,
+    edges: document.querySelectorAll(".react-flow__edge").length,
+    labels: document.querySelectorAll(".rae-edge-label").length,
+    zoom: +(getComputedStyle(document.querySelector(".react-flow__viewport")!).transform.match(/matrix\(([^,]+)/)?.[1] ?? 1),
+  }));
+
+/** Frame intervals while `act` runs (and 300 ms after, for what it left to render). */
+async function frames(act: () => Promise<void>) {
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__frames = [];
+    let last = performance.now();
+    w.__benchOn = true;
+    const tick = (t: number) => {
+      w.__frames.push(t - last);
+      last = t;
+      if (w.__benchOn) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  const start = Date.now();
+  await act();
+  await page.waitForTimeout(300);
+  const ms = Date.now() - start;
+  const f: number[] = await page.evaluate(() => {
+    (window as any).__benchOn = false;
+    return (window as any).__frames.slice(1);
+  });
+  const sorted = [...f].sort((a, b) => a - b);
+  const mean = f.reduce((a, b) => a + b, 0) / f.length;
+  return {
+    fps: Math.round(1000 / mean),
+    ms,
+    p50: +sorted[Math.floor(sorted.length * 0.5)]?.toFixed(1),
+    p95: +sorted[Math.floor(sorted.length * 0.95)]?.toFixed(1),
+    worst: +sorted.at(-1)!.toFixed(1),
+    over50: f.filter((x) => x > 50).length,
+  };
+}
+
+/** A point on the empty pane (not on a node or edge label), so a drag pans. */
+const emptyPoint = () =>
+  page.evaluate(({ x, y, width, height }) => {
+    for (let fy = 0.5; fy < 0.95; fy += 0.05)
+      for (let fx = 0.08; fx < 0.5; fx += 0.02) {
+        const px = x + width * fx;
+        const py = y + height * fy;
+        if (document.elementFromPoint(px, py)?.classList.contains("react-flow__pane")) return { x: px, y: py };
+      }
+    return null;
+  }, pane);
+const pan = async () => {
+  const at = await emptyPoint();
+  if (!at) throw new Error("no empty spot on the pane to drag");
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 40; i++) await page.mouse.move(at.x + i * 12, at.y + Math.sin(i / 6) * 60);
+  for (let i = 40; i >= 0; i--) await page.mouse.move(at.x + i * 12, at.y);
+  await page.mouse.up();
+};
+const zoom = async () => {
+  await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, -120);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 120);
+};
+
+const results: Record<string, unknown> = { engine, file: file ?? "(last)", placeMs };
+results.fitDom = await dom();
+if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-fit.png` });
+results.fitPan = await frames(pan);
+results.fitZoom = await frames(zoom);
+// 0.5×, centred: the readable middle
+await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+for (let i = 0; i < 40 && (await dom()).zoom < 0.5; i++) await page.mouse.wheel(0, -100);
+await page.waitForTimeout(800);
+results.midDom = await dom();
+if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-mid.png` });
+results.midPan = await frames(pan);
+// 1×: full detail (labels, dashes, arrows)
+for (let i = 0; i < 40 && (await dom()).zoom < 1; i++) await page.mouse.wheel(0, -100);
+await page.waitForTimeout(800);
+results.fullDom = await dom();
+if (shots) await page.screenshot({ path: `${shots}/bench-${engine}-full.png` });
+results.fullPan = await frames(pan);
+if (errors.size) results.errors = Object.fromEntries(errors);
+console.log(JSON.stringify(results));
+await browser.close();

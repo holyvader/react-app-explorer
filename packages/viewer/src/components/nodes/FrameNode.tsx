@@ -4,6 +4,7 @@ import { memo, type MouseEvent, type PointerEvent } from "react";
 import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
 import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
+import { useLod } from "../lod.ts";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
@@ -79,6 +80,8 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
   const route = element.kind === "route" ? node?.route : undefined;
   const Icon = folder ? IconFolder : route ? KIND_META.route.icon : KIND_META.module.icon;
   const room = useRoomAsCanvas();
+  // zoomed out: the title only (larger, canvas.css), no chips or actions
+  const detailed = useLod() === "full";
   return (
     <div className="rae-frame" data-kind={folder ? "folder" : route ? "route" : "module"} data-refused={refused || undefined} data-change={data.change}>
       {data.change && (
@@ -99,17 +102,17 @@ function FrameNodeImpl({ data }: NodeProps<FrameFlowNode>) {
           {route && <div className="rae-sub">{routeCaption(route)}</div>}
           {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
         </div>
-        {route?.rendering && (
+        {detailed && route?.rendering && (
           <span className="rae-chip" data-render={renderingKey(route.rendering)} title={route.rendering.reasons.join("\n")}>
             {renderingLabel(route.rendering)}
           </span>
         )}
-        {node?.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
-        {node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
-        <NodeActions data={data} frame />
+        {detailed && node?.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
+        {detailed && node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
+        {detailed && <NodeActions data={data} frame />}
       </div>
       <div className="rae-frame__room nopan" {...room} />
-      <ContainsButton data={data} />
+      {detailed && <ContainsButton data={data} />}
       <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
     </div>
   );

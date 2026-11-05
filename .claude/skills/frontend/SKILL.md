@@ -142,6 +142,7 @@ bun run scan packages/fixtures/next-app
 PW_CHROMIUM_PATH=~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell \
   bun --cwd packages/viewer e2e [screenshotDir]
 ```
+Canvas performance with thousands of nodes: `bun packages/viewer/e2e/benchSnapshot.ts <scan dir> <out dir> <copies>` (a scan copied N times; 4 copies of `packages/viewer` ≈ 2,800 nodes), a test server on `<out dir>`, then `bun --cwd packages/viewer bench [chromium|webkit] [snapshot file] [screenshot dir]` (see the react-flow skill, "Level of detail"). Dev-mode React: compare runs with each other, not with the packaged app.
 Afterwards stop **only that server**: `kill "$(cat /tmp/rae-test.pid)"`. Never `pkill -f "bun --filter @rae/viewer dev"` or `pkill -f vite`: that pattern matches the user's own `bun run dev` and kills their server.
 Pass a screenshot dir and look at the PNG to check layout visually. In dev, `window.__rae` is the zustand store: tests can call `__rae.getState().addNodes([...])` to build big canvases, and you can profile with CDP `Profiler.*` through `page.context().newCDPSession(page)`. Extend `e2e/smoke.ts` when adding user flows. Use accessible names (`getByRole(..., { name })`); every icon button has a label through `ActionIconButton`.
 

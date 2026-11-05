@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "e2e": "bun e2e/smoke.ts"
+    "e2e": "bun e2e/smoke.ts",
+    "bench": "bun e2e/bench.ts"
   },
   "dependencies": {
     "@rae/design-system": "workspace:*",

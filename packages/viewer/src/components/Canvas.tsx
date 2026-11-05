@@ -14,6 +14,7 @@ import {
   type OnNodeDrag,
   ReactFlow,
   useReactFlow,
+  useStore,
 } from "@xyflow/react";
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
@@ -28,6 +29,7 @@ import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
+import { LodContext, lodOf } from "./lod.ts";
 import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
 import { ExplorationPicker } from "./picker/ExplorationPicker.tsx";
 import { QuickAdd } from "./picker/QuickAdd.tsx";
@@ -142,6 +144,8 @@ export function Canvas() {
   const fitIds = useExplorer((s) => s.fitIds);
   const { select, consumeFocus, applyLayout, dropAt } = useExplorer.getState();
   const flow = useReactFlow();
+  // the level of detail: a bucket of the zoom, so this re-renders only when it changes
+  const lod = useStore((s) => lodOf(s.transform[2]));
   const [dragging, setDragging] = useState(false);
   const menu = useExplorer((s) => s.menu);
   const setMenu = useExplorer.getState().openMenu;
@@ -512,6 +516,7 @@ export function Canvas() {
       className="rae-canvas"
       tabIndex={-1}
       data-selection={selection.length ? "" : undefined}
+      data-lod={lod}
       data-dragging={dragging ? "" : undefined}
       data-adding={adding ? "" : undefined}
       data-boxing={boxing ? "" : undefined}
@@ -524,96 +529,98 @@ export function Canvas() {
         if (active && active !== e.currentTarget && active.matches("input, textarea, select")) e.currentTarget.focus({ preventScroll: true });
       }}
     >
-      <ReactFlow<ElementFlowNode, Edge>
-        // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
-        colorMode={colorMode}
-        // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
-        proOptions={{ hideAttribution: true }}
-        nodes={nodes}
-        edges={edges as Edge[]}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
-        nodesConnectable={false}
-        // Selection is the store's alone: React Flow's own selection (which also flips its internal
-        // node state on click) is off; `selected` is passed in and clicks still reach onNodeClick.
-        elementsSelectable={false}
-        deleteKeyCode={null}
-        selectionKeyCode={null}
-        // Space adds to the diagram; panning is a plain drag.
-        panActivationKeyCode={null}
-        multiSelectionKeyCode={null}
-        edgesFocusable={false}
-        onNodeClick={(e, n) => {
-          // Cards select anywhere; frames (files holding elements, folders) only from their header —
-          // where they're dragged. Their room acts as empty canvas (FrameNode: click clears, drag pans).
-          const target = e.target as HTMLElement;
-          if (target.closest(".rae-icon-btn, .rae-contains")) return;
-          if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
-          select(n.id, e.metaKey || e.ctrlKey || e.shiftKey);
-        }}
-        onNodeMouseEnter={(e, n) => {
-          clearTimeout(tipTimer.current);
-          // Folders have no tooltip: their header says what's inside.
-          if (!n.data.node) return;
-          const el = (e.target as Element).closest(".react-flow__node");
-          tipTimer.current = setTimeout(() => {
-            if (!el?.isConnected) return;
-            const r = el.getBoundingClientRect();
-            setTip({ id: n.id, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } });
-          }, 600);
-        }}
-        // A moving view would leave the tooltip behind its node.
-        onMoveStart={() => {
-          clearTimeout(tipTimer.current);
-          setTip(null);
-        }}
-        onNodeMouseLeave={() => {
-          clearTimeout(tipTimer.current);
-          setTip(null);
-        }}
-        onNodeContextMenu={(e, n) => {
-          e.preventDefault();
-          if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
-          setMenu({ x: e.clientX, y: e.clientY, id: n.id, mode: "node" });
-        }}
-        onPaneContextMenu={(e) => {
-          e.preventDefault();
-          const s = useExplorer.getState();
-          // Quick add: a small picker right there; what's picked lands at that point.
-          if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
-        }}
-        onNodeDragStart={onNodeDragStart}
-        onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
-        onPaneClick={() => select(undefined)}
-        minZoom={0.05}
-        maxZoom={2}
-        fitView
-        fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
-        onlyRenderVisibleElements
-      >
-        <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={cssVar("canvas.grid")} />
-        <FlowPanel position="top-left" className="rae-filters">
-          <RelationFilters />
-        </FlowPanel>
-        <Controls position="bottom-left" showInteractive={false} />
-        <FlowPanel position="bottom-left" className="rae-history">
-          <HistoryButtons />
-        </FlowPanel>
-        <MiniMap
-          pannable
-          zoomable
-          position="bottom-right"
-          nodeColor={(n) => {
-            const d = (n as ElementFlowNode).data;
-            if (d.element.kind === "folder") return "transparent";
-            return cssVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
+      <LodContext.Provider value={lod}>
+        <ReactFlow<ElementFlowNode, Edge>
+          // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
+          colorMode={colorMode}
+          // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
+          proOptions={{ hideAttribution: true }}
+          nodes={nodes}
+          edges={edges as Edge[]}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
+          nodesConnectable={false}
+          // Selection is the store's alone: React Flow's own selection (which also flips its internal
+          // node state on click) is off; `selected` is passed in and clicks still reach onNodeClick.
+          elementsSelectable={false}
+          deleteKeyCode={null}
+          selectionKeyCode={null}
+          // Space adds to the diagram; panning is a plain drag.
+          panActivationKeyCode={null}
+          multiSelectionKeyCode={null}
+          edgesFocusable={false}
+          onNodeClick={(e, n) => {
+            // Cards select anywhere; frames (files holding elements, folders) only from their header —
+            // where they're dragged. Their room acts as empty canvas (FrameNode: click clears, drag pans).
+            const target = e.target as HTMLElement;
+            if (target.closest(".rae-icon-btn, .rae-contains")) return;
+            if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
+            select(n.id, e.metaKey || e.ctrlKey || e.shiftKey);
           }}
-          nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
-        />
-      </ReactFlow>
+          onNodeMouseEnter={(e, n) => {
+            clearTimeout(tipTimer.current);
+            // Folders have no tooltip: their header says what's inside.
+            if (!n.data.node) return;
+            const el = (e.target as Element).closest(".react-flow__node");
+            tipTimer.current = setTimeout(() => {
+              if (!el?.isConnected) return;
+              const r = el.getBoundingClientRect();
+              setTip({ id: n.id, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } });
+            }, 600);
+          }}
+          // A moving view would leave the tooltip behind its node.
+          onMoveStart={() => {
+            clearTimeout(tipTimer.current);
+            setTip(null);
+          }}
+          onNodeMouseLeave={() => {
+            clearTimeout(tipTimer.current);
+            setTip(null);
+          }}
+          onNodeContextMenu={(e, n) => {
+            e.preventDefault();
+            if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
+            setMenu({ x: e.clientX, y: e.clientY, id: n.id, mode: "node" });
+          }}
+          onPaneContextMenu={(e) => {
+            e.preventDefault();
+            const s = useExplorer.getState();
+            // Quick add: a small picker right there; what's picked lands at that point.
+            if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
+          }}
+          onNodeDragStart={onNodeDragStart}
+          onNodeDrag={onNodeDrag}
+          onNodeDragStop={onNodeDragStop}
+          onPaneClick={() => select(undefined)}
+          minZoom={0.05}
+          maxZoom={2}
+          fitView
+          fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
+          onlyRenderVisibleElements
+        >
+          <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={cssVar("canvas.grid")} />
+          <FlowPanel position="top-left" className="rae-filters">
+            <RelationFilters />
+          </FlowPanel>
+          <Controls position="bottom-left" showInteractive={false} />
+          <FlowPanel position="bottom-left" className="rae-history">
+            <HistoryButtons />
+          </FlowPanel>
+          <MiniMap
+            pannable
+            zoomable
+            position="bottom-right"
+            nodeColor={(n) => {
+              const d = (n as ElementFlowNode).data;
+              if (d.element.kind === "folder") return "transparent";
+              return cssVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
+            }}
+            nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
+          />
+        </ReactFlow>
+      </LodContext.Provider>
       {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
       {!dragging && !menu && <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} />}
       {marquee.box && <div className="rae-marquee" style={marquee.box} />}
