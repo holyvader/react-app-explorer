@@ -2,6 +2,7 @@
 name = "react-app-explorer"
 version = "0.1.25"
 description = "React App Explorer"
+license = "MIT"
 edition = "2021"
 
 [lib]

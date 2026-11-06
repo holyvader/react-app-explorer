@@ -1,6 +1,7 @@
 {
   "name": "@rae/desktop",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Desktop app (Tauri): a native window around the viewer, with the server + scanner as a sidecar.",
   "scripts": {

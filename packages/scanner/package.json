@@ -1,6 +1,7 @@
 {
   "name": "@rae/scanner",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "bin": {
     "rae-scan": "./src/cli.ts"

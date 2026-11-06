@@ -44,3 +44,7 @@ bun --cwd packages/viewer e2e  # headless smoke test (see .claude/skills/fronten
 ```
 
 Project skills for Claude Code are in `.claude/skills` (scanner, react-flow, frontend, design-system).
+
+## License
+
+[MIT](LICENSE)
