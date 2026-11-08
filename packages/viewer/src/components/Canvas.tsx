@@ -1,4 +1,4 @@
-import type { Edge as GraphEdge } from "@rae/schema";
+import type { Edge as GraphEdge, GraphNode } from "@rae/schema";
 import { ContextMenu, SegmentedToggles, ShortcutLegend, type Shortcut, type ToggleItem, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
@@ -30,6 +30,7 @@ import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.
 import { relationFilterOf, useExplorer } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
+import { NodeDiffModal } from "./NodeDiffModal.tsx";
 import { collapseLevelOf, type Lod, LodContext, lodOf, nextLod } from "./lod.ts";
 import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
 import { ExplorationPicker } from "./picker/ExplorationPicker.tsx";
@@ -102,6 +103,8 @@ const SHORTCUTS: Shortcut[] = [
 ];
 
 const RAISED_Z = 1000;
+/** How long a tooltip stays after the pointer leaves its node: time to reach it (and keep it open). */
+const TIP_GRACE = 250;
 /** Fitting keeps clear of the canvas chrome: the relation filters on top, the controls and minimap below. */
 const FIT_PADDING = { top: "68px", bottom: "64px", left: "48px", right: "48px" } as const;
 const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 350 } as const;
@@ -153,6 +156,11 @@ export function Canvas() {
   const setMenu = useExplorer.getState().openMenu;
   const [tip, setTip] = useState<TipState | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // the tooltip's grace time after its node is left (apart from showing: crossing a frame on the way keeps it)
+  const tipHide = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // the diff view's code: the hovered element's changed lines in the tooltip, and its code diff dialog
+  const diffCode = useExplorer((s) => s.diffOverlay && s.diffCode);
+  const [diffOf, setDiffOf] = useState<GraphNode | null>(null);
   /** ⌘ / Ctrl / Shift held: a click adds to the selection (the cursor says so). */
   const [adding, setAdding] = useState(false);
   /** Shift held: a drag on empty space draws a selection box (crosshair). */
@@ -600,12 +608,18 @@ export function Canvas() {
           }}
           onNodeMouseEnter={(e, n) => {
             clearTimeout(tipTimer.current);
+            // back on the node whose tooltip is open: it stays (another node's leaves when its grace is over)
+            setTip((t) => {
+              if (t?.id === n.id) clearTimeout(tipHide.current);
+              return t;
+            });
             // Folders have no tooltip: their header says what's inside.
             if (!n.data.node) return;
             const el = (e.target as Element).closest(".react-flow__node");
             tipTimer.current = setTimeout(() => {
               if (!el?.isConnected) return;
               const r = el.getBoundingClientRect();
+              clearTimeout(tipHide.current);
               setTip({ id: n.id, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } });
             }, 600);
           }}
@@ -614,9 +628,13 @@ export function Canvas() {
             clearTimeout(tipTimer.current);
             setTip(null);
           }}
-          onNodeMouseLeave={() => {
+          // a moment to reach the tooltip: the pointer on it keeps it open
+          onNodeMouseLeave={(e) => {
             clearTimeout(tipTimer.current);
-            setTip(null);
+            // onto the tooltip (from its node, or from the frame around it, crossed on the way): it stays
+            if ((e.relatedTarget as Element | null)?.closest?.(".rae-tip")) return;
+            clearTimeout(tipHide.current);
+            tipHide.current = setTimeout(() => setTip(null), TIP_GRACE);
           }}
           onNodeContextMenu={(e, n) => {
             e.preventDefault();
@@ -661,7 +679,28 @@ export function Canvas() {
         </ReactFlow>
       </LodContext.Provider>
       {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
-      {!dragging && !menu && <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} />}
+      {!dragging && !menu && !diffOf && (
+        <NodeTooltip
+          tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null}
+          snapshot={snapshot}
+          index={index}
+          diffCode={diffCode}
+          onOpenDiff={(n) => {
+            setTip(null);
+            setDiffOf(n);
+          }}
+          onPointerEnter={() => {
+            clearTimeout(tipTimer.current);
+            clearTimeout(tipHide.current);
+          }}
+          onPointerLeave={() => {
+            clearTimeout(tipTimer.current);
+            clearTimeout(tipHide.current);
+            setTip(null);
+          }}
+        />
+      )}
+      {diffOf && snapshot && <NodeDiffModal node={diffOf} snapshot={snapshot} open onOpenChange={(open) => !open && setDiffOf(null)} />}
       {marquee.box && <div className="rae-marquee" style={marquee.box} />}
       <ExplorationPicker />
       <QuickAdd />

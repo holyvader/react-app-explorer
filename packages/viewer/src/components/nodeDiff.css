@@ -42,3 +42,69 @@
 }
 .rae-cdiff__fold button:hover { background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg); }
 .rae-cdiff__fold button:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1.5px; }
+
+/* The diff view's "Overlay + code": the node tooltip's left column (TipDiff.tsx), changed lines only. */
+.rae-tip[data-diff] { display: flex; align-items: stretch; max-width: none; max-height: min(560px, var(--room)); }
+.rae-tip[data-diff] .rae-tip__main { min-width: 240px; max-width: 380px; overflow: auto; }
+.rae-tip__diff {
+  display: flex;
+  flex-direction: column;
+  width: 580px;
+  min-height: 0;
+  border-right: 1px solid var(--chakra-colors-border-muted);
+  cursor: auto;
+}
+.rae-diffcard__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(34px * var(--rae-text-scale, 1));
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid var(--chakra-colors-border-muted);
+  font: calc(12px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
+  color: var(--chakra-colors-fg-muted);
+}
+.rae-diffcard__change {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--chakra-colors-diff-changed-fg);
+  background: var(--chakra-colors-diff-changed-subtle);
+}
+.rae-diffcard__change[data-change="added"] { color: var(--chakra-colors-diff-added-fg); background: var(--chakra-colors-diff-added-subtle); }
+.rae-diffcard__change[data-change="removed"] { color: var(--chakra-colors-diff-removed-fg); background: var(--chakra-colors-diff-removed-subtle); }
+.rae-diffcard__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--chakra-colors-fg); font-weight: 600; }
+.rae-diffcard__counts { font-family: var(--chakra-fonts-mono); font-size: calc(11px * var(--rae-text-scale, 1)); white-space: nowrap; }
+.rae-diffcard__counts [data-type="del"] { color: var(--chakra-colors-diff-removed-fg); }
+.rae-diffcard__counts [data-type="add"] { color: var(--chakra-colors-diff-added-fg); }
+.rae-diffcard__open {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--chakra-colors-border);
+  color: var(--chakra-colors-fg-muted);
+  cursor: pointer;
+}
+.rae-diffcard__toggle {
+  all: unset;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--chakra-colors-fg-muted);
+  font: 500 calc(11.5px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
+}
+.rae-diffcard__toggle:hover { color: var(--chakra-colors-fg); background: var(--chakra-colors-bg-muted); }
+.rae-diffcard__toggle:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
+.rae-diffcard__open:hover { color: var(--chakra-colors-fg); background: var(--chakra-colors-bg-muted); }
+.rae-diffcard__open:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
+.rae-diffcard__note { padding: 10px 12px; font: calc(12px * var(--rae-text-scale, 1)) var(--chakra-fonts-body); color: var(--chakra-colors-fg-muted); }
+.rae-cdiff.rae-diffcard__code { flex: 1; min-height: 0; max-height: none; border: 0; border-radius: 0 0 0 8px; cursor: text; }
+/* between two runs of changed lines: the unchanged lines left out */
+.rae-diffcard__gap td { height: 7px; padding: 0 !important; background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in oklab, var(--chakra-colors-border-muted) 60%, transparent) 5px 6px); border-block: 1px solid var(--chakra-colors-border-muted); }

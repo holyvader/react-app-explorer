@@ -1,4 +1,4 @@
-import { ActionIconButton, Box, BrandMark, Button, ContextMenu, Flex, Popover, Select, setColorMode, setTextSize, Stack, Switch, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useTextSize } from "@rae/design-system";
+import { ActionIconButton, Box, BrandMark, Button, ContextMenu, Flex, Popover, Select, setColorMode, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useTextSize } from "@rae/design-system";
 import { projectName, shortPath } from "../lib/paths.ts";
 import {
   IconBranch,
@@ -19,7 +19,7 @@ import { sideLabel } from "../lib/diff.ts";
 import type { SnapshotDiff } from "@rae/schema";
 import { EDITORS, type EditorKind, openRequestPage } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
-import { useExplorer } from "../store.ts";
+import { type DiffMode, diffModeOf, useExplorer } from "../store.ts";
 
 export interface ToolbarProps {
   list?: SnapshotList;
@@ -121,7 +121,7 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
         </Flex>
       </Tooltip>
       {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
-      {snapshot?.diff && <DiffOverlaySwitch />}
+      {snapshot?.diff && <DiffModeSelect />}
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
         ref={fileRef}
@@ -256,15 +256,23 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   );
 }
 
-/** The diff overlay (colours, removed elements as ghosts), on the bar while a diff is open. */
-function DiffOverlaySwitch() {
-  const diffOverlay = useExplorer((s) => s.diffOverlay);
+const DIFF_MODES = [
+  { value: "off", label: "Off" },
+  { value: "overlay", label: "Overlay" },
+  { value: "code", label: "Overlay + code" },
+];
+
+/**
+ * The diff view, on the bar while a diff is open: off, the overlay (what changed in colour, removed
+ * elements as ghosts), or the overlay plus the selected element's changed lines in a card under it.
+ */
+function DiffModeSelect() {
+  const mode = useExplorer(diffModeOf);
   return (
-    <Tooltip content="Diff overlay: what changed in colour, removed elements as ghosts">
+    <Tooltip content="Diff view — Overlay: what changed in colour, removed elements as ghosts. Overlay + code: also the changed lines in the tooltip of a changed element.">
       <Flex align="center" gap="1.5" flexShrink={0} fontSize={textPx(12)} color="fg.muted">
-        <Switch size="xs" checked={diffOverlay} onCheckedChange={useExplorer.getState().setDiffOverlay}>
-          Diff overlay
-        </Switch>
+        <Text as="span">Diff</Text>
+        <Select value={mode} onValueChange={(v) => useExplorer.getState().setDiffMode(v as DiffMode)} options={DIFF_MODES} width="140px" size="xs" label="Diff view" />
       </Flex>
     </Tooltip>
   );

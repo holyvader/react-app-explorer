@@ -378,7 +378,7 @@
 .rae-tip {
   position: fixed;
   z-index: 1500;
-  pointer-events: none;
+  /* hoverable: the pointer on it keeps it open (Canvas), its code scrolls and selects */
   width: max-content;
   min-width: 240px;
   max-width: 380px;

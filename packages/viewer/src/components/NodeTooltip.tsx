@@ -4,6 +4,8 @@ import type { GraphIndex } from "../graph/relations.ts";
 import { cacheLabel, fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
 import { DefinitionCode, SourceCode, TypeCode } from "./Code.tsx";
 import { shownReturn, shownType } from "../lib/typeText.ts";
+import { showsTipDiff } from "../lib/nodeDiff.ts";
+import { TipDiff } from "./TipDiff.tsx";
 
 /** Characters a laid-out type may take in the tooltip. */
 const TIP_COLUMNS = 52;
@@ -328,14 +330,32 @@ export interface TipState {
 
 /** Room needed above a node to show the tooltip there; with less, it goes below. */
 const ROOM_ABOVE = 260;
-/** Half the tooltip's max width + margin, to keep it on screen when centring. */
+/** Half the tooltip's max width + margin, to keep it on screen when centring (with the diff column: wider). */
 const HALF = 200;
+const HALF_DIFF = 490;
+/** The gap between the node and the tooltip. */
+const GAP = 12;
+/** The app's toolbar over the canvas (44px) and a margin: the tooltip stays below it. */
+const TOP = 52;
+
+export interface NodeTooltipProps {
+  tip: TipState | null;
+  snapshot?: Snapshot;
+  index?: GraphIndex;
+  /** The diff view shows code: a changed element's changed lines in a left column. */
+  diffCode?: boolean;
+  onOpenDiff: (node: GraphNode) => void;
+  /** The pointer on the tooltip keeps it open (it's left on its own when the pointer goes). */
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}
 
 /**
  * One tooltip for the whole canvas, above the hovered node and centred on it (below it when
- * there's no room above).
+ * there's no room above). It stays open while the pointer is on it: its code can be scrolled
+ * and selected, and the diff column's button opens the code diff dialog.
  */
-export function NodeTooltip({ tip, snapshot, index }: { tip: TipState | null; snapshot?: Snapshot; index?: GraphIndex }) {
+export function NodeTooltip({ tip, snapshot, index, diffCode = false, onOpenDiff, onPointerEnter, onPointerLeave }: NodeTooltipProps) {
   if (!tip || !snapshot || !index) return null;
   const n = snapshot.nodes[tip.id];
   if (!n) return null;
@@ -343,34 +363,48 @@ export function NodeTooltip({ tip, snapshot, index }: { tip: TipState | null; sn
   const Icon = meta.icon;
   const caption = [meta.label, fileNote(n), n.moduleType, n.nextRole ? `next ${n.nextRole}` : undefined, n.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const { rect } = tip;
-  const centre = Math.min(Math.max(rect.left + rect.width / 2, HALF), window.innerWidth - HALF);
-  const above = rect.top >= ROOM_ABOVE;
+  const diff = showsTipDiff(snapshot, n, diffCode);
+  const half = diff ? HALF_DIFF : HALF;
+  const centre = Math.min(Math.max(rect.left + rect.width / 2, half), window.innerWidth - half);
+  // the diff column is tall: it goes where there's more room, and its lines scroll within that
+  const roomAbove = rect.top - GAP - TOP;
+  const roomBelow = window.innerHeight - rect.bottom - GAP - 8;
+  const above = diff ? roomAbove >= roomBelow : rect.top - TOP >= ROOM_ABOVE;
   return (
     <div
       className="rae-tip"
       role="tooltip"
       data-kind={n.kind}
       data-side={above ? "top" : "bottom"}
-      style={{
-        left: centre,
-        top: above ? rect.top - 12 : rect.bottom + 12,
-        transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
-      }}
+      data-diff={diff ? "" : undefined}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      style={
+        {
+          left: centre,
+          top: above ? rect.top - GAP : rect.bottom + GAP,
+          transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+          "--room": `${Math.max(above ? roomAbove : roomBelow, 160)}px`,
+        } as CSSProperties
+      }
     >
-      <div className="rae-tip__head">
-        <span className="rae-card__tile rae-tip__tile">
-          <Icon size={15} strokeWidth={2.2} />
-        </span>
-        <div className="rae-tip__titles">
-          <div className="rae-tip__title">{n.name}</div>
-          <div className="rae-tip__caption">{caption}</div>
+      {diff && <TipDiff node={n} snapshot={snapshot} onOpenDiff={onOpenDiff} />}
+      <div className="rae-tip__main">
+        <div className="rae-tip__head">
+          <span className="rae-card__tile rae-tip__tile">
+            <Icon size={15} strokeWidth={2.2} />
+          </span>
+          <div className="rae-tip__titles">
+            <div className="rae-tip__title">{n.name}</div>
+            <div className="rae-tip__caption">{caption}</div>
+          </div>
         </div>
+        <div className="rae-tip__path">
+          {n.filePath}
+          {n.loc && n.kind !== "module" && n.kind !== "external" ? `:${n.loc.line}` : ""}
+        </div>
+        <div className="rae-tip__body">{content(n, snapshot, index)}</div>
       </div>
-      <div className="rae-tip__path">
-        {n.filePath}
-        {n.loc && n.kind !== "module" && n.kind !== "external" ? `:${n.loc.line}` : ""}
-      </div>
-      <div className="rae-tip__body">{content(n, snapshot, index)}</div>
     </div>
   );
 }

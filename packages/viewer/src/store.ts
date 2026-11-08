@@ -57,6 +57,10 @@ export interface ScanState {
   typed?: boolean;
 }
 
+/** The diff view: nothing marked, the overlay (colours, ghosts), or the overlay plus the selection's changed lines. */
+export type DiffMode = "off" | "overlay" | "code";
+export const diffModeOf = (s: { diffOverlay: boolean; diffCode: boolean }): DiffMode => (!s.diffOverlay ? "off" : s.diffCode ? "code" : "overlay");
+
 interface ExplorerState {
   snapshot?: Snapshot;
   snapshotName?: string;
@@ -78,6 +82,8 @@ interface ExplorerState {
   showAssets: boolean;
   /** Diff snapshots: show what changed (colours, badges, removed elements as ghosts). */
   diffOverlay: boolean;
+  /** Diff snapshots, with the overlay on: the selected element's changed lines in a card under it. */
+  diffCode: boolean;
   /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
@@ -153,6 +159,8 @@ interface ExplorerState {
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
   setShowAssets: (on: boolean) => void;
   setDiffOverlay: (on: boolean) => void;
+  /** The toolbar's diff view: off, the overlay, or the overlay plus the selected element's code changes. */
+  setDiffMode: (mode: DiffMode) => void;
   /** Diff snapshots: puts the changes on the canvas (declarations and their files, up to a limit). */
   showChanges: () => void;
   setRoutes: (on: boolean) => void;
@@ -178,7 +186,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
+const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 const readJson = <T,>(key: string, fallback: T): T => {
   try {
     const v = localStorage.getItem(key);
@@ -258,6 +266,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     hideAllLibraries: readJson(KEYS.hideAll, false),
     showAssets: readJson(KEYS.assets, false),
     diffOverlay: readJson(KEYS.diffOverlay, true),
+    diffCode: readJson(KEYS.diffCode, false),
     // Folders and routes are nodes of their own (added from the tree / picker), not automatic
     // frames around files: both frame modes stay off (the toolbar toggles are gone).
     routes: false,
@@ -515,6 +524,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setDiffOverlay: (on) => {
       localStorage.setItem(KEYS.diffOverlay, JSON.stringify(on));
       redraw({ diffOverlay: on }, null);
+    },
+
+    setDiffMode: (mode) => {
+      const code = mode === "code";
+      localStorage.setItem(KEYS.diffCode, JSON.stringify(code));
+      set({ diffCode: code });
+      if (get().diffOverlay !== (mode !== "off")) get().setDiffOverlay(mode !== "off");
     },
 
     setLibraryFilter: ({ excluded, hideAllLibraries }) => {

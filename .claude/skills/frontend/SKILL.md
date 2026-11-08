@@ -149,7 +149,8 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 ## Diff snapshots (`snapshot.diff`, lib/diff.ts)
 - `normalizeSnapshot` → `applyDiff`: the diff's removed nodes and edges go into the graph as **ghosts**
   (`isGhost`, `edgeChange` via WeakSets/WeakMaps — no extra fields on schema objects); added edges are marked.
-- The **diff overlay** (`diffOverlay` in the store; its switch sits on the toolbar beside the diff chip) shows changes; off, `LibraryFilter.hideRemoved`
+- The toolbar's **Diff** select, beside the diff chip (`DiffMode` off / overlay / code = `diffOverlay` + `diffCode`; `setDiffMode`, `rae.diffCode`). "Overlay + code": the node tooltip of a changed element gets a left column (`TipDiff`, components/TipDiff.tsx; `showsTipDiff` in lib/nodeDiff.ts) with its changed lines only (runs apart, no unchanged context) from `useNodeDiff`, and a button opening `NodeDiffModal` (held by Canvas, so it outlives the tooltip).
+- The **diff overlay** (`diffOverlay` in the store) shows changes; off, `LibraryFilter.hideRemoved`
   hides ghosts everywhere (canvas, tree, relations) through `isFiltered` / `drawnGraph` / `isChildEdge`.
   Pass `diffOverlay` to every `relationFilterOf` call. Assets the diff touched (`isChangedAsset`) show with
   the overlay on even while the Assets toggle is off, and `changesToShow` includes them.

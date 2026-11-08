@@ -29,6 +29,12 @@ export interface NodeDiff {
   removed: number;
 }
 
+/** Elements whose code can be read: external packages and routes have none of their own here. */
+export const hasCode = (n: GraphNode) => n.kind !== "external" && n.kind !== "route" && !n.asset && !n.missing;
+
+/** Whether the node tooltip shows `n`'s changed lines: the diff view shows code, and `n` changed and has code. */
+export const showsTipDiff = (s: Snapshot, n: GraphNode, on: boolean) => on && !!s.diff?.nodes[n.id] && hasCode(n);
+
 /** The two sides of a node's change: the base (changed / removed) and the head (changed / added). */
 export function sidesOf(snapshot: Snapshot, node: GraphNode): { before?: DiffSide; after?: DiffSide; whole: boolean } {
   const diff = snapshot.diff!;
