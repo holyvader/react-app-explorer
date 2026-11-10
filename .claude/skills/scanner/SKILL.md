@@ -167,7 +167,7 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
 ## Adding things
 - **New condition kind**: add to `ConditionKind` (schema) → push in `JsxAnalyzer` → `formatCondition` / `CONDITION_LABEL` in `packages/viewer/src/lib/conditions.ts` → test.
 - Relations: `imports`, `declares`, `renders`, `usesHook`, `invokes` (calls, `new`, handler references, module-level calls), `invokesAction` (invokes a server action). Schema v1 called the last two `calls`/`callsAction`; the viewer upgrades old snapshots in `normalizeSnapshot`.
-- **New edge kind**: add to `EdgeKind` → `addEdge` in graph.ts → viewer `EDGE_GROUP_OF`, `CHILD_KINDS` (relations.ts), `EDGE_STYLE` (Canvas.tsx).
+- **New edge kind**: add to `EdgeKind` → `addEdge` in graph.ts → viewer `EDGE_GROUP_OF`, `CHILD_KINDS` (relations.ts), `edgeLook` (components/canvas/edges.ts).
 - **New Next.js file convention**: `APP_ROLES` / `nextRoleOf` in project.ts.
 
 ## Verify

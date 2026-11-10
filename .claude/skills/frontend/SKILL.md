@@ -14,6 +14,9 @@ vite.config.ts / vite-plugin-snapshots.ts   dev API (dir = RAE_SNAPSHOTS):
                         RAE_BROWSE_ROOT the initial picker folder). Dev-only: it exposes the local filesystem.
 src/main.tsx            DesignSystemProvider + App
 src/App.tsx             shell: Toolbar, Canvas, DetailsPanel, ScanModal, LibrariesModal, ConfirmExpansion; ⌘K opens the picker
+src/components/details/ the details panel's sections: Signature (generics, props, inputs & output), Route (route, cache,
+                        middleware), Relations (Uses / Used by, chips), Diff ("In this diff"), CodeRows, codeBox
+src/components/canvas/  the canvas's parts (react-flow skill): node / edge pipelines, drag, tooltip, keys, marquee
 src/components/picker/  adding: ExplorationPicker (tree picker), QuickAdd (right-click), ElementTree
 src/store.ts            zustand store (single source of UI state)
 src/graph/              pure graph logic (drawn graph, relations, ELK layout, placement engine, library filter), no React; tests in test/
