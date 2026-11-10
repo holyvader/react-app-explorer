@@ -20,6 +20,11 @@ const fail = (msg: string) => {
   process.exitCode = 1;
 };
 
+// A server without snapshots shows the welcome screen, never the diagram: say why up front.
+const list = (await (await fetch(new URL("api/snapshots", url))).json()) as { dir: string; snapshots: unknown[] };
+if (!list.snapshots.length)
+  throw new Error(`the server has no snapshots in ${list.dir}: RAE_SNAPSHOTS is relative to the repo root (packages/fixtures/next-app/.explorer/snapshots), and run \`bun run scan packages/fixtures/next-app --no-merge\` first`);
+
 await page.goto(url);
 await page.getByText("Empty diagram").waitFor({ timeout: 15000 });
 // Earlier runs' UI scans add react-app snapshots to the same folder: pick the newest next-app one

@@ -141,7 +141,8 @@ bun run build && tsc -p packages/viewer --noEmit && bun run lint
 ```bash
 bun run scan packages/fixtures/next-app
 # Dedicated port + PID: the user may have their own `bun run dev` running.
-(cd packages/viewer && RAE_SNAPSHOTS=../fixtures/next-app/.explorer/snapshots node_modules/.bin/vite --port 5199 --strictPort > /tmp/rae-test.log 2>&1 & echo $! > /tmp/rae-test.pid)
+# RAE_SNAPSHOTS is relative to the repo root (vite-plugin-snapshots.ts), not to where vite runs
+(cd packages/viewer && RAE_SNAPSHOTS=packages/fixtures/next-app/.explorer/snapshots node_modules/.bin/vite --port 5199 --strictPort > /tmp/rae-test.log 2>&1 & echo $! > /tmp/rae-test.pid)
 PW_CHROMIUM_PATH=~/Library/Caches/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-mac-arm64/chrome-headless-shell \
   bun --cwd packages/viewer e2e [screenshotDir]
 ```
