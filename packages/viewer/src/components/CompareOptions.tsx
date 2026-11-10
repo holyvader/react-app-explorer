@@ -4,6 +4,8 @@ import type { GitOverview, GitRequest, GitRequestList, GitTools, GitToolStatus, 
 import { useEffect, useMemo, useState } from "react";
 import { fetchGit, fetchGitRequests, fetchGitTools, type ScanSettings } from "../lib/api.ts";
 import { branchOptions, branchPrefix } from "../lib/branches.ts";
+import { readSetting, writeSetting } from "../lib/settings.ts";
+import { plural } from "../lib/text.ts";
 
 /** What "Compare" sends: undefined while off (a plain scan). */
 export type CompareChoice = ScanSettings["diff"];
@@ -43,7 +45,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
   const requests = repo && requestsFor?.key === repo.root ? requestsFor : undefined;
   // the source per repo: what the user picked (remembered), Auto otherwise
   const [picked, setPicked] = useState<Record<string, RequestSource>>({});
-  const source: RequestSource = repo ? (picked[repo.root] ?? (localStorage.getItem(SOURCE_KEY(repo.root)) as RequestSource | null) ?? "auto") : "auto";
+  const source: RequestSource = repo ? (picked[repo.root] ?? readSetting<RequestSource>(SOURCE_KEY(repo.root), "auto")) : "auto";
 
   const [on, setOn] = useState(false);
   const [base, setBase] = useState("");
@@ -145,7 +147,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
     { value: "glab", label: `GitLab CLI (glab) — ${toolState(tools?.tools?.glab)}` },
   ];
   const setSource = (s: string) => {
-    localStorage.setItem(SOURCE_KEY(repo.root), s);
+    writeSetting(SOURCE_KEY(repo.root), s);
     setPicked((p) => ({ ...p, [repo.root]: s as RequestSource }));
   };
 
@@ -235,7 +237,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
             <Text fontSize="xs" color="fg.muted" pl="80px">
               {requests?.error ??
                 (listed
-                  ? `${listed.requests.length} ${viaCli ? "open " : ""}request${listed.requests.length === 1 ? "" : "s"} via ${TOOL_NAME[listed.source]}${listed.fallback ? ` — ${listed.fallback}` : ""}`
+                  ? `${listed.requests.length} ${viaCli ? "open " : ""}${plural(listed.requests.length, "request", { word: true })} via ${TOOL_NAME[listed.source]}${listed.fallback ? ` — ${listed.fallback}` : ""}`
                   : "Checking the CLIs…")}
             </Text>
           )}

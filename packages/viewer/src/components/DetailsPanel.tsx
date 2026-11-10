@@ -21,18 +21,19 @@ import { CHANGE_WORD, type ParamSide, type SignatureChange, signatureChanges } f
 import { canOpenEditor, EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, duration, renderingLabel, routeCaption } from "../lib/kinds.tsx";
 import { relationToken, relationWord } from "../lib/relationWords.ts";
-import { relationFilterOf, useExplorer, SIDEBAR_WIDTH } from "../store.ts";
+import { SIDEBAR_WIDTH, useExplorer, useRelationFilter } from "../store.ts";
 import { isFolder } from "../graph/drawn.ts";
 import { DetailsStrip } from "./DetailsStrip.tsx";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
 import { NodeDiffModal } from "./NodeDiffModal.tsx";
-import { useNodeDiff } from "../lib/nodeDiff.ts";
+import { hasCode, useNodeDiff } from "../lib/nodeDiff.ts";
 import { RenderTree } from "./RenderTree.tsx";
 import { SourceCode } from "./Code.tsx";
 import { TypeText } from "./TypeText.tsx";
 import { Section } from "./Section.tsx";
 import { shownReturn, shownType } from "../lib/typeText.ts";
+import { plural } from "../lib/text.ts";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -48,10 +49,7 @@ export function DetailsPanel() {
   const selectedId = useExplorer((s) => s.inspectedId ?? s.selectedId);
   const onDiagram = useExplorer((s) => !!selectedId && s.graph.elements.some((e) => e.id === selectedId));
   const multiSelected = useExplorer((s) => !s.inspectedId && s.selection.length > 1);
-  const enabled = useExplorer((s) => s.enabled);
-  const excluded = useExplorer((s) => s.excluded);
-  const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
-  const showAssets = useExplorer((s) => s.showAssets);
+  const filter = useRelationFilter();
   const diffOverlay = useExplorer((s) => s.diffOverlay);
   const editor = useExplorer((s) => s.editor);
   const hasEditor = useExplorer((s) => canOpenEditor(s.editors));
@@ -62,12 +60,11 @@ export function DetailsPanel() {
 
   const relations = useMemo(() => {
     if (!snapshot || !index || !node) return { parents: [], children: [] };
-    const filter = relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets, diffOverlay });
     return {
       parents: parentEdges(snapshot, index, node.id, filter),
       children: childEdges(snapshot, index, node.id, filter),
     };
-  }, [snapshot, index, node, enabled, excluded, hideAllLibraries, showAssets, diffOverlay]);
+  }, [snapshot, index, node, filter]);
 
   // Several selected on the diagram: no one element's details (a file-tree inspection still shows).
   if (multiSelected) return null;
@@ -589,7 +586,7 @@ function MiddlewareView({ node }: { node: GraphNode }) {
         </Text>
       )}
       <Text fontSize="xs" color="fg.muted">
-        Runs before {routes} route{routes === 1 ? "" : "s"} (see Uses). Checks inside the function itself aren't evaluated.
+        Runs before {plural(routes, "route")} (see Uses). Checks inside the function itself aren't evaluated.
       </Text>
     </Stack>
   );
@@ -887,11 +884,10 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
  */
 function DiffLines({ node }: { node: GraphNode }) {
   const snapshot = useExplorer((s) => s.snapshot);
-  const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
-  const { diff } = useNodeDiff(snapshot, node, hasCode);
+  const { diff } = useNodeDiff(snapshot, node, hasCode(node));
   if (!diff) return null;
   return (
-    <Text as="span" fontFamily="mono" fontSize={textPx(10.5)} title={`${diff.removed} line${diff.removed === 1 ? "" : "s"} removed, ${diff.added} added`}>
+    <Text as="span" fontFamily="mono" fontSize={textPx(10.5)} title={`${plural(diff.removed, "line")} removed, ${diff.added} added`}>
       <Text as="span" color="diff.removed.fg">
         −{diff.removed}
       </Text>
@@ -936,8 +932,6 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
   // only the signature here: props / parameters and the return type; the rest is in the code diff
   const items = change === "changed" && before ? signatureChanges(before, node, { annotations: !!diff.annotations }) : [];
   const shown = more ? items : items.slice(0, DIFF_ITEMS);
-  // external packages and routes have no code of their own here
-  const hasCode = node.kind !== "external" && node.kind !== "route" && !node.asset && !node.missing;
   const word = (it: Extract<SignatureChange, { kind: "param" }>) => `${it.isProp ? "prop" : "parameter"} ${it.what}`;
   return (
     <Stack gap="2" fontSize={textPx(12.5)}>
@@ -951,7 +945,7 @@ function DiffView({ node, change }: { node: GraphNode; change: "added" | "remove
                 ? `Signature changed${items.length > DIFF_ITEMS ? ` (${items.length})` : ""}:`
                 : "Same signature: the code diff shows what changed."}
         </Text>
-        {hasCode && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
+        {hasCode(node) && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
       </Flex>
       {shown.map((it, i) => (
         <Box key={i} minW="0">

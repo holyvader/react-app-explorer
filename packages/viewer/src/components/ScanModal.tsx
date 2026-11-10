@@ -5,6 +5,7 @@ import { type FsListing, listDir } from "../lib/api.ts";
 import { isScanning, startScan } from "../lib/scanJob.ts";
 import { type CompareChoice, CompareOptions } from "./CompareOptions.tsx";
 import { useExplorer } from "../store.ts";
+import { readSetting, writeSetting } from "../lib/settings.ts";
 
 const LAST_PATH_KEY = "rae.scanPath";
 const MERGE_KEY = "rae.scanMerge";
@@ -18,10 +19,10 @@ export interface ScanModalProps {
 
 /** Pick a folder or entry file on the dev server's machine and run the scanner on it. */
 export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
-  const [path, setPath] = useState(() => localStorage.getItem(LAST_PATH_KEY) ?? "");
+  const [path, setPath] = useState(() => readSetting(LAST_PATH_KEY, ""));
   const [types, setTypes] = useState(true);
   // remembered: whether files declaring one exported thing become that declaration (default on)
-  const [merge, setMerge] = useState(() => localStorage.getItem(MERGE_KEY) !== "off");
+  const [merge, setMerge] = useState(() => readSetting(MERGE_KEY, true, (raw) => raw !== "off"));
   const [diff, setDiff] = useState<CompareChoice>();
   const [listing, setListing] = useState<FsListing>();
   const [browseError, setBrowseError] = useState<string>();
@@ -38,7 +39,7 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
   // Load the initial listing when the dialog opens (an external system → effect is appropriate).
   useEffect(() => {
     if (!open) return;
-    const start = localStorage.getItem(LAST_PATH_KEY) ?? undefined;
+    const start = readSetting(LAST_PATH_KEY, "") || undefined;
     let cancelled = false;
     listDir(start)
       .catch(() => listDir())
@@ -51,8 +52,8 @@ export function ScanModal({ open, onOpenChange, onScanned }: ScanModalProps) {
 
   const scan = () => {
     const target = path.trim();
-    localStorage.setItem(LAST_PATH_KEY, target);
-    localStorage.setItem(MERGE_KEY, merge ? "on" : "off");
+    writeSetting(LAST_PATH_KEY, target);
+    writeSetting(MERGE_KEY, merge);
     void startScan(target, { types, merge, diff }, onScanned);
     onOpenChange(false); // progress (and Cancel) show over the canvas: nothing blocks while it runs
   };

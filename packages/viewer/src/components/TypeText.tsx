@@ -6,6 +6,7 @@ import { type FoldRule, layoutDefinition, layoutType, type Tok } from "../lib/sy
 import { useExplorer } from "../store.ts";
 import { useCodeColumns } from "../lib/useColumns.ts";
 import { CodeLines, DefinitionCode, TypeCode } from "./Code.tsx";
+import { plural } from "../lib/text.ts";
 
 /** Lines of a definition shown in a tooltip before "…". */
 const PREVIEW_LINES = 24;
@@ -96,7 +97,7 @@ export function TypeText({ text, owner, block, flat, optional }: { text: string;
           role="button"
           tabIndex={0}
           aria-expanded={!t.fold}
-          title={t.fold ? `Show ${t.members} member${t.members === 1 ? "" : "s"}` : "Fold this object"}
+          title={t.fold ? `Show ${plural(t.members ?? 0, "member")}` : "Fold this object"}
           onClick={(e) => {
             e.stopPropagation();
             setToggled((s) => ({ ...s, [toggle]: !t.fold }));

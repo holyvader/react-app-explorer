@@ -2,6 +2,7 @@ import { Alert, Badge, Box, Button, Checkbox, Flex, HStack, Modal, Stack, Text }
 import { useState } from "react";
 import { deleteSnapshots, type SnapshotList } from "../lib/api.ts";
 import { projectName, shortPath } from "../lib/paths.ts";
+import { plural } from "../lib/text.ts";
 
 export interface SnapshotsModalProps {
   open: boolean;
@@ -83,7 +84,7 @@ export function SnapshotsModal({ open, onOpenChange, list, current, onDeleted }:
         confirming ? (
           <HStack w="full">
             <Text fontSize="sm" flex="1">
-              Delete {selected.size} snapshot{selected.size === 1 ? "" : "s"}? This can't be undone.
+              Delete {plural(selected.size, "snapshot")}? This can't be undone.
             </Text>
             <Button variant="outline" onClick={() => setConfirming(false)} disabled={busy}>
               Keep them

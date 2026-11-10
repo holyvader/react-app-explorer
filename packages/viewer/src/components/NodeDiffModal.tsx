@@ -3,34 +3,13 @@ import { IconInline, IconSplit } from "@rae/design-system/icons";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, useMemo, useState } from "react";
 import { type DiffLine, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
-import { sidesOf, useNodeDiff } from "../lib/nodeDiff.ts";
-import { lexSource, type TokLine } from "../lib/syntax.ts";
-import "./syntax.css";
-import "./nodeDiff.css";
+import { type Coloured, sidesOf, useColoured, useNodeDiff } from "../lib/nodeDiff.ts";
+import { DiffCode, InlineRow } from "./DiffCode.tsx";
+import { usePersistentState } from "../lib/settings.ts";
+import { plural } from "../lib/text.ts";
 
 export type DiffMode = "split" | "inline";
 
-/** Files bigger than this (characters) are shown without colours: lexing them would slow the dialog. */
-const COLOUR_LIMIT = 400_000;
-
-/** Each side's lines, coloured (by line number − 1), from the whole file: comments and strings spanning lines colour right. */
-type Coloured = { before?: TokLine[]; after?: TokLine[] };
-const colour = (text: string | undefined) => (text !== undefined && text.length <= COLOUR_LIMIT ? lexSource(text) : undefined);
-
-/** A line's code: coloured when its side was, else as text. */
-function Code({ tokens, text }: { tokens?: TokLine; text: string }) {
-  if (!tokens) return <>{text || " "}</>;
-  if (!tokens.length) return <> </>;
-  return (
-    <>
-      {tokens.map((t, i) => (
-        <span key={i} className={`rae-tok--${t.k}`}>
-          {t.t}
-        </span>
-      ))}
-    </>
-  );
-}
 const MODE_KEY = "rae.codeDiffMode";
 
 export interface NodeDiffModalProps {
@@ -48,17 +27,13 @@ export interface NodeDiffModalProps {
  */
 export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffModalProps) {
   const { before, after, whole } = useMemo(() => sidesOf(snapshot, node), [snapshot, node]);
-  const [mode, setMode] = useState<DiffMode>(() => (localStorage.getItem(MODE_KEY) as DiffMode | null) ?? "split");
-  const pickMode = (m: DiffMode) => {
-    localStorage.setItem(MODE_KEY, m);
-    setMode(m);
-  };
+  const [mode, pickMode] = usePersistentState<DiffMode>(MODE_KEY, "split");
   const [showAll, setShowAll] = useState(false);
 
   // both versions from git, and their line diff (shared with the details' "In this diff" header)
   const { diff: loaded, error } = useNodeDiff(snapshot, node, open);
   const lines: DiffLine[] | undefined = loaded?.lines;
-  const coloured = useMemo<Coloured>(() => (loaded ? { before: colour(loaded.before), after: colour(loaded.after) } : {}), [loaded]);
+  const coloured = useColoured(loaded);
   const counts = { add: loaded?.added ?? 0, del: loaded?.removed ?? 0 };
 
   const title = (
@@ -128,7 +103,7 @@ function Fold({ count, cols, onExpand }: { count: number; cols: number; onExpand
     <tr className="rae-cdiff__fold">
       <td colSpan={cols}>
         <button type="button" onClick={onExpand}>
-          ⋯ {count} unchanged line{count === 1 ? "" : "s"}
+          ⋯ {count} unchanged {plural(count, "line", { word: true })}
         </button>
       </td>
     </tr>
@@ -147,14 +122,7 @@ function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[];
             ) : (
               <Fragment key={i}>
                 {p.rows.map((l, k) => (
-                  <tr key={k} data-type={l.type}>
-                    <td className="rae-cdiff__num">{l.type !== "add" ? l.a : ""}</td>
-                    <td className="rae-cdiff__num">{l.type !== "del" ? l.b : ""}</td>
-                    <td className="rae-cdiff__sign">{l.type === "add" ? "+" : l.type === "del" ? "−" : ""}</td>
-                    <td className="rae-cdiff__code">
-                      <Code tokens={l.type === "del" ? coloured.before?.[l.a - 1] : coloured.after?.[l.b - 1]} text={l.text} />
-                    </td>
-                  </tr>
+                  <InlineRow key={k} line={l} coloured={coloured} />
                 ))}
               </Fragment>
             ),
@@ -189,13 +157,13 @@ function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; 
                       {r.left?.a ?? ""}
                     </td>
                     <td className="rae-cdiff__code" data-type={r.left?.type ?? "empty"}>
-                      {r.left ? <Code tokens={coloured.before?.[r.left.a - 1]} text={(r.left.type === "same" && r.left.was) || r.left.text} /> : ""}
+                      {r.left ? <DiffCode tokens={coloured.before?.[r.left.a - 1]} text={(r.left.type === "same" && r.left.was) || r.left.text} /> : ""}
                     </td>
                     <td className="rae-cdiff__num" data-type={r.right?.type ?? "empty"}>
                       {r.right?.b ?? ""}
                     </td>
                     <td className="rae-cdiff__code" data-type={r.right?.type ?? "empty"}>
-                      {r.right ? <Code tokens={coloured.after?.[r.right.b - 1]} text={r.right.text} /> : ""}
+                      {r.right ? <DiffCode tokens={coloured.after?.[r.right.b - 1]} text={r.right.text} /> : ""}
                     </td>
                   </tr>
                 ))}

@@ -32,11 +32,11 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 ## Relations (`graph/relations.ts`)
 - `CHILD_KINDS[nodeKind]` decides which outgoing edge kinds count as children. An edge X→Y is a parent link of Y iff it is a child link of X.
   - module: imports, declares, renders, invokes · component: renders, usesHook, invokes, invokesAction · hook/function/action: invokes, usesHook, invokesAction · external: none
-- Every relation query takes a `RelationFilter` (enabled edge groups + library filter): `relationFilterOf(state)`.
+- Every relation query takes a `RelationFilter` (enabled edge groups + library filter): `useRelationFilter()` in components, `relationFilterOf(state)` outside React.
 - `reachable(…, deep)` is a BFS with a visited set. Expansions above `LARGE_EXPANSION` (300) ask first.
 
 ## Nodes and edges are plain HTML/CSS (no Chakra on the canvas)
-- `components/nodes/{CardNode,FrameNode,NodeActions}.tsx`, `ConditionEdge.tsx` and `components/canvas.css` render with plain elements and `rae-*` classes. They re-render on every drag frame, and Chakra's runtime styling dropped frames. Colors come from design-system tokens via Chakra CSS variables (`--chakra-colors-kind-server-action-solid`: camelCase becomes kebab-case; see `cssVar()` in Canvas.tsx). The design-system import rule still holds: nothing imports Chakra here.
+- `components/nodes/{CardNode,FrameNode,NodeActions}.tsx`, `ConditionEdge.tsx` and `components/canvas.css` render with plain elements and `rae-*` classes. They re-render on every drag frame, and Chakra's runtime styling dropped frames. Colors come from design-system tokens via Chakra CSS variables (`--chakra-colors-kind-server-action-solid`: camelCase becomes kebab-case; see `tokenVar()` in the design system). The design-system import rule still holds: nothing imports Chakra here.
 - Leaf cards (the "Explorer Final" design): flat, 52px high, padding 0 12, a 17px icon in the kind's colour (no tile), name 15/600 (caption 12.5; frame titles 13 mono, chips 11.5), and a caption whose first word is the kind in `kind.*.fg` followed by quiet extras (`.rae-card__extra`: role, async, cached; ` · client` / ` · shared` for top-level files in the boundary colour). Borders only, no shadows except while dragging. States change **instantly** (no transitions on nodes, WebKit rasterises animating layers at 1×): hover = `kind.*.muted` border on `card.bgSelected`; related = 1.5px `selection.related`; selected = 1.5px `selection.solid` + 3px `selection.ring`; faded = a veil of 68% canvas colour (`::after` on `.rae-card` / `.rae-frame` / edge labels; ghosts' contents a `::before` veil), **never `opacity`**: a translucent node gets its own WebKit layer, rasterised at 1× and scaled by the zoom, so the desktop app showed every faded node blurry. Actions sit in an inset group on the right (`.rae-card__actions`, `bg.emphasized`), shown on hover or selection. No `backdrop-filter` on the canvas.
 - The kind's shape is in the corners (plain CSS `border-radius` on `.rae-card`): component 8px, hook a pill, function `26px 8px 8px 26px`, server action `10px 2px 10px 2px`, type 3px, library a dashed pill, folder and missing files dashed. Frames: `card.frame` background, 1px `card.border`, radius 8, a 34px header (`PADDING.top` 48) with the file path / route URL / folder name in mono and outlined chips (Next.js role in the route colour, boundary).
 - Colours: **blue (hue 240–280) is reserved for selection** (`selection.solid` selected, `selection.related` related, also the selected tree row and the primary action). Every relation has a `relation.*` token shared by its edge, arrow, label, filter swatch and details badge.
@@ -115,7 +115,7 @@ description: Work on the viewer's React Flow (@xyflow/react v12) diagram — can
 - Define `nodeTypes` and `edgeTypes` at **module scope** and wrap node components in `memo`.
 - Card/frame sizes come from `widthOf`/`frameWidthOf`/`CARD_HEIGHT`/`PADDING`. If node content grows, update those so ELK and the placement agree.
 - Interactive elements inside nodes need `className="nodrag nopan"` and `stopPropagation` (see `NodeActions`).
-- Colors come from design-system tokens through CSS vars (`cssVar("kind.component.solid")`).
+- Colors come from design-system tokens through CSS vars (`tokenVar("kind.component.solid")` from `@rae/design-system`).
 - Keep `onlyRenderVisibleElements` on. Leave the React Flow attribution visible.
 
 ## Adding a node kind / edge kind / container level

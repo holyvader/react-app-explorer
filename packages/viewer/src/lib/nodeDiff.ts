@@ -1,8 +1,9 @@
 import type { GraphNode, Snapshot } from "@rae/schema";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchSource } from "./api.ts";
 import { sideLabel } from "./diff.ts";
 import { type DiffLine, diffLines } from "./lineDiff.ts";
+import { lexSource, type TokLine } from "./syntax.ts";
 
 /*
  * One element's code diff in a diff snapshot: both versions read from git (the server's
@@ -107,3 +108,13 @@ export function useNodeDiff(snapshot: Snapshot | undefined, node: GraphNode, ena
   }, [enabled, snapshot, node, key]);
   return state?.key === key ? state : {};
 }
+
+/** Files bigger than this (characters) are shown without colours: lexing them would slow things down. */
+const COLOUR_LIMIT = 400_000;
+
+/** Each side's lines, coloured (by line number − 1), from the whole file: comments and strings spanning lines colour right. */
+export type Coloured = { before?: TokLine[]; after?: TokLine[] };
+const colour = (text: string | undefined) => (text !== undefined && text.length <= COLOUR_LIMIT ? lexSource(text) : undefined);
+
+/** Both sides of a loaded diff, coloured once per diff. */
+export const useColoured = (diff: NodeDiff | undefined): Coloured => useMemo(() => (diff ? { before: colour(diff.before), after: colour(diff.after) } : {}), [diff]);

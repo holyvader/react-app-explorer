@@ -17,7 +17,7 @@ page.on("pageerror", (e) => {
   if (!errors.has(e.message)) console.error("page error:", e.stack?.split("\n").slice(0, 6).join("\n"));
   errors.set(e.message, (errors.get(e.message) ?? 0) + 1);
 });
-if (file) await page.addInitScript((f) => localStorage.setItem("rae.lastSnapshot", f), file);
+if (file) await page.addInitScript((f) => localStorage.setItem("rae.lastSnapshot", JSON.stringify(f)), file);
 // Frame timestamps from the page's own start, in its own world: frames() reads the ones in its span.
 await page.addInitScript(() => {
   const w = window as any;

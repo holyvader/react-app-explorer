@@ -15,6 +15,7 @@ import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { fetchEditors } from "./lib/editor.ts";
 import { useExplorer } from "./store.ts";
+import { readSetting, writeSetting } from "./lib/settings.ts";
 
 const LAST_SNAPSHOT_KEY = "rae.lastSnapshot";
 
@@ -36,7 +37,7 @@ export function App() {
       setError(undefined);
       try {
         setSnapshot(await fetchSnapshot(file), file);
-        localStorage.setItem(LAST_SNAPSHOT_KEY, file);
+        writeSetting(LAST_SNAPSHOT_KEY, file);
       } catch (e) {
         setError((e as Error).message);
       } finally {
@@ -52,7 +53,7 @@ export function App() {
         .then((l) => {
           setList(l);
           // The snapshot opened last time (and its stored diagram) comes back, else the newest.
-          const last = localStorage.getItem(LAST_SNAPSHOT_KEY);
+          const last = readSetting(LAST_SNAPSHOT_KEY, "") || null;
           const file = loadFile ?? (l.snapshots.some((x) => x.file === last) ? last! : l.snapshots[0]?.file);
           if (file) void load(file);
         })
@@ -76,7 +77,7 @@ export function App() {
         setList(l);
         const name = useExplorer.getState().snapshotName;
         if (name && removed.includes(name)) {
-          if (localStorage.getItem(LAST_SNAPSHOT_KEY) === name) localStorage.removeItem(LAST_SNAPSHOT_KEY);
+          if (readSetting(LAST_SNAPSHOT_KEY, "") === name) writeSetting(LAST_SNAPSHOT_KEY, undefined);
           const next = l.snapshots[0]?.file;
           if (next) void load(next);
           else useExplorer.getState().unloadSnapshot();

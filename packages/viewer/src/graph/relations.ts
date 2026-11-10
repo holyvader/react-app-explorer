@@ -62,6 +62,8 @@ export function buildIndex(s: Snapshot): GraphIndex {
 }
 
 export type EnabledGroups = Record<EdgeGroup, boolean>;
+/** Every relation group on: the default filter, and lists that show the whole model (tree, picker). */
+export const ALL_GROUPS: EnabledGroups = Object.fromEntries(EDGE_GROUPS.map((g) => [g.group, true])) as EnabledGroups;
 
 /** Which relations count, and which libraries are filtered out. */
 export interface RelationFilter {

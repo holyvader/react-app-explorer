@@ -1,11 +1,13 @@
 import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
 import type { CSSProperties, ReactNode } from "react";
+import { tokenVar } from "@rae/design-system";
 import type { GraphIndex } from "../graph/relations.ts";
 import { cacheLabel, fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
 import { DefinitionCode, SourceCode, TypeCode } from "./Code.tsx";
 import { shownReturn, shownType } from "../lib/typeText.ts";
 import { showsTipDiff } from "../lib/nodeDiff.ts";
 import { TipDiff } from "./TipDiff.tsx";
+import { plural } from "../lib/text.ts";
 
 /** Characters a laid-out type may take in the tooltip. */
 const TIP_COLUMNS = 52;
@@ -18,8 +20,6 @@ const TIP_COLUMNS = 52;
 /** Items per section before "+N more". */
 const MAX_ROWS = 8;
 
-/** CSS variable of a colour token, matching the design system's `tokenVar`. */
-const tokenVar = (token: string) => `var(--chakra-colors-${token.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).replaceAll(".", "-")})`;
 
 function Section({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -226,7 +226,7 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
                 )) : <Tok k="punct">none — every route</Tok>}
               </div>
             </Section>
-            <div className="rae-tip__foot">Runs before {ran} route{ran === 1 ? "" : "s"}</div>
+            <div className="rae-tip__foot">Runs before {plural(ran, "route")}</div>
           </>
         );
       }

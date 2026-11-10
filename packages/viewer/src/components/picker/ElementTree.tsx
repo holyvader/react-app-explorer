@@ -3,7 +3,7 @@ import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useStat
 import { buildTree, changesTree, openKeys, type TreeNode, visibleRows } from "../../graph/tree.ts";
 import { CHANGE_LETTER, CHANGE_WORD, changeOf } from "../../lib/diff.ts";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
-import { relationFilterOf, useExplorer } from "../../store.ts";
+import { useExplorer, useRelationFilter } from "../../store.ts";
 import "./picker.css";
 
 export type TickState = "off" | "on" | "file" | "all" | "partial";
@@ -45,9 +45,7 @@ const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: 
  */
 export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
-  const excluded = useExplorer((s) => s.excluded);
-  const hideAll = useExplorer((s) => s.hideAllLibraries);
-  const showAssets = useExplorer((s) => s.showAssets);
+  const filter = useRelationFilter({ allGroups: true });
   const diffOverlay = useExplorer((s) => s.diffOverlay);
   // diff snapshots: folders holding changed files get a dot
   const diffShown = !!snapshot?.diff && diffOverlay;
@@ -66,12 +64,11 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const fileChanges = useMemo(() => new Map((changesOnly && snapshot?.diff?.files.map((f) => [f.path, f])) || []), [changesOnly, snapshot]);
   const roots = useMemo(() => {
     if (!snapshot) return [];
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets, diffOverlay });
-    const all = buildTree(snapshot, f.libraries);
+    const all = buildTree(snapshot, filter.libraries);
     if (!changesOnly || !snapshot.diff) return all;
     const d = snapshot.diff;
     return changesTree(all, (n) => !!n.id && (!!d.nodes[n.id] || ((n.kind === "file" || !!n.file) && fileChanges.has(n.path))));
-  }, [snapshot, excluded, hideAll, showAssets, diffOverlay, changesOnly, fileChanges]);
+  }, [snapshot, filter, changesOnly, fileChanges]);
   // the changes view starts with everything open (it's short); the full tree closed
   const [open, setOpen] = useState<Set<string>>(() => (changesOnly ? openKeys(roots) : new Set()));
   const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);

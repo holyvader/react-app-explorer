@@ -1,5 +1,5 @@
 import type { Edge as GraphEdge, GraphNode } from "@rae/schema";
-import { ContextMenu, SegmentedToggles, ShortcutLegend, type Shortcut, type ToggleItem, useColorMode } from "@rae/design-system";
+import { ContextMenu, SegmentedToggles, ShortcutLegend, type Shortcut, type ToggleItem, tokenVar, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
   Background,
@@ -27,7 +27,7 @@ import { IconBack, IconForward } from "@rae/design-system/icons";
 import { changeOf, edgeChange } from "../lib/diff.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { goBack, goForward, useSelectionHistory } from "../lib/selectionHistory.ts";
-import { relationFilterOf, useExplorer } from "../store.ts";
+import { useExplorer, useRelationFilter } from "../store.ts";
 import "./canvas.css";
 import { ConditionEdge, type ConditionFlowEdge } from "./ConditionEdge.tsx";
 import { NodeDiffModal } from "./NodeDiffModal.tsx";
@@ -43,42 +43,39 @@ import { type ElementFlowNode, FRAME_HANDLE } from "./nodes/types.ts";
 const nodeTypes = { card: CardNode, frame: FrameNode };
 const edgeTypes = { condition: ConditionEdge };
 
-/** Chakra exposes tokens as CSS variables: `kind.serverAction.solid` → `--chakra-colors-kind-server-action-solid`. */
-const cssVar = (token: string) => `var(--chakra-colors-${token.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`).replaceAll(".", "-")})`;
-
 /** CSS class (colour, dash shape, speed: canvas.css) and arrow colour of each relation. */
 function edgeLook(e: GraphEdge): { className: string; color: string } {
   switch (e.kind) {
     case "imports":
-      if (e.importType === "type-only") return { className: "rae-edge rae-edge--imports-type", color: cssVar("relation.importsMuted") };
+      if (e.importType === "type-only") return { className: "rae-edge rae-edge--imports-type", color: tokenVar("relation.importsMuted") };
       if (e.importType === "lazy" || e.importType === "dynamic" || e.importType === "next-dynamic")
-        return { className: "rae-edge rae-edge--imports-lazy", color: cssVar("relation.imports") };
-      return { className: "rae-edge rae-edge--imports", color: cssVar("relation.imports") };
+        return { className: "rae-edge rae-edge--imports-lazy", color: tokenVar("relation.imports") };
+      return { className: "rae-edge rae-edge--imports", color: tokenVar("relation.imports") };
     case "renders":
-      return { className: "rae-edge rae-edge--renders", color: cssVar("relation.renders") };
+      return { className: "rae-edge rae-edge--renders", color: tokenVar("relation.renders") };
     case "usesHook":
-      return { className: "rae-edge rae-edge--usesHook", color: cssVar("relation.usesHook") };
+      return { className: "rae-edge rae-edge--usesHook", color: tokenVar("relation.usesHook") };
     case "invokes":
-      return { className: "rae-edge rae-edge--invokes", color: cssVar("relation.invokes") };
+      return { className: "rae-edge rae-edge--invokes", color: tokenVar("relation.invokes") };
     case "invokesAction":
-      return { className: "rae-edge rae-edge--invokesAction", color: cssVar("relation.invokesAction") };
+      return { className: "rae-edge rae-edge--invokesAction", color: tokenVar("relation.invokesAction") };
     case "declares":
-      return { className: "rae-edge rae-edge--declares", color: cssVar("relation.declares") };
+      return { className: "rae-edge rae-edge--declares", color: tokenVar("relation.declares") };
     case "usesType":
-      return { className: "rae-edge rae-edge--usesType", color: cssVar("relation.usesType") };
+      return { className: "rae-edge rae-edge--usesType", color: tokenVar("relation.usesType") };
     case "routeFile":
     case "routeChild":
-      return { className: "rae-edge rae-edge--routeFile", color: cssVar("relation.routeFile") };
+      return { className: "rae-edge rae-edge--routeFile", color: tokenVar("relation.routeFile") };
     case "navigates":
-      return { className: "rae-edge rae-edge--navigates", color: cssVar("relation.navigates") };
+      return { className: "rae-edge rae-edge--navigates", color: tokenVar("relation.navigates") };
     case "fetches":
-      return { className: "rae-edge rae-edge--fetches", color: cssVar("relation.fetches") };
+      return { className: "rae-edge rae-edge--fetches", color: tokenVar("relation.fetches") };
     case "revalidates":
-      return { className: "rae-edge rae-edge--revalidates", color: cssVar("relation.revalidates") };
+      return { className: "rae-edge rae-edge--revalidates", color: tokenVar("relation.revalidates") };
     case "runsBefore":
-      return { className: "rae-edge rae-edge--runsBefore", color: cssVar("relation.runsBefore") };
+      return { className: "rae-edge rae-edge--runsBefore", color: tokenVar("relation.runsBefore") };
     case "invalidates":
-      return { className: "rae-edge rae-edge--invalidates", color: cssVar("relation.invalidates") };
+      return { className: "rae-edge rae-edge--invalidates", color: tokenVar("relation.invalidates") };
   }
 }
 
@@ -140,9 +137,6 @@ export function Canvas() {
   const graph = useExplorer((s) => s.graph);
   const placed = useExplorer((s) => s.placed);
   const layoutToken = useExplorer((s) => s.layoutToken);
-  const enabled = useExplorer((s) => s.enabled);
-  const excluded = useExplorer((s) => s.excluded);
-  const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const selection = useExplorer((s) => s.selection);
   const focusId = useExplorer((s) => s.focusId);
   const fitIds = useExplorer((s) => s.fitIds);
@@ -185,9 +179,8 @@ export function Canvas() {
     };
   }, [layoutToken, applyLayout, flow]);
 
-  const showAssets = useExplorer((s) => s.showAssets);
   const diffOverlay = useExplorer((s) => s.diffOverlay);
-  const filter = useMemo(() => relationFilterOf({ enabled, excluded, hideAllLibraries, showAssets, diffOverlay }), [enabled, excluded, hideAllLibraries, showAssets, diffOverlay]);
+  const filter = useRelationFilter();
   // diff snapshots, overlay on: what changed is marked
   const showDiff = !!snapshot?.diff && diffOverlay;
 
@@ -465,7 +458,7 @@ export function Canvas() {
           className: change ? `${look.className} rae-edge--${change}` : look.className,
           data: { edge: e, change, ...laneOf.get(id) },
           zIndex: 1,
-          markerEnd: { type: MarkerType.ArrowClosed, color: change ? cssVar(`diff.${change}.solid`) : look.color, width: 12, height: 12 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: change ? tokenVar(`diff.${change}.solid`) : look.color, width: 12, height: 12 },
         };
       });
   }, [graph, placed, showDiff]);
@@ -657,7 +650,7 @@ export function Canvas() {
           fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
           onlyRenderVisibleElements
         >
-          <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={cssVar("canvas.grid")} />
+          <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={tokenVar("canvas.grid")} />
           <FlowPanel position="top-left" className="rae-filters">
             <RelationFilters />
           </FlowPanel>
@@ -672,9 +665,9 @@ export function Canvas() {
             nodeColor={(n) => {
               const d = (n as ElementFlowNode).data;
               if (d.element.kind === "folder") return "transparent";
-              return cssVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
+              return tokenVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
             }}
-            nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? cssVar("kind.module.muted") : "transparent")}
+            nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? tokenVar("kind.module.muted") : "transparent")}
           />
         </ReactFlow>
       </LodContext.Provider>

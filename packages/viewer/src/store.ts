@@ -1,12 +1,15 @@
 import type { Snapshot } from "@rae/schema";
+import { useMemo } from "react";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute, routeChain, routeOf } from "./graph/drawn.ts";
 import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
-import { buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
+import { ALL_GROUPS, buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
 import { changesToShow } from "./lib/diff.ts";
+import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
 /** Expansions above this size ask for confirmation first. */
@@ -187,19 +190,24 @@ interface ExplorerState {
 }
 
 const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
-const readJson = <T,>(key: string, fallback: T): T => {
-  try {
-    const v = localStorage.getItem(key);
-    return v === null ? fallback : (JSON.parse(v) as T);
-  } catch {
-    return fallback;
-  }
-};
 
 export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
   libraries: { excluded: new Set(s.excluded), hideAll: s.hideAllLibraries, showAssets: s.showAssets, hideRemoved: s.diffOverlay === false },
 });
+
+/**
+ * The relation filter for a component: re-created only when one of its settings changes.
+ * `allGroups`: every relation group on (lists of the whole model: the tree, the picker), so the
+ * canvas's relation toggles don't re-render it.
+ */
+export function useRelationFilter(opts?: { allGroups?: boolean }): RelationFilter {
+  const all = !!opts?.allGroups;
+  const parts = useExplorer(
+    useShallow((s) => ({ enabled: all ? ALL_GROUPS : s.enabled, excluded: s.excluded, hideAllLibraries: s.hideAllLibraries, showAssets: s.showAssets, diffOverlay: s.diffOverlay })),
+  );
+  return useMemo(() => relationFilterOf(parts), [parts]);
+}
 
 const EMPTY: DrawnGraph = { elements: [], relations: [] };
 
@@ -261,21 +269,21 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     past: [],
     future: [],
     // the relation filter, kept (groups added since default to on)
-    enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true, ...readJson<Partial<EnabledGroups>>(KEYS.enabled, {}) },
-    excluded: readJson(KEYS.excluded, DEFAULT_EXCLUDED),
-    hideAllLibraries: readJson(KEYS.hideAll, false),
-    showAssets: readJson(KEYS.assets, false),
-    diffOverlay: readJson(KEYS.diffOverlay, true),
-    diffCode: readJson(KEYS.diffCode, false),
+    enabled: { ...ALL_GROUPS, ...readSetting<Partial<EnabledGroups>>(KEYS.enabled, {}) },
+    excluded: readSetting(KEYS.excluded, DEFAULT_EXCLUDED),
+    hideAllLibraries: readSetting(KEYS.hideAll, false),
+    showAssets: readSetting(KEYS.assets, false),
+    diffOverlay: readSetting(KEYS.diffOverlay, true),
+    diffCode: readSetting(KEYS.diffCode, false),
     // Folders and routes are nodes of their own (added from the tree / picker), not automatic
     // frames around files: both frame modes stay off (the toolbar toggles are gone).
     routes: false,
-    sidebarWidth: readJson(KEYS.sidebar, SIDEBAR_WIDTH),
-    treeOpen: readJson(KEYS.treeOpen, true),
-    treeWidth: readJson(KEYS.treeWidth, TREE_WIDTH),
-    detailsOpen: readJson(KEYS.detailsOpen, true),
+    sidebarWidth: readSetting(KEYS.sidebar, SIDEBAR_WIDTH),
+    treeOpen: readSetting(KEYS.treeOpen, true),
+    treeWidth: readSetting(KEYS.treeWidth, TREE_WIDTH),
+    detailsOpen: readSetting(KEYS.detailsOpen, true),
     folders: false,
-    editor: (localStorage.getItem(KEYS.editor) as EditorKind | null) ?? "idea",
+    editor: readSetting<EditorKind>(KEYS.editor, "idea"),
     searchOpen: false,
     graph: EMPTY,
     placed: [],
@@ -479,7 +487,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
 
     toggleGroup: (g) => {
       const enabled = { ...get().enabled, [g]: !get().enabled[g] };
-      localStorage.setItem(KEYS.enabled, JSON.stringify(enabled));
+      writeSetting(KEYS.enabled, enabled);
       redraw({ enabled }, null);
     },
 
@@ -490,57 +498,57 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     setSidebarWidth: (width) => {
-      localStorage.setItem(KEYS.sidebar, JSON.stringify(width));
+      writeSetting(KEYS.sidebar, width);
       set({ sidebarWidth: width });
     },
 
     inspect: (id) => set({ inspectedId: id }),
 
     setTreeOpen: (open) => {
-      localStorage.setItem(KEYS.treeOpen, JSON.stringify(open));
+      writeSetting(KEYS.treeOpen, open);
       set({ treeOpen: open });
     },
 
     setDetailsOpen: (open) => {
-      localStorage.setItem(KEYS.detailsOpen, JSON.stringify(open));
+      writeSetting(KEYS.detailsOpen, open);
       set({ detailsOpen: open });
     },
 
     setTreeWidth: (width) => {
-      localStorage.setItem(KEYS.treeWidth, JSON.stringify(width));
+      writeSetting(KEYS.treeWidth, width);
       set({ treeWidth: width });
     },
 
     setRoutes: (on) => {
-      localStorage.setItem(KEYS.routes, JSON.stringify(on));
+      writeSetting(KEYS.routes, on);
       redraw({ routes: on }, null);
     },
 
     setShowAssets: (on) => {
-      localStorage.setItem(KEYS.assets, JSON.stringify(on));
+      writeSetting(KEYS.assets, on);
       redraw({ showAssets: on }, null);
     },
 
     setDiffOverlay: (on) => {
-      localStorage.setItem(KEYS.diffOverlay, JSON.stringify(on));
+      writeSetting(KEYS.diffOverlay, on);
       redraw({ diffOverlay: on }, null);
     },
 
     setDiffMode: (mode) => {
       const code = mode === "code";
-      localStorage.setItem(KEYS.diffCode, JSON.stringify(code));
+      writeSetting(KEYS.diffCode, code);
       set({ diffCode: code });
       if (get().diffOverlay !== (mode !== "off")) get().setDiffOverlay(mode !== "off");
     },
 
     setLibraryFilter: ({ excluded, hideAllLibraries }) => {
-      if (excluded) localStorage.setItem(KEYS.excluded, JSON.stringify(excluded));
-      if (hideAllLibraries !== undefined) localStorage.setItem(KEYS.hideAll, JSON.stringify(hideAllLibraries));
+      if (excluded) writeSetting(KEYS.excluded, excluded);
+      if (hideAllLibraries !== undefined) writeSetting(KEYS.hideAll, hideAllLibraries);
       redraw({ ...(excluded ? { excluded } : {}), ...(hideAllLibraries !== undefined ? { hideAllLibraries } : {}) }, null);
     },
 
     setFolders: (folders) => {
-      localStorage.setItem(KEYS.folders, JSON.stringify(folders));
+      writeSetting(KEYS.folders, folders);
       redraw({ folders }, null, true);
     },
 
@@ -578,7 +586,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     setEditor: (editor) => {
-      localStorage.setItem(KEYS.editor, editor);
+      writeSetting(KEYS.editor, editor);
       set({ editor });
     },
     setEditors: (editors) => {
@@ -616,7 +624,7 @@ useExplorer.subscribe((s, prev) => {
 const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}${s.diff.head.worktree ? "+wt" : ""}` : ""}`;
 
 function loadDiagram(key: string): DiagramState | undefined {
-  const saved = readJson<DiagramState | null>(key, null);
+  const saved = readSetting<DiagramState | null>(key, null);
   return saved && Array.isArray(saved.visible) && Array.isArray(saved.placed) ? saved : undefined;
 }
 
@@ -632,13 +640,8 @@ useExplorer.subscribe((s, prev) => {
   clearTimeout(saveTimer);
   pendingSave = () => {
     pendingSave = undefined;
-    const key = diagramKey(s.snapshot!);
-    try {
-      if (!s.visible.length) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify({ visible: s.visible, placed: s.placed, selectedId: s.selectedId } satisfies DiagramState));
-    } catch {
-      // Storage full: the diagram just isn't kept.
-    }
+    // an empty diagram isn't kept; a full storage just doesn't keep it
+    writeSetting(diagramKey(s.snapshot!), s.visible.length ? ({ visible: s.visible, placed: s.placed, selectedId: s.selectedId } satisfies DiagramState) : undefined);
   };
   saveTimer = setTimeout(pendingSave, 300);
 });

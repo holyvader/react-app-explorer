@@ -5,7 +5,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { TreeNode } from "../../graph/tree.ts";
 import { folderExpansion, folderPath } from "../../graph/folder.ts";
 import { isFiltered } from "../../graph/packages.ts";
-import { relationFilterOf, useExplorer } from "../../store.ts";
+import { useExplorer, useRelationFilter } from "../../store.ts";
 import { ElementTree, type TickState } from "./ElementTree.tsx";
 
 /**
@@ -17,10 +17,7 @@ export function ExplorationPicker() {
   const open = useExplorer((s) => s.searchOpen);
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
-  const excluded = useExplorer((s) => s.excluded);
-  const hideAll = useExplorer((s) => s.hideAllLibraries);
-  const showAssets = useExplorer((s) => s.showAssets);
-  const diffOverlay = useExplorer((s) => s.diffOverlay);
+  const filter = useRelationFilter({ allGroups: true });
   const { setSearchOpen, addNodes, hideNode, clear, requestAdd } = useExplorer.getState();
   const input = useRef<HTMLInputElement>(null);
   const flow = useReactFlow();
@@ -28,9 +25,8 @@ export function ExplorationPicker() {
   const shown = useMemo(() => new Set(visible), [visible]);
   const total = useMemo(() => {
     if (!snapshot) return 0;
-    const f = relationFilterOf({ enabled: { imports: true, declares: true, renders: true, hooks: true, invokes: true, types: true, navigation: true, cache: true }, excluded, hideAllLibraries: hideAll, showAssets, diffOverlay });
-    return Object.values(snapshot.nodes).filter((n) => !n.id.startsWith("asset:") && !isFiltered(n, f.libraries)).length;
-  }, [snapshot, excluded, hideAll, showAssets, diffOverlay]);
+    return Object.values(snapshot.nodes).filter((n) => !n.id.startsWith("asset:") && !isFiltered(n, filter.libraries)).length;
+  }, [snapshot, filter]);
 
   const graph = useExplorer((s) => s.graph);
   const onCanvas = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
