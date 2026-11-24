@@ -5,6 +5,8 @@ import { TypeText } from "../TypeText.tsx";
 import { shownReturn, shownType } from "../../lib/typeText.ts";
 import { CODE_BOX } from "./codeBox.ts";
 import { CodeRow } from "./CodeRows.tsx";
+import { useExplorer } from "../../store.ts";
+import { namedPropsType, propsTypeDeclaration } from "../../graph/privateProps.ts";
 
 /* The details panel's signature sections: generics, a component's props, inputs & output. */
 
@@ -56,14 +58,33 @@ export function Generics({ node }: { node: GraphNode }) {
 }
 
 /**
- * A component's props: each prop when they're known one by one, else its parameter's type (e.g.
- * `props: ButtonProps`, a link to that type); type parameters first if it's generic.
+ * How the named props type is declared (`interface`, `type`, `enum`), when it's one declaration of
+ * the project (`ButtonProps`, `Props<T>`); none for anything else (`A & B`, a library's type).
+ */
+function useDeclarationKeyword(owner: GraphNode): string | undefined {
+  return useExplorer((s) => {
+    const target = s.snapshot ? propsTypeDeclaration(s.snapshot, owner) : undefined;
+    return target ? (target.typeKind ?? "type") : undefined;
+  });
+}
+
+/**
+ * A component's props: the named type they're declared with (a link to it), then each prop when
+ * they're known one by one, else its parameter's type; type parameters first if it's generic.
  */
 export function ComponentProps({ node }: { node: GraphNode }) {
   const params = node.signature?.params ?? [];
+  const named = node.props?.length ? namedPropsType(params) : undefined;
+  const keyword = useDeclarationKeyword(node);
   return (
     <Stack gap="3">
       {node.typeParams?.length ? <Generics node={node} /> : null}
+      {named && (
+        <Box {...CODE_BOX} wordBreak="break-word">
+          {keyword && <CodeToken kind="keyword">{keyword} </CodeToken>}
+          <TypeText text={named} owner={node} />
+        </Box>
+      )}
       {node.props?.length ? (
         <Stack gap="0.5">
           {node.props.map((p) => (

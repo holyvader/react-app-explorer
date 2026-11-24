@@ -131,13 +131,13 @@ export async function commitInfo(root: string, sha: string): Promise<{ subject: 
 
 /** Local and remote-tracking branches, most recent commit first. */
 export async function listBranches(root: string): Promise<BranchRef[]> {
-  const out = await git(root, ["for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(contents:subject)%00%(committerdate:iso-strict)", "refs/heads", "refs/remotes"]);
+  const out = await git(root, ["for-each-ref", "--sort=-committerdate", "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(contents:subject)%00%(committerdate:iso-strict)%00%(authorname)", "refs/heads", "refs/remotes"]);
   return out
     .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [ref = "", name = "", sha = "", subject = "", date = ""] = line.split("\0");
-      return { ref, name, sha, subject, date, remote: ref.startsWith("refs/remotes/") };
+      const [ref = "", name = "", sha = "", subject = "", date = "", author = ""] = line.split("\0");
+      return { ref, name, sha, subject, date, remote: ref.startsWith("refs/remotes/"), ...(author ? { author } : {}) };
     })
     .filter((b) => !b.ref.endsWith("/HEAD"));
 }
@@ -163,6 +163,18 @@ export async function listRequests(root: string, remote = "origin"): Promise<Req
 export async function fetchRequest(root: string, request: Pick<RequestRef, "ref">, remote = "origin"): Promise<string> {
   if (!/^refs\/(pull|merge-requests)\/\d+\/head$/.test(request.ref)) throw new GitError(`Not a request ref: ${request.ref}`);
   await git(root, ["fetch", "--quiet", "--no-tags", remote, request.ref]);
+  return (await git(root, ["rev-parse", "FETCH_HEAD^{commit}"])).trim();
+}
+
+/**
+ * Fetches a branch's newest commit from `remote` (into FETCH_HEAD only: no local branch or ref is
+ * created or moved) and returns its sha.
+ */
+export async function fetchBranch(root: string, branch: string, remote = "origin"): Promise<string> {
+  if (!branch || branch.startsWith("-") || !/^[\w./-]+$/.test(branch)) throw new GitError(`Not a branch name: ${branch}`);
+  await git(root, ["fetch", "--quiet", "--no-tags", remote, `refs/heads/${branch}`], undefined, 60_000).catch((e: Error) => {
+    throw new GitError(`Couldn't fetch ${branch} from ${remote}: ${e.message.trim().split("\n").pop()}`);
+  });
   return (await git(root, ["rev-parse", "FETCH_HEAD^{commit}"])).trim();
 }
 

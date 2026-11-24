@@ -289,3 +289,144 @@ describe("merged scan: a declaration standing for its file", async () => {
     expect(row).toMatchObject({ kind: "decl", name: "HomePage", file: true, children: [] });
   });
 });
+
+describe("component expansion", async () => {
+  const { buildIndex, childEdges, INVOKES, RENDERS, reachable, ALL_GROUPS } = await import("../src/graph/relations.ts");
+  const s = await loadSnapshot();
+  const ix = buildIndex(s);
+  const f = { enabled: ALL_GROUPS, libraries: { excluded: new Set<string>(), hideAll: false } };
+  // a component with render children and other children (hooks, calls, types…)
+  const comp = Object.values(s.nodes).find((n) => {
+    if (n.kind !== "component") return false;
+    const kinds = new Set(childEdges(s, ix, n.id, f).map((e) => e.kind));
+    return kinds.has("renders") && kinds.size > 1;
+  })!;
+
+  test("the fixture has a component that renders and does something else", () => expect(comp).toBeDefined());
+
+  test("renders-only adds just what it renders, and follows only renders when deep", () => {
+    const rendered = new Set(childEdges(s, ix, comp.id, f, RENDERS).map((e) => e.to));
+    const all = new Set(childEdges(s, ix, comp.id, f).map((e) => e.to));
+    expect(new Set(reachable(s, ix, comp.id, "children", false, f, RENDERS))).toEqual(rendered);
+    expect(rendered.size).toBeLessThan(all.size);
+    for (const id of reachable(s, ix, comp.id, "children", true, f, RENDERS)) expect(["component", "external"]).toContain(s.nodes[id]!.kind);
+  });
+
+  test("invokes-only adds just functions and server actions it calls", () => {
+    for (const id of reachable(s, ix, comp.id, "children", false, f, INVOKES)) {
+      expect(childEdges(s, ix, comp.id, f, INVOKES).some((e) => e.to === id)).toBe(true);
+    }
+  });
+});
+
+describe("floating edges on component tags", async () => {
+  const { floatingEdgeParams } = await import("../src/graph/floating.ts");
+  const { Position } = await import("@xyflow/react");
+  const { TAG_DEPTH } = await import("../src/graph/layout.ts");
+  type N = Parameters<typeof floatingEdgeParams>[0];
+  const card = (id: string, x: number, y: number, kind: string, w = 260) =>
+    ({ id, type: "card", data: { node: { kind } }, measured: { width: w, height: 52 }, internals: { positionAbsolute: { x, y } } }) as unknown as N;
+
+  test("an edge straight from the side ends at the tag's point", () => {
+    const e = floatingEdgeParams(card("a", 500, 0, "component"), card("b", 0, 0, "hook"));
+    expect(e.sx).toBeCloseTo(500);
+    expect(e.sy).toBeCloseTo(26);
+    expect(e.sourcePos).toBe(Position.Left);
+    // the hook is a box: its right border
+    expect(e.tx).toBeCloseTo(260);
+  });
+
+  test("a slanted edge ends on the tag's slanted end, not the box corner", () => {
+    const e = floatingEdgeParams(card("a", 500, 0, "component"), card("b", 0, -40, "hook"));
+    expect(e.sx).toBeGreaterThan(500);
+    expect(e.sx).toBeLessThan(500 + TAG_DEPTH);
+    expect(e.sy).toBeLessThan(26);
+    expect(e.sourcePos).toBe(Position.Left);
+  });
+
+  test("edges from above and below still meet the top and bottom", () => {
+    const up = floatingEdgeParams(card("a", 0, 300, "component"), card("b", 0, 0, "component"));
+    expect(up.sy).toBeCloseTo(300);
+    expect(up.sourcePos).toBe(Position.Top);
+    expect(up.ty).toBeCloseTo(52);
+    expect(up.targetPos).toBe(Position.Bottom);
+  });
+
+  test("other kinds keep the box", () => {
+    const e = floatingEdgeParams(card("a", 500, 0, "function"), card("b", 0, -40, "hook"));
+    expect(e.sx).toBeCloseTo(500);
+  });
+});
+
+describe("private props types", async () => {
+  const { privatePropsType } = await import("../src/graph/privateProps.ts");
+  const { buildIndex } = await import("../src/graph/relations.ts");
+  const node = (id: string, kind: string, extra: Record<string, unknown> = {}) => ({ id, kind, name: id.split("#")[1] ?? id, filePath: id.split("#")[0], ...extra });
+  const make = (edges: { from: string; to: string; kind: string; specifiers?: string[] }[], extraNodes: ReturnType<typeof node>[] = []) => {
+    const nodes = Object.fromEntries(
+      [
+        node("ui/Button.tsx", "module"),
+        node("ui/Button.tsx#Button", "component", { signature: { params: [{ name: "{ ...rest }", type: "ButtonProps", written: "ButtonProps" }] }, typeRefs: { ButtonProps: "ui/Button.tsx#ButtonProps" } }),
+        node("ui/Button.tsx#ButtonProps", "type", { typeKind: "interface" }),
+        ...extraNodes,
+      ].map((n) => [n.id, n]),
+    );
+    const s = {
+      nodes,
+      edges: [
+        { from: "ui/Button.tsx", to: "ui/Button.tsx#Button", kind: "declares" },
+        { from: "ui/Button.tsx", to: "ui/Button.tsx#ButtonProps", kind: "declares" },
+        { from: "ui/Button.tsx#Button", to: "ui/Button.tsx#ButtonProps", kind: "usesType" },
+        ...edges,
+      ],
+    } as unknown as Snapshot;
+    return privatePropsType(s, buildIndex(s), s.nodes["ui/Button.tsx#Button"]!);
+  };
+
+  test("a props type only its component uses is private, even when its file is imported for the component", () => {
+    expect(make([{ from: "app/page.tsx", to: "ui/Button.tsx", kind: "imports", specifiers: ["Button"] }])?.id).toBe("ui/Button.tsx#ButtonProps");
+  });
+  test("another declaration using it makes it shared", () => {
+    expect(make([{ from: "ui/Icon.tsx#IconButton", to: "ui/Button.tsx#ButtonProps", kind: "usesType" }])).toBeUndefined();
+  });
+  test("another file importing it (by name, renamed, or the whole module) makes it shared", () => {
+    for (const sp of [["ButtonProps"], ["ButtonProps as BP"], ["* as ui"]])
+      expect(make([{ from: "app/page.tsx", to: "ui/Button.tsx", kind: "imports", specifiers: sp }])).toBeUndefined();
+  });
+});
+
+describe("props chip", async () => {
+  const { propsCount, propsChipLabel } = await import("../src/lib/propsCount.ts");
+  const comp = (props: { name: string; optional: boolean; written?: string }[]) => ({ id: "c", kind: "component", name: "C", filePath: "c.tsx", props }) as never;
+  test("own props are the written ones; the rest are inherited", () => {
+    const c = propsCount(comp([{ name: "variant", optional: true, written: '"a" | "b"' }, { name: "size", optional: true, written: '"sm"' }, { name: "onClick", optional: true }]))!;
+    expect(c.own).toEqual(["variant?", "size?"]);
+    expect(c.inherited).toEqual(["onClick?"]);
+    expect(propsChipLabel(c)).toBe("2 + 1 props");
+  });
+  test("one prop, or none written at all (plain JS): all its own", () => {
+    expect(propsChipLabel(propsCount(comp([{ name: "children", optional: false, written: "ReactNode" }]))!)).toBe("1 prop");
+    expect(propsChipLabel(propsCount(comp([{ name: "a", optional: false }, { name: "b", optional: false }]))!)).toBe("2 props");
+  });
+  test("no props: no chip", () => expect(propsCount(comp([]))).toBeUndefined());
+});
+
+describe("boundary", () => {
+  test("types have no server / client boundary; everything else keeps its own", async () => {
+    const { boundaryOf } = await import("../src/lib/boundary.ts");
+    expect(boundaryOf({ kind: "type", moduleType: "client" })).toBeUndefined();
+    expect(boundaryOf({ kind: "component", moduleType: "client" })).toBe("client");
+    expect(boundaryOf({ kind: "function", moduleType: "shared" })).toBe("shared");
+  });
+});
+
+describe("props type name (In this diff)", () => {
+  test("a component's named props type, as written; none for inline objects or non-components", async () => {
+    const { propsTypeName } = await import("../src/lib/diff.ts");
+    const c = (written?: string, type?: string, kind = "component") => ({ id: "x", name: "X", kind, signature: { params: [{ name: "{ a }", written, type }] } }) as never;
+    expect(propsTypeName(c("ButtonProps", "ButtonProps"))).toBe("ButtonProps");
+    expect(propsTypeName(c(undefined, "Props<string>"))).toBe("Props<string>");
+    expect(propsTypeName(c("{ a: string }", "{ a: string; }"))).toBeUndefined();
+    expect(propsTypeName(c("ButtonProps", "ButtonProps", "function"))).toBeUndefined();
+  });
+});

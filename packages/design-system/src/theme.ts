@@ -118,8 +118,8 @@ const config = defineConfig({
         },
         shell: { bg: v("#EFEEEA", "#141518"), border: v("#E2E0DA", "#26282D") },
         panel: { bg: v("#FFFFFF", "#18191D") },
-        canvas: { bg: v("#F6F5F1", "#121316"), grid: v("#EDEBE5", "#1B1C20"), dot: v("#CFCBC2", "#26282D") },
-        card: { bg: v("#FFFFFF", "#1B1C20"), bgSelected: v("#FFFFFF", "#1E2025"), border: v("#C9C5BC", "#2C2E34"), frame: v("#FCFBF9", "#17181C") },
+        canvas: { bg: v("#F6F5F1", "#121316"), grid: v("#F2F0EB", "#1B1C20"), dot: v("#CFCBC2", "#26282D") },
+        card: { bg: v("#FFFFFF", "#23252B"), bgSelected: v("#FFFFFF", "#292B32"), border: v("#C9C5BC", "#4A4D55"), frame: v("#FCFBF9", "#1A1B20") },
         // Selection (selected and related nodes, the selected tree row, the primary action).
         selection: {
           solid: v(ok(0.56, 0.2, 262), ok(0.7, 0.15, 262)),

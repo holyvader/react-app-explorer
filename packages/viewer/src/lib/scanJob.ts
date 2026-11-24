@@ -1,6 +1,12 @@
 import type { Snapshot } from "@rae/schema";
 import { fetchSnapshot, runScan, type ScanSettings, serverLogFile } from "./api.ts";
 import { type ScanState, useExplorer } from "../store.ts";
+import { readSetting, writeSetting } from "./settings.ts";
+
+/** The last folder or file scanned from the UI, and whether single-export files are merged (remembered). */
+export const SCAN_PATH_KEY = "rae.scanPath";
+export const SCAN_MERGE_KEY = "rae.scanMerge";
+export const readMergeSetting = () => readSetting(SCAN_MERGE_KEY, true, (raw) => raw !== "off");
 
 /** How long the "Types added" note stays before the progress panel goes away. */
 const DONE_LINGER_MS = 2500;
@@ -86,6 +92,12 @@ export async function startScan(path: string, settings: ScanSettings, onStructur
  * Stops the running scan: the request is aborted, and the server stops parsing or kills the type
  * checker. A structure snapshot already loaded stays (without types).
  */
+/** Scans a folder with the remembered settings (types on): the folder switcher's Rescan and pasted paths. */
+export function scanFolder(path: string, onStructure: (file: string) => void): Promise<void> {
+  writeSetting(SCAN_PATH_KEY, path);
+  return startScan(path, { types: true, merge: readMergeSetting() }, onStructure);
+}
+
 export function cancelScan() {
   running?.abort();
 }

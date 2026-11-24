@@ -1,8 +1,8 @@
 import type { GraphNode } from "@rae/schema";
 import { ActionIconButton, BoundaryChip, Box, Button, Code, CodeChip, CodeToken, Eyebrow, Flex, HStack, KindChip, KindTile, Panel, PanelBar, PanelHeader, Stack, TagChip, Text, textPx, Wrap } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconOpen, IconPlus, IconRouteChain } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconInvokes, IconOpen, IconPlus, IconRenders, IconRenderTree, IconRouteChain } from "@rae/design-system/icons";
 import { useMemo } from "react";
-import { childEdges, parentEdges } from "../graph/relations.ts";
+import { childEdges, downKinds, INVOKES, parentEdges } from "../graph/relations.ts";
 import { CHANGE_WORD } from "../lib/diff.ts";
 import { canOpenEditor, EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META, fileNote, routeCaption } from "../lib/kinds.tsx";
@@ -21,6 +21,7 @@ import { ComponentProps, Generics, Signature } from "./details/Signature.tsx";
 import { CacheView, MiddlewareView, RouteInfoView } from "./details/Route.tsx";
 import { NodeChip, RelationList } from "./details/Relations.tsx";
 import { DiffLines, DiffView } from "./details/Diff.tsx";
+import { boundaryOf } from "../lib/boundary.ts";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -116,7 +117,7 @@ export function DetailsPanel() {
         {/* what it is: kind, boundary, Next.js role, then plain tags */}
         <Wrap gap="5px" mt="2.5" align="center">
           <KindChip kind={node.kind}>{kindWord}</KindChip>
-          {node.moduleType && <BoundaryChip boundary={node.moduleType} />}
+          {boundaryOf(node) && <BoundaryChip boundary={boundaryOf(node)!} />}
           {node.nextRole && <KindChip kind="route">{node.nextRole}</KindChip>}
           {change && (
             <TagChip color={`diff.${change}.solid`}>
@@ -199,10 +200,22 @@ export function DetailsPanel() {
           )}
           <Box flex="1" />
           <HStack gap="0" bg="bg.emphasized" rounded="l2" p="2px">
-            <ActionIconButton label="Show parents" icon={<IconArrowUp />} size="2xs" onClick={() => expand(node.id, "parents", false)} />
-            <ActionIconButton label="Parents up to root" icon={<IconChevronsUp />} size="2xs" onClick={() => expand(node.id, "parents", true)} />
-            <ActionIconButton label="Show children" icon={<IconArrowDown />} size="2xs" onClick={() => expand(node.id, "children", false)} />
-            <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="2xs" onClick={() => expand(node.id, "children", true)} />
+            <ActionIconButton label={node.kind === "component" ? "Rendered by" : "Show parents"} icon={<IconArrowUp />} size="2xs" onClick={() => expand(node.id, "parents", false)} />
+            <ActionIconButton label={node.kind === "component" ? "Rendered by, up to the root" : "Parents up to root"} icon={<IconChevronsUp />} size="2xs" onClick={() => expand(node.id, "parents", true)} />
+            {node.kind === "component" ? (
+              <>
+                <ActionIconButton label="Renders" icon={<IconRenders />} size="2xs" onClick={() => expand(node.id, "children", false, downKinds(node.kind))} />
+                <ActionIconButton label="Show render tree" icon={<IconRenderTree />} size="2xs" onClick={() => expand(node.id, "children", true, downKinds(node.kind))} />
+                {relations.children.some((e) => INVOKES.includes(e.kind)) && (
+                  <ActionIconButton label="Invokes" icon={<IconInvokes />} size="2xs" onClick={() => expand(node.id, "children", false, INVOKES)} />
+                )}
+              </>
+            ) : (
+              <>
+                <ActionIconButton label="Show children" icon={<IconArrowDown />} size="2xs" onClick={() => expand(node.id, "children", false)} />
+                <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="2xs" onClick={() => expand(node.id, "children", true)} />
+              </>
+            )}
           </HStack>
         </Flex>
       </PanelHeader>

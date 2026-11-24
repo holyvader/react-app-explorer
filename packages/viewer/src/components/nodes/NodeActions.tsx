@@ -1,4 +1,20 @@
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconLayout, IconRemove, IconRouteChain, IconUnwrap } from "@rae/design-system/icons";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconChevronsDown,
+  IconChevronsUp,
+  IconCodeDiff,
+  IconInvokes,
+  IconLayout,
+  IconRemove,
+  IconRenders,
+  IconRenderTree,
+  IconRouteChain,
+  IconUnwrap,
+} from "@rae/design-system/icons";
+import { downKinds, INVOKES } from "../../graph/relations.ts";
+import { CHANGE_WORD } from "../../lib/diff.ts";
+import { hasCode } from "../../lib/nodeDiff.ts";
 import type { MouseEvent, ReactNode } from "react";
 import { useExplorer } from "../../store.ts";
 import type { ElementNodeData } from "./types.ts";
@@ -26,21 +42,36 @@ const I = 12;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange } = useExplorer.getState();
-  const { element, node, parents, children, hiddenParents, hiddenChildren, can } = data;
+  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff } = useExplorer.getState();
+  const { element, node, change, parents, children, hiddenParents, hiddenChildren, invokes, hiddenInvokes, can } = data;
   const id = element.id;
+  const isComponent = node?.kind === "component";
+  const down = downKinds(node?.kind);
   return (
     <span className="rae-actions nodrag nopan">
+      {/* diff view on: what changed in its code (added: all new, removed: all gone) */}
+      {node && change && hasCode(node) && <IconBtn label={`Show the code diff (${CHANGE_WORD[change].toLowerCase()} in this diff)`} icon={<IconCodeDiff size={I} />} onClick={() => showCodeDiff(id)} />}
       {/* Only what would add something: no parents/children, or all of them drawn → no button. */}
       {node && can.parents && (
-        <IconBtn label={`Show parents (${hiddenParents} of ${parents} not drawn)`} icon={<IconArrowUp size={I} />} onClick={() => expand(id, "parents", false)} />
+        <IconBtn label={`${node.kind === "component" ? "Rendered by" : "Show parents"} (${hiddenParents} of ${parents} not drawn)`} icon={<IconArrowUp size={I} />} onClick={() => expand(id, "parents", false)} />
       )}
-      {node && can.allParents && <IconBtn label="Show all parents up to the root" icon={<IconChevronsUp size={I} />} onClick={() => expand(id, "parents", true)} />}
+      {node && can.allParents && <IconBtn label={node.kind === "component" ? "Rendered by, up to the root" : "Show all parents up to the root"} icon={<IconChevronsUp size={I} />} onClick={() => expand(id, "parents", true)} />}
       {node && can.children && (
-        <IconBtn label={`Show children (${hiddenChildren} of ${children} not drawn)`} icon={<IconArrowDown size={I} />} onClick={() => expand(id, "children", false)} />
+        <IconBtn
+          label={`${isComponent ? "Renders" : "Show children"} (${hiddenChildren} of ${children} not drawn)`}
+          icon={isComponent ? <IconRenders size={I} /> : <IconArrowDown size={I} />}
+          onClick={() => expand(id, "children", false, down)}
+        />
       )}
       {node && can.allChildren && (
-        <IconBtn label="Show all children down to the leaves" icon={<IconChevronsDown size={I} />} onClick={() => expand(id, "children", true)} />
+        <IconBtn
+          label={isComponent ? "Show render tree" : "Show all children down to the leaves"}
+          icon={isComponent ? <IconRenderTree size={I} /> : <IconChevronsDown size={I} />}
+          onClick={() => expand(id, "children", true, down)}
+        />
+      )}
+      {node && can.invokes && (
+        <IconBtn label={`Invokes (${hiddenInvokes} of ${invokes} not drawn)`} icon={<IconInvokes size={I} />} onClick={() => expand(id, "children", false, INVOKES)} />
       )}
       {node && can.routeChain && (
         <IconBtn label="Show the route chain (layouts down to the page)" icon={<IconRouteChain size={I} />} onClick={() => showRouteChain(id)} />

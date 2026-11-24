@@ -2,6 +2,7 @@ import { Box, Text, Tooltip } from "@rae/design-system";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { useMemo, useState } from "react";
 import { isPrimitiveType } from "../lib/typeText.ts";
+import { targetOf } from "../lib/typeTargets.ts";
 import { type FoldRule, layoutDefinition, layoutType, type Tok } from "../lib/syntax.ts";
 import { useExplorer } from "../store.ts";
 import { useCodeColumns } from "../lib/useColumns.ts";
@@ -12,26 +13,6 @@ import { plural } from "../lib/text.ts";
 const PREVIEW_LINES = 24;
 /** The tooltip's width, in characters. */
 const TOOLTIP_COLUMNS = 72;
-
-/** Type declarations by name, per snapshot: the fallback for names the owner didn't record (inferred types). */
-const byName = new WeakMap<Snapshot, Map<string, string[]>>();
-function typesNamed(s: Snapshot, name: string): string[] {
-  let m = byName.get(s);
-  if (!m) {
-    m = new Map();
-    for (const n of Object.values(s.nodes)) if (n.kind === "type") (m.get(n.name) ?? m.set(n.name, []).get(n.name)!).push(n.id);
-    byName.set(s, m);
-  }
-  return m.get(name) ?? [];
-}
-
-/** The node a name in `owner`'s type text stands for: its recorded reference, else a unique type of that name. */
-function targetOf(s: Snapshot, owner: GraphNode | undefined, name: string): GraphNode | undefined {
-  const id = owner?.typeRefs?.[name];
-  if (id) return s.nodes[id];
-  const named = typesNamed(s, name);
-  return named.length === 1 ? s.nodes[named[0]!] : undefined;
-}
 
 function Preview({ text, targets }: { text: string; targets: GraphNode[] }) {
   return (

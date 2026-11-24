@@ -52,7 +52,8 @@ export async function readSnapshotFile(file: File): Promise<Snapshot> {
 export interface FsListing {
   path: string;
   parent: string | null;
-  entries: { name: string; path: string; kind: "dir" | "file" }[];
+  /** `project`: a folder that is a project (Next.js: a next.config; package: a package.json). */
+  entries: { name: string; path: string; kind: "dir" | "file"; project?: "next" | "package" }[];
   /** Project markers found in this dir (package.json, tsconfig.json, next.config.*). */
   markers: string[];
 }
@@ -74,6 +75,8 @@ export interface ScanSettings {
   merge: boolean;
   /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
   diff?: { base?: string; head?: string; request?: string; requestInfo?: { title?: string; author?: string; url?: string }; worktree?: boolean; against?: "merge-base" | "base" };
+  /** Scan the newest commit of origin's default branch (fetched first; the checkout isn't touched). Not with `diff`. */
+  latest?: boolean;
 }
 
 /** The git repo a folder is in, with its branches. */
@@ -108,12 +111,12 @@ export async function fetchGitRequests(path: string, source: RequestSource = "au
   return data;
 }
 
-export async function runScan(path: string, { types, merge, diff }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function runScan(path: string, { types, merge, diff, latest }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
   const res = await fetch("/api/scan", {
     signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, types, merge, diff }),
+    body: JSON.stringify({ path, types, merge, diff, latest: latest && !diff ? true : undefined }),
   });
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));

@@ -1,13 +1,17 @@
 import type { GraphNode, ParamDef, Snapshot } from "@rae/schema";
-import type { CSSProperties, ReactNode } from "react";
+import { createContext, type CSSProperties, type ReactNode, useContext, useState } from "react";
+import { createPortal } from "react-dom";
 import { tokenVar } from "@rae/design-system";
 import type { GraphIndex } from "../graph/relations.ts";
 import { cacheLabel, fileNote, KIND_META, renderingLabel } from "../lib/kinds.tsx";
-import { DefinitionCode, SourceCode, TypeCode } from "./Code.tsx";
+import { DefinitionCode, SourceCode, TypeCode, type TokenRenderer } from "./Code.tsx";
+import { targetOf } from "../lib/typeTargets.ts";
+import { useExplorer } from "../store.ts";
 import { shownReturn, shownType } from "../lib/typeText.ts";
 import { showsTipDiff } from "../lib/nodeDiff.ts";
 import { TipDiff } from "./TipDiff.tsx";
 import { plural } from "../lib/text.ts";
+import { boundaryOf } from "../lib/boundary.ts";
 
 /** Characters a laid-out type may take in the tooltip. */
 const TIP_COLUMNS = 52;
@@ -47,6 +51,111 @@ function Chips({ items }: { items: { text: string; color: string }[] }) {
   );
 }
 
+/** Type names in the tooltip link to their declarations: hovered, a card shows it; clicked, it's drawn (if it isn't), selected and centred. */
+interface TypeLinks {
+  owner: GraphNode;
+  snapshot: Snapshot;
+  hover: (target: GraphNode | null, at?: DOMRect) => void;
+}
+const TypeLinksContext = createContext<TypeLinks | null>(null);
+
+/** A type in the tooltip, laid out like `TypeCode`, its project types and libraries as links. */
+function TipType(props: { text: string; width?: number; flat?: boolean; optional?: boolean }) {
+  const links = useContext(TypeLinksContext);
+  const render: TokenRenderer | undefined = links
+    ? (t, key) => {
+        const target = t.k === "type" ? targetOf(links.snapshot, links.owner, t.t) : undefined;
+        if (!target || target.id === links.owner.id)
+          return (
+            <span key={key} className={`rae-tok--${t.k}`}>
+              {t.t}
+            </span>
+          );
+        const go = () => {
+          links.hover(null);
+          useExplorer.getState().addNodes([target.id], { select: target.id, focus: target.id, anchor: links.owner.id });
+        };
+        return (
+          <span
+            key={key}
+            className={`rae-tok--${t.k} rae-tok--link`}
+            role="link"
+            tabIndex={0}
+            onMouseEnter={(e) => links.hover(target, e.currentTarget.getBoundingClientRect())}
+            onMouseLeave={() => links.hover(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              go();
+            }}
+            onKeyDown={(e) => e.key === "Enter" && go()}
+          >
+            {t.t}
+          </span>
+        );
+      }
+    : undefined;
+  return <TypeCode {...props} render={render} />;
+}
+
+/** Characters a signature may take on one line before it puts each parameter on its own. */
+const SIGNATURE_LINE = 58;
+
+/**
+ * A function's signature as one line of code, its types linked: `scenariosOf(node: OutlineNode, doc:
+ * DesignDocumentInput): ScenarioEntry[]` — a parameter per line when it's longer than that.
+ */
+function SignatureLine({ n }: { n: GraphNode }) {
+  const params = n.signature?.params ?? [];
+  const ret = shownReturn(n.signature);
+  const typeOf = (p: ParamDef) => shownType(p);
+  const flatLength = n.name.length + 2 + params.reduce((sum, p) => sum + p.name.length + 2 + (typeOf(p)?.length ?? 0) + 2, 0) + (ret ? ret.length + 2 : 0);
+  const split = flatLength > SIGNATURE_LINE && params.length > 0;
+  const param = (p: ParamDef, i: number) => (
+    <span key={i}>
+      {split ? "\n  " : i > 0 ? <Tok k="punct">, </Tok> : null}
+      <Tok k="name">{p.name}</Tok>
+      {typeOf(p) && (
+        <>
+          <Tok k="punct">{p.optional && !p.default ? "?: " : ": "}</Tok>
+          <TipType text={typeOf(p)!} flat optional={p.optional} />
+        </>
+      )}
+      {split && <Tok k="punct">,</Tok>}
+    </span>
+  );
+  return (
+    <span className="rae-code">
+      <span className="rae-tok--fn">{n.name}</span>
+      <Tok k="punct">(</Tok>
+      {params.map(param)}
+      {split && "\n"}
+      <Tok k="punct">)</Tok>
+      {ret && (
+        <>
+          <Tok k="punct">: </Tok>
+          <TipType text={ret} flat />
+        </>
+      )}
+    </span>
+  );
+}
+
+/** The hovered type's declaration, next to its name (portalled: the tooltip is transformed, so `fixed` inside it isn't the viewport's). */
+function TypeCard({ target, at }: { target: GraphNode; at: DOMRect }) {
+  const width = 420;
+  const left = Math.max(8, Math.min(at.left, window.innerWidth - width - 8));
+  const below = at.bottom + 6 + 220 < window.innerHeight;
+  return createPortal(
+    <div className="rae-typecard" style={{ left, ...(below ? { top: at.bottom + 6 } : { bottom: window.innerHeight - at.top + 6 }), maxWidth: width }}>
+      <div className="rae-typecard__head">
+        {target.kind === "type" ? `${target.typeKind ?? "type"} · ${target.filePath}` : target.kind === "external" ? `from ${target.name}` : `${KIND_META[target.kind].label.toLowerCase()} · ${target.filePath}`} — click to go to it
+      </div>
+      {target.typeText ? <DefinitionCode text={target.typeText} width={56} maxLines={16} /> : <span className="rae-tok--type">{target.name}</span>}
+    </div>,
+    document.body,
+  );
+}
+
 const Tok = ({ k, children }: { k: "name" | "type" | "value" | "punct" | "keyword"; children: ReactNode }) => <span className={`rae-tok rae-tok--${k}`}>{children}</span>;
 
 function ParamRows({ params }: { params: ParamDef[] }) {
@@ -59,7 +168,7 @@ function ParamRows({ params }: { params: ParamDef[] }) {
           {shownType(p) && (
             <>
               <Tok k="punct">{p.optional && !p.default ? "?: " : ": "}</Tok>
-              <TypeCode text={shownType(p)!} flat optional={p.optional} />
+              <TipType text={shownType(p)!} flat optional={p.optional} />
             </>
           )}
           {p.default && (
@@ -162,7 +271,7 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
                   <div key={p.name}>
                     <Tok k="name">{p.name}</Tok>
                     <Tok k="punct">{p.optional ? "?: " : ": "}</Tok>
-                    <TypeCode text={shownType(p) ?? "unknown"} flat optional={p.optional} />
+                    <TipType text={shownType(p) ?? "unknown"} flat optional={p.optional} />
                     {p.default && (
                       <>
                         <Tok k="punct"> = </Tok>
@@ -202,7 +311,7 @@ function kindContent(n: GraphNode, s: Snapshot, index: GraphIndex): ReactNode {
           </Section>
           <Section label="Output">
             <div className="rae-tip__code rae-tip__pre">
-              <TypeCode text={shownReturn(n.signature) ?? "unknown"} width={TIP_COLUMNS} />
+              <TipType text={shownReturn(n.signature) ?? "unknown"} width={TIP_COLUMNS} />
             </div>
           </Section>
           {hookNames(n, s).length > 0 && (
@@ -332,7 +441,7 @@ export interface TipState {
 const ROOM_ABOVE = 260;
 /** Half the tooltip's max width + margin, to keep it on screen when centring (with the diff column: wider). */
 const HALF = 200;
-const HALF_DIFF = 490;
+const HALF_DIFF = 262;
 /** The gap between the node and the tooltip. */
 const GAP = 12;
 /** The app's toolbar over the canvas (44px) and a margin: the tooltip stays below it. */
@@ -355,13 +464,26 @@ export interface NodeTooltipProps {
  * there's no room above). It stays open while the pointer is on it: its code can be scrolled
  * and selected, and the diff column's button opens the code diff dialog.
  */
-export function NodeTooltip({ tip, snapshot, index, diffCode = false, onOpenDiff, onPointerEnter, onPointerLeave }: NodeTooltipProps) {
+export function NodeTooltip(props: NodeTooltipProps) {
+  // the hovered type name's card; reset when the tooltip moves to another node
+  const [card, setCard] = useState<{ target: GraphNode; at: DOMRect; tip: string } | null>(null);
+  const id = props.tip?.id;
+  const n = id ? props.snapshot?.nodes[id] : undefined;
+  if (!props.tip || !props.snapshot || !props.index || !n) return null;
+  const links: TypeLinks = { owner: n, snapshot: props.snapshot, hover: (target, at) => setCard(target && at ? { target, at, tip: n.id } : null) };
+  return (
+    <TypeLinksContext.Provider value={links}>
+      <TooltipBox {...props} n={n} />
+      {card && card.tip === n.id && <TypeCard target={card.target} at={card.at} />}
+    </TypeLinksContext.Provider>
+  );
+}
+
+function TooltipBox({ tip, snapshot, index, n, diffCode = false, onOpenDiff, onPointerEnter, onPointerLeave }: NodeTooltipProps & { n: GraphNode }) {
   if (!tip || !snapshot || !index) return null;
-  const n = snapshot.nodes[tip.id];
-  if (!n) return null;
   const meta = KIND_META[n.kind];
   const Icon = meta.icon;
-  const caption = [meta.label, fileNote(n), n.moduleType, n.nextRole ? `next ${n.nextRole}` : undefined, n.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
+  const caption = [meta.label, fileNote(n), boundaryOf(n), n.nextRole ? `next ${n.nextRole}` : undefined, n.isAsync ? "async" : undefined].filter(Boolean).join(" · ");
   const { rect } = tip;
   const diff = showsTipDiff(snapshot, n, diffCode);
   const half = diff ? HALF_DIFF : HALF;
@@ -370,6 +492,19 @@ export function NodeTooltip({ tip, snapshot, index, diffCode = false, onOpenDiff
   const roomAbove = rect.top - GAP - TOP;
   const roomBelow = window.innerHeight - rect.bottom - GAP - 8;
   const above = diff ? roomAbove >= roomBelow : rect.top - TOP >= ROOM_ABOVE;
+  const path = `${n.filePath}${n.loc && n.kind !== "module" && n.kind !== "external" ? `:${n.loc.line}` : ""}`;
+  const titleBlock = (
+    <div className="rae-tip__head">
+      <span className="rae-card__tile rae-tip__tile">
+        <Icon size={15} strokeWidth={2.2} />
+      </span>
+      <div className="rae-tip__titles">
+        <div className="rae-tip__title">{n.name}</div>
+        <div className="rae-tip__caption">{caption}</div>
+        {diff && <div className="rae-tip__path">{path}</div>}
+      </div>
+    </div>
+  );
   return (
     <div
       className="rae-tip"
@@ -388,23 +523,16 @@ export function NodeTooltip({ tip, snapshot, index, diffCode = false, onOpenDiff
         } as CSSProperties
       }
     >
-      {diff && <TipDiff node={n} snapshot={snapshot} onOpenDiff={onOpenDiff} />}
-      <div className="rae-tip__main">
-        <div className="rae-tip__head">
-          <span className="rae-card__tile rae-tip__tile">
-            <Icon size={15} strokeWidth={2.2} />
-          </span>
-          <div className="rae-tip__titles">
-            <div className="rae-tip__title">{n.name}</div>
-            <div className="rae-tip__caption">{caption}</div>
-          </div>
+      {diff ? (
+        // a changed element: one column, its signature over the changed lines
+        <TipDiff node={n} snapshot={snapshot} onOpenDiff={onOpenDiff} head={titleBlock} signature={n.signature && <SignatureLine n={n} />} />
+      ) : (
+        <div className="rae-tip__main">
+          {titleBlock}
+          <div className="rae-tip__path">{path}</div>
+          <div className="rae-tip__body">{content(n, snapshot, index)}</div>
         </div>
-        <div className="rae-tip__path">
-          {n.filePath}
-          {n.loc && n.kind !== "module" && n.kind !== "external" ? `:${n.loc.line}` : ""}
-        </div>
-        <div className="rae-tip__body">{content(n, snapshot, index)}</div>
-      </div>
+      )}
     </div>
   );
 }

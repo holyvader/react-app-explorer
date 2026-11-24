@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { ScanEvent, Snapshot } from "@rae/schema";
 import { scanDiff } from "./diffScan.ts";
+import { latestTree } from "./latestScan.ts";
 import { addTypes, type ScanOptions, scanStructure, writeSnapshot } from "./scan.ts";
 
 export type { ScanEvent };
@@ -18,6 +19,8 @@ export interface ScanJobOptions extends Omit<ScanOptions, "onCount"> {
   signal?: AbortSignal;
   /** Diff mode: scan the folder at two commits and compare them (see scanDiff). */
   diff?: ScanDiffRequest;
+  /** Scan the newest commit of origin's default branch (fetched and exported; the checkout isn't touched). Ignored in diff mode. */
+  latest?: boolean;
 }
 
 /** What a UI asks to compare: a base ref, and a head ref or a pull / merge request's ref. */
@@ -83,14 +86,16 @@ export async function runScanJob(input: string, opts: ScanJobOptions, emit: (e: 
       emit({ type: "done" });
       return;
     }
-    const structure = await scanStructure(input, scanOpts);
+    const latest = opts.latest ? await latestTree(input, { onProgress: opts.onProgress, signal: opts.signal }) : undefined;
+    const asProject = (s: Snapshot) => (latest ? latest.finish(s) : s);
+    const structure = await scanStructure(latest?.path ?? input, scanOpts);
     emit({ type: "progress", stage: "graph" });
-    const file = basename(writeSnapshot(structure.snapshot, opts.outDir));
+    const file = basename(writeSnapshot(asProject(structure.snapshot), opts.outDir));
     const typesPending = opts.types !== false;
     emit({ type: "result", file, stdout: summary(structure.snapshot), ms: ms(), warnings, typesPending });
     if (typesPending) {
       warnings = [];
-      const typed = await addTypes(structure, scanOpts);
+      const typed = asProject(await addTypes(structure, scanOpts));
       writeSnapshot(typed, opts.outDir);
       emit({ type: "types", file, ms: ms(), typed: typed.stats.types, warnings });
     }

@@ -36,11 +36,17 @@ export const hasCode = (n: GraphNode) => n.kind !== "external" && n.kind !== "ro
 /** Whether the node tooltip shows `n`'s changed lines: the diff view shows code, and `n` changed and has code. */
 export const showsTipDiff = (s: Snapshot, n: GraphNode, on: boolean) => on && !!s.diff?.nodes[n.id] && hasCode(n);
 
-/** The two sides of a node's change: the base (changed / removed) and the head (changed / added). */
-export function sidesOf(snapshot: Snapshot, node: GraphNode): { before?: DiffSide; after?: DiffSide; whole: boolean } {
+/** Whether a node stands for a whole file (a module, or a declaration merged with its file). */
+export const isWholeFile = (node: GraphNode) => node.kind === "module" || !!node.file;
+
+/**
+ * The two sides of a node's change: the base (changed / removed) and the head (changed / added).
+ * `wholeFile`: a declaration's whole file rather than its own lines.
+ */
+export function sidesOf(snapshot: Snapshot, node: GraphNode, wholeFile = false): { before?: DiffSide; after?: DiffSide; whole: boolean } {
   const diff = snapshot.diff!;
   const change = diff.nodes[node.id];
-  const whole = node.kind === "module" || !!node.file;
+  const whole = wholeFile || isWholeFile(node);
   const was = change === "changed" ? diff.before[node.id] : change === "removed" ? node : undefined;
   return {
     whole,
@@ -76,36 +82,37 @@ export function diffOf(before: { text?: string; side?: DiffSide }, after: { text
 const loaded = new WeakMap<Snapshot, Map<string, Promise<NodeDiff>>>();
 
 /** Loads (once per snapshot and node) a node's code diff. A failure isn't kept: the next ask tries again. */
-export function loadNodeDiff(snapshot: Snapshot, node: GraphNode): Promise<NodeDiff> {
+export function loadNodeDiff(snapshot: Snapshot, node: GraphNode, wholeFile = false): Promise<NodeDiff> {
   let m = loaded.get(snapshot);
   if (!m) loaded.set(snapshot, (m = new Map()));
-  const known = m.get(node.id);
+  const id = wholeFile ? `${node.id}|file` : node.id;
+  const known = m.get(id);
   if (known) return known;
-  const { before, after } = sidesOf(snapshot, node);
+  const { before, after } = sidesOf(snapshot, node, wholeFile);
   const read = (side?: DiffSide) => (side ? fetchSource(snapshot.rootDir, side.sha, side.node.filePath) : Promise.resolve(undefined));
   const p = Promise.all([read(before), read(after)]).then(([b, a]) => ({
     ...diffOf({ text: b?.text, side: before }, { text: a?.text, side: after }),
     truncated: b?.truncated || a?.truncated,
   }));
-  m.set(node.id, p);
-  p.catch(() => m.delete(node.id));
+  m.set(id, p);
+  p.catch(() => m.delete(id));
   return p;
 }
 
 /** A node's code diff, loaded when `enabled` (an external system: the server reads git). */
-export function useNodeDiff(snapshot: Snapshot | undefined, node: GraphNode, enabled = true): { diff?: NodeDiff; error?: string } {
-  const key = snapshot?.diff ? `${node.id}|${snapshot.diff.compared}|${snapshot.diff.head.sha}` : "";
+export function useNodeDiff(snapshot: Snapshot | undefined, node: GraphNode, enabled = true, wholeFile = false): { diff?: NodeDiff; error?: string } {
+  const key = snapshot?.diff ? `${node.id}|${wholeFile}|${snapshot.diff.compared}|${snapshot.diff.head.sha}` : "";
   const [state, setState] = useState<{ key: string; diff?: NodeDiff; error?: string }>();
   useEffect(() => {
     if (!enabled || !snapshot?.diff || !key) return;
     let live = true;
-    loadNodeDiff(snapshot, node)
+    loadNodeDiff(snapshot, node, wholeFile)
       .then((d) => live && setState({ key, diff: d }))
       .catch((e: Error) => live && setState({ key, error: e.message }));
     return () => {
       live = false;
     };
-  }, [enabled, snapshot, node, key]);
+  }, [enabled, snapshot, node, key, wholeFile]);
   return state?.key === key ? state : {};
 }
 

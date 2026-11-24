@@ -118,7 +118,8 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
     else if (name === "*") result = moduleId(path);
     else if (depth < 20) {
       const direct = indexOf(f).exports.get(name);
-      if (direct?.local) result = resolveLocal(f, direct.local, depth + 1)?.id;
+      // a re-exported import may be type-only (`import type { X }; export type { X }`)
+      if (direct?.local) result = resolveLocal(f, direct.local, depth + 1, true)?.id;
       else if (direct && direct.from !== undefined) {
         const imp = f.imports[direct.from]!;
         result = imp.resolved ? resolveTarget(imp.resolved, direct.imported ?? name, depth + 1) : undefined;
@@ -151,16 +152,19 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
   interface FileIndex {
     decls: Set<string>;
     imports: Map<string, { resolved: Resolved; imported: string }>;
+    /** `import type { X }`: only types can come from these, so only type references resolve through them. */
+    typeImports: Map<string, { resolved: Resolved; imported: string }>;
     exports: Map<string, FileExtract["exports"][number]>;
   }
   const indexes = new Map<string, FileIndex>();
   const indexOf = (f: FileExtract): FileIndex => {
     let ix = indexes.get(f.absPath);
     if (!ix) {
-      ix = { decls: new Set(f.decls.map((d) => d.local)), imports: new Map(), exports: new Map() };
+      ix = { decls: new Set(f.decls.map((d) => d.local)), imports: new Map(), typeImports: new Map(), exports: new Map() };
       for (const imp of f.imports) {
-        if (imp.type === "type-only" || !imp.resolved) continue;
-        for (const n of imp.names) if (!ix.imports.has(n.local)) ix.imports.set(n.local, { resolved: imp.resolved, imported: n.imported });
+        if (!imp.resolved) continue;
+        const into = imp.type === "type-only" ? ix.typeImports : ix.imports;
+        for (const n of imp.names) if (!into.has(n.local)) into.set(n.local, { resolved: imp.resolved, imported: n.imported });
       }
       for (const e of f.exports) if (!ix.exports.has(e.exported)) ix.exports.set(e.exported, e);
       indexes.set(f.absPath, ix);
@@ -168,11 +172,12 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
     return ix;
   };
 
-  function resolveLocal(f: FileExtract, local: string, depth = 0): LocalTarget | undefined {
+  /** `types`: a type reference, which may also come through `import type` (values can't). */
+  function resolveLocal(f: FileExtract, local: string, depth = 0, types = false): LocalTarget | undefined {
     for (let i = 0; i < 5 && f.aliases[local]; i++) local = f.aliases[local]!;
     const ix = indexOf(f);
     if (ix.decls.has(local)) return { id: declId(f.absPath, local) };
-    const imp = ix.imports.get(local);
+    const imp = ix.imports.get(local) ?? (types ? ix.typeImports.get(local) : undefined);
     if (!imp) return undefined;
     if (imp.imported === "*" && imp.resolved.kind === "local") return { id: moduleId(imp.resolved.path), nsPath: imp.resolved.path };
     const id = resolveTarget(imp.resolved, imp.imported, depth);
@@ -241,7 +246,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       if (d.typeRefs?.length) {
         const refs: Record<string, NodeId> = {};
         for (const name of d.typeRefs) {
-          const t = resolveLocal(f, name);
+          const t = resolveLocal(f, name, 0, true);
           if (!t || !nodes[t.id]) continue;
           refs[name] = t.id;
           if (nodes[t.id]!.kind === "type") addEdge({ from: did, to: t.id, kind: "usesType" });

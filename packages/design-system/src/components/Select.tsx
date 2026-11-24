@@ -5,6 +5,12 @@ export interface SelectOption {
   label: string;
   /** Options with the same group are listed together under it, groups in order of first appearance. */
   group?: string;
+  /** SearchSelect: the first line in the list, in parts (`dim` quiet, `strong` bold); `label` otherwise. */
+  parts?: { text: string; tone?: "dim" | "strong" }[];
+  /** SearchSelect: a second, quieter line under it (also searched)… */
+  detail?: string;
+  /** …led by this, a little heavier (an author's name). */
+  detailLead?: string;
 }
 
 export interface SelectProps {

@@ -12,9 +12,13 @@ export type ElementNodeData = {
   children: number;
   hiddenParents: number;
   hiddenChildren: number;
-  /** Whether each expand action would add anything (else its button isn't shown). */
-  /** Which expansions would add something; `routeChain`: routes and route files whose chain isn't all drawn. */
-  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; routeChain?: boolean };
+  /** Components: what they call (functions and server actions), and how many of those aren't drawn. */
+  invokes?: number;
+  hiddenInvokes?: number;
+  /** Components: the props type only they use (`ButtonProps`), named in the caption instead of drawn as a card. */
+  propsType?: { id: string; name: string; keyword: string };
+  /** Which expansions would add something (components: children = what they render); `routeChain`: routes and route files whose chain isn't all drawn. */
+  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean };
   /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
   scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */

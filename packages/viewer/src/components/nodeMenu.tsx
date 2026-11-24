@@ -8,6 +8,9 @@ import {
   IconCopy,
   IconFocus,
   IconFolder,
+  IconInvokes,
+  IconRenders,
+  IconRenderTree,
   IconRouteChain,
   IconRemove,
   IconLayout,
@@ -19,7 +22,7 @@ import {
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
 import { folderContents, folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
-import { hasUndrawn } from "../graph/relations.ts";
+import { downKinds, hasUndrawn, INVOKES, type EdgeKinds } from "../graph/relations.ts";
 import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { relationFilterOf, useExplorer } from "../store.ts";
@@ -28,9 +31,9 @@ import { relationFilterOf, useExplorer } from "../store.ts";
 const RELATIONS: { kinds: EdgeKind[]; out: string; in: string }[] = [
   { kinds: ["imports"], out: "Imports", in: "Imported by" },
   { kinds: ["declares"], out: "Declares", in: "Declared in" },
-  { kinds: ["renders"], out: "Renders", in: "Rendered by" },
+  { kinds: ["renders"], out: "Components it renders", in: "Components rendering it" },
   { kinds: ["usesHook"], out: "Uses hooks", in: "Hook used by" },
-  { kinds: ["invokes", "invokesAction"], out: "Invokes", in: "Invoked by" },
+  { kinds: ["invokes", "invokesAction"], out: "Functions it calls", in: "Invoked by" },
   { kinds: ["usesType"], out: "Uses types", in: "Type used by" },
   { kinds: ["navigates"], out: "Navigates to", in: "Navigated to from" },
   { kinds: ["fetches"], out: "Calls APIs", in: "API called by" },
@@ -153,7 +156,9 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
   // Expand actions that would add nothing (no parents/children, or all drawn) are disabled.
   const drawnNow = new Set(st.graph.elements.map((e) => e.id));
   const rf = relationFilterOf(st);
-  const can = (dir: "parents" | "children", deep: boolean) => hasUndrawn(s, index, id, dir, deep, rf, drawnNow);
+  const can = (dir: "parents" | "children", deep: boolean, only?: EdgeKinds) => hasUndrawn(s, index, id, dir, deep, rf, drawnNow, only);
+  const isComponent = node?.kind === "component";
+  const down = downKinds(node?.kind);
   entries.push({ type: "separator" });
   {
     const route = routeOf(s, id);
@@ -170,10 +175,26 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       });
     }
   }
-  entries.push({ type: "item", value: "parents", label: "Show parents", icon: <IconArrowUp size={I} />, disabled: !can("parents", false), onSelect: () => expand(id, "parents", false) });
-  entries.push({ type: "item", value: "parents-all", label: "Show all parents up to the root", icon: <IconChevronsUp size={I} />, disabled: !can("parents", true), onSelect: () => expand(id, "parents", true) });
-  entries.push({ type: "item", value: "children", label: "Show children", icon: <IconArrowDown size={I} />, disabled: !can("children", false), onSelect: () => expand(id, "children", false) });
-  entries.push({ type: "item", value: "children-all", label: "Show all children down to the leaves", icon: <IconChevronsDown size={I} />, disabled: !can("children", true), onSelect: () => expand(id, "children", true) });
+  entries.push({ type: "item", value: "parents", label: node?.kind === "component" ? "Rendered by" : "Show parents", icon: <IconArrowUp size={I} />, disabled: !can("parents", false), onSelect: () => expand(id, "parents", false) });
+  entries.push({ type: "item", value: "parents-all", label: node?.kind === "component" ? "Rendered by, up to the root" : "Show all parents up to the root", icon: <IconChevronsUp size={I} />, disabled: !can("parents", true), onSelect: () => expand(id, "parents", true) });
+  entries.push({
+    type: "item",
+    value: "children",
+    label: isComponent ? "Renders" : "Show children",
+    icon: isComponent ? <IconRenders size={I} /> : <IconArrowDown size={I} />,
+    disabled: !can("children", false, down),
+    onSelect: () => expand(id, "children", false, down),
+  });
+  entries.push({
+    type: "item",
+    value: "children-all",
+    label: isComponent ? "Show render tree" : "Show all children down to the leaves",
+    icon: isComponent ? <IconRenderTree size={I} /> : <IconChevronsDown size={I} />,
+    disabled: !can("children", true, down),
+    onSelect: () => expand(id, "children", true, down),
+  });
+  if (isComponent && (index.out.get(id) ?? []).some((e) => INVOKES.includes(e.kind)))
+    entries.push({ type: "item", value: "invokes", label: "Invokes", icon: <IconInvokes size={I} />, disabled: !can("children", false, INVOKES), onSelect: () => expand(id, "children", false, INVOKES) });
 
   // Relations, both ways, with "show all" or one by one. Libraries hidden by the filter stay hidden.
   const { libraries } = relationFilterOf(st);

@@ -132,4 +132,7 @@
 .rae-tree__change[data-change="added"] { color: var(--chakra-colors-diff-added-fg); }
 .rae-tree__change[data-change="removed"] { color: var(--chakra-colors-diff-removed-fg); }
 .rae-tree__change[data-change="dir"] { width: 6px; height: 6px; border-radius: 999px; background: var(--chakra-colors-diff-changed-solid); }
-.rae-tree__name[data-change="removed"] { text-decoration: line-through; color: var(--chakra-colors-fg-subtle); }
+/* the name in its change's colour, as its letter: added green, modified yellow, removed red (struck through) */
+.rae-tree__name[data-change="added"] { color: var(--chakra-colors-diff-added-fg); }
+.rae-tree__name[data-change="changed"] { color: var(--chakra-colors-diff-changed-fg); }
+.rae-tree__name[data-change="removed"] { color: var(--chakra-colors-diff-removed-fg); text-decoration: line-through; }

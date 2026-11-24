@@ -83,6 +83,9 @@ function whenReady(attempt: () => boolean | Promise<boolean>, tries = 10) {
 
 export function Canvas() {
   const snapshot = useExplorer((s) => s.snapshot);
+  // the code diff dialog (diff snapshots), opened from a card's action or its tooltip
+  const codeDiffId = useExplorer((s) => s.codeDiffId);
+  const codeDiffOf = codeDiffId ? snapshot?.nodes[codeDiffId] : undefined;
   const index = useExplorer((s) => s.index);
   const graph = useExplorer((s) => s.graph);
   const placed = useExplorer((s) => s.placed);
@@ -276,10 +279,10 @@ export function Canvas() {
         </ReactFlow>
       </LodContext.Provider>
       {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
-      {!drag.dragging && !menu && !tooltip.diffOf && (
+      {!drag.dragging && !menu && !codeDiffOf && (
         <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} {...tooltip.tooltipProps} />
       )}
-      {tooltip.diffOf && snapshot && <NodeDiffModal node={tooltip.diffOf} snapshot={snapshot} open onOpenChange={(open) => !open && tooltip.closeDiff()} />}
+      {codeDiffOf && snapshot && <NodeDiffModal node={codeDiffOf} snapshot={snapshot} open onOpenChange={(open) => !open && useExplorer.getState().showCodeDiff(undefined)} />}
       {marquee.box && <div className="rae-marquee" style={marquee.box} />}
       <ExplorationPicker />
       <QuickAdd />

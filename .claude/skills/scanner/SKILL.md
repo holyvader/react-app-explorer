@@ -161,6 +161,10 @@ the head's snapshot with `snapshot.diff` (`SnapshotDiff` in schema).
   title / author / link travel as `diff.requestInfo` (cleaned by `parseDiffRequest`; links must pass
   `isRequestUrl`: https PR / MR pages) → `diff.head.request`. The desktop `/api/open` also opens
   `isRequestUrl` links. Verified with real gh on pmndrs/zustand (3 PRs listed in ~0.9s, a PR diffed in ~1.8s).
+- **Latest from origin** (`latestScan.ts`, `--latest`, `runScanJob(dir, { latest: true })`, scan body `latest`):
+  `fetchBranch` gets origin's default branch tip into FETCH_HEAD only, `exportCommit` exports it, the
+  folder is scanned there; `finish` sets `rootDir` back to the folder asked for and records
+  `snapshot.commit` (`origin/main`, sha, subject, date). The checkout is never touched. Ignored with a diff.
 - Tests: `test/diff.test.ts` builds real temp repos (branch, rename, delete, a bare "host" with request
   refs, a monorepo with a workspace link).
 

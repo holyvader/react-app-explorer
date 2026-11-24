@@ -4,7 +4,8 @@ import type { Collapse } from "../../graph/collapse.ts";
 import { type DrawnGraph, FOLDER_PREFIX, routeChain, routeOf } from "../../graph/drawn.ts";
 import { folderExpansion, folderPath, parentFolders } from "../../graph/folder.ts";
 import type { PlacedElement } from "../../graph/layout.ts";
-import { childEdges, type GraphIndex, hasUndrawn, parentEdges, type RelationFilter } from "../../graph/relations.ts";
+import { privatePropsType } from "../../graph/privateProps.ts";
+import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
 import { changeOf } from "../../lib/diff.ts";
 import { type ElementFlowNode, FRAME_HANDLE } from "../nodes/types.ts";
 
@@ -98,7 +99,10 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
       const id = p.element.id;
       const node = snapshot.nodes[id];
       const parents = node ? parentEdges(snapshot, index, id, filter) : [];
-      const children = node ? childEdges(snapshot, index, id, filter) : [];
+      const down = downKinds(node?.kind);
+      const children = node ? childEdges(snapshot, index, id, filter, down) : [];
+      const invokes = node?.kind === "component" ? childEdges(snapshot, index, id, filter, INVOKES) : undefined;
+      const propsType = node ? privatePropsType(snapshot, index, node) : undefined;
       return {
         id,
         type: p.holds ? "frame" : "card",
@@ -122,12 +126,16 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
           children: distinct(children.map((e) => e.to)),
           hiddenParents: distinct(parents.filter((e) => !drawn.has(e.from)).map((e) => e.from)),
           hiddenChildren: distinct(children.filter((e) => !drawn.has(e.to)).map((e) => e.to)),
+          invokes: invokes && distinct(invokes.map((e) => e.to)),
+          hiddenInvokes: invokes && distinct(invokes.filter((e) => !drawn.has(e.to)).map((e) => e.to)),
+          propsType: propsType && { id: propsType.id, name: propsType.name, keyword: propsType.typeKind ?? "type" },
           can: node
             ? {
                 parents: parents.some((e) => !drawn.has(e.from)),
                 allParents: hasUndrawn(snapshot, index, id, "parents", true, filter, drawn),
                 children: children.some((e) => !drawn.has(e.to)),
-                allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn),
+                allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn, down),
+                invokes: !!invokes?.some((e) => !drawn.has(e.to)),
                 routeChain: (() => {
                   const route = routeOf(snapshot, id);
                   return !!route && routeChain(snapshot, route).some((x) => !drawn.has(x));

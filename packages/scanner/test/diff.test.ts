@@ -473,3 +473,56 @@ describe("a typed diff: both sides typed", () => {
     expect(s.nodes["src/App.tsx#App"]!.signature?.returnHash).not.toBe(before.signature?.returnHash);
   }, 60_000);
 });
+
+describe("scan the latest from origin", () => {
+  test("fetches origin's default branch, scans it from an export, leaves the checkout alone", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "rae-latest-")));
+    const local = join(root, "local");
+    const host = join(root, "host.git");
+    const other = join(root, "other");
+    const put = (dir: string, files: Record<string, string>) => {
+      for (const [p, text] of Object.entries(files)) {
+        mkdirSync(dirname(join(dir, p)), { recursive: true });
+        writeFileSync(join(dir, p), text);
+      }
+    };
+    try {
+      await git(root, ["init", "-q", "--bare", "-b", "main", host], ENV);
+      mkdirSync(local);
+      await git(local, ["init", "-q", "-b", "main"], ENV);
+      put(local, {
+        "package.json": `{ "name": "latest" }`,
+        "tsconfig.json": `{ "compilerOptions": { "jsx": "react-jsx" } }`,
+        "src/App.tsx": `export function App() {\n  return <div />;\n}\n`,
+      });
+      await git(local, ["add", "-A"], ENV);
+      await git(local, ["commit", "-q", "-m", "first"], ENV);
+      const first = (await git(local, ["rev-parse", "HEAD"], ENV)).trim();
+      await git(local, ["remote", "add", "origin", host], ENV);
+      await git(local, ["push", "-q", "origin", "main"], ENV);
+      // someone else pushes a newer commit; the local checkout doesn't have it
+      await git(root, ["clone", "-q", host, other], ENV);
+      put(other, { "src/Newer.tsx": `export function Newer() {\n  return null;\n}\n` });
+      await git(other, ["add", "-A"], ENV);
+      await git(other, ["commit", "-q", "-m", "newer on main"], ENV);
+      await git(other, ["push", "-q", "origin", "main"], ENV);
+      const newer = (await git(other, ["rev-parse", "HEAD"], ENV)).trim();
+
+      const out = join(root, "out");
+      const events: ScanEvent[] = [];
+      await runScanJob(local, { outDir: out, latest: true, types: false, cache: false, mergeSingleExport: false }, (e) => events.push(e));
+      const result = events.find((e) => e.type === "result");
+      expect(events.find((e) => e.type === "error")).toBeUndefined();
+      const snap = JSON.parse(readFileSync(join(out, (result as { file: string }).file), "utf8")) as Snapshot;
+      expect(snap.commit).toMatchObject({ ref: "origin/main", sha: newer, subject: "newer on main" });
+      expect(snap.rootDir).toBe(local);
+      expect(snap.nodes["src/Newer.tsx#Newer"]).toBeDefined();
+      // the checkout: same commit, same branches, no new file
+      expect((await git(local, ["rev-parse", "HEAD"], ENV)).trim()).toBe(first);
+      expect((await git(local, ["for-each-ref", "--format=%(refname)", "refs/heads"], ENV)).trim()).toBe("refs/heads/main");
+      expect(existsSync(join(local, "src/Newer.tsx"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+});

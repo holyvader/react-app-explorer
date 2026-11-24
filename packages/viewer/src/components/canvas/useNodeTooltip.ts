@@ -23,7 +23,6 @@ export function useNodeTooltip() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // the diff view's code: the hovered element's changed lines in the tooltip, and its code diff dialog
   const diffCode = useExplorer((s) => s.diffOverlay && s.diffCode);
-  const [diffOf, setDiffOf] = useState<GraphNode | null>(null);
 
   /** Puts it away now (a drag, a moving view). Stable: safe in other hooks' dependencies. */
   const hide = useCallback(() => {
@@ -63,7 +62,7 @@ export function useNodeTooltip() {
     diffCode,
     onOpenDiff: (n: GraphNode) => {
       setTip(null);
-      setDiffOf(n);
+      useExplorer.getState().showCodeDiff(n.id);
     },
     onPointerEnter: () => {
       clearTimeout(showTimer.current);
@@ -76,5 +75,5 @@ export function useNodeTooltip() {
     },
   };
 
-  return { tip, hide, onNodeMouseEnter, onNodeMouseLeave, tooltipProps, diffOf, closeDiff: () => setDiffOf(null) };
+  return { tip, hide, onNodeMouseEnter, onNodeMouseLeave, tooltipProps };
 }

@@ -7,7 +7,7 @@ import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
-import { ALL_GROUPS, buildIndex, type EdgeGroup, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
+import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
 import { changesToShow } from "./lib/diff.ts";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
@@ -87,6 +87,8 @@ interface ExplorerState {
   diffOverlay: boolean;
   /** Diff snapshots, with the overlay on: the selected element's changed lines in a card under it. */
   diffCode: boolean;
+  /** Diff snapshots: the element whose code diff dialog is open (from its card, its tooltip). */
+  codeDiffId?: string;
   /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
@@ -149,7 +151,8 @@ interface ExplorerState {
   redo: () => void;
   clear: () => void;
   select: (id: string | undefined, adding?: boolean) => void;
-  expand: (id: string, dir: "parents" | "children", deep: boolean) => void;
+  /** `only`: follow just these edge kinds (a component's renders, its invokes). */
+  expand: (id: string, dir: "parents" | "children", deep: boolean, only?: EdgeKinds) => void;
   /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
   expandFolder: (id: string, deep: boolean) => void;
   /** Routes (and route files): add every route and file that renders its URL, root first. */
@@ -164,6 +167,8 @@ interface ExplorerState {
   setDiffOverlay: (on: boolean) => void;
   /** The toolbar's diff view: off, the overlay, or the overlay plus the selected element's code changes. */
   setDiffMode: (mode: DiffMode) => void;
+  /** Opens (an id) or closes (undefined) an element's code diff dialog. */
+  showCodeDiff: (id: string | undefined) => void;
   /** Diff snapshots: puts the changes on the canvas (declarations and their files, up to a limit). */
   showChanges: () => void;
   setRoutes: (on: boolean) => void;
@@ -427,7 +432,9 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     select: (id, adding) => {
-      if (id === undefined) return set({ selection: [], selectedId: undefined });
+      // letting go of the selection (a click on the empty diagram, Esc) also ends an inspection: with
+      // nothing selected the selection doesn't change, so the subscription below wouldn't end it
+      if (id === undefined) return set({ selection: [], selectedId: undefined, inspectedId: undefined });
       const s = get();
       // Clicked again while it's the only one selected: let go of it.
       if (!adding) return s.selection.length === 1 && s.selection[0] === id ? set({ selection: [], selectedId: undefined }) : set({ selection: [id], selectedId: id });
@@ -436,10 +443,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       set({ selection, selectedId: selection.at(-1) });
     },
 
-    expand: (id, dir, deep) => {
+    expand: (id, dir, deep, only) => {
       const s = get();
       if (!s.snapshot || !s.index) return;
-      const ids = reachable(s.snapshot, s.index, id, dir, deep, relationFilterOf(s));
+      const ids = reachable(s.snapshot, s.index, id, dir, deep, relationFilterOf(s), only);
       const present = new Set(s.visible);
       const fresh = ids.filter((x) => !present.has(x));
       if (fresh.length > LARGE_EXPANSION) {
@@ -533,6 +540,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       writeSetting(KEYS.diffOverlay, on);
       redraw({ diffOverlay: on }, null);
     },
+
+    showCodeDiff: (id) => set({ codeDiffId: id }),
 
     setDiffMode: (mode) => {
       const code = mode === "code";

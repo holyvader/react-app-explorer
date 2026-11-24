@@ -83,17 +83,25 @@ const isChildEdge = (s: Snapshot, e: Edge, f: RelationFilter) => {
   );
 };
 
-export function childEdges(s: Snapshot, ix: GraphIndex, id: string, f: RelationFilter): Edge[] {
-  return (ix.out.get(id) ?? []).filter((e) => isChildEdge(s, e, f));
+/** Edge kinds an expansion follows; `undefined` = every child kind of the node. */
+export type EdgeKinds = readonly EdgeKind[] | undefined;
+
+/** Components expand down along what they render only; their calls have their own action. */
+export const RENDERS: readonly EdgeKind[] = ["renders"];
+export const INVOKES: readonly EdgeKind[] = ["invokes", "invokesAction"];
+export const downKinds = (kind: NodeKind | undefined): EdgeKinds => (kind === "component" ? RENDERS : undefined);
+
+export function childEdges(s: Snapshot, ix: GraphIndex, id: string, f: RelationFilter, only?: EdgeKinds): Edge[] {
+  return (ix.out.get(id) ?? []).filter((e) => (!only || only.includes(e.kind)) && isChildEdge(s, e, f));
 }
 
-export function parentEdges(s: Snapshot, ix: GraphIndex, id: string, f: RelationFilter): Edge[] {
-  return (ix.in.get(id) ?? []).filter((e) => isChildEdge(s, e, f));
+export function parentEdges(s: Snapshot, ix: GraphIndex, id: string, f: RelationFilter, only?: EdgeKinds): Edge[] {
+  return (ix.in.get(id) ?? []).filter((e) => (!only || only.includes(e.kind)) && isChildEdge(s, e, f));
 }
 
 /**
  * Nodes reachable from `id` in one direction. `deep` walks until roots/leaves (cycle-safe).
- * Returns ids in BFS order, excluding the start node.
+ * Returns ids in BFS order, excluding the start node. `only` limits every step to those edge kinds.
  */
 export function reachable(
   s: Snapshot,
@@ -102,6 +110,7 @@ export function reachable(
   dir: "parents" | "children",
   deep: boolean,
   f: RelationFilter,
+  only?: EdgeKinds,
 ): string[] {
   const seen = new Set([id]);
   const order: string[] = [];
@@ -109,7 +118,7 @@ export function reachable(
   while (frontier.length) {
     const next: string[] = [];
     for (const cur of frontier) {
-      const edges = dir === "children" ? childEdges(s, ix, cur, f) : parentEdges(s, ix, cur, f);
+      const edges = dir === "children" ? childEdges(s, ix, cur, f, only) : parentEdges(s, ix, cur, f, only);
       for (const e of edges) {
         const other = dir === "children" ? e.to : e.from;
         if (seen.has(other)) continue;
@@ -137,13 +146,14 @@ export function hasUndrawn(
   deep: boolean,
   f: RelationFilter,
   drawn: ReadonlySet<string>,
+  only?: EdgeKinds,
 ): boolean {
   const seen = new Set([id]);
   let frontier = [id];
   while (frontier.length) {
     const next: string[] = [];
     for (const cur of frontier) {
-      const edges = dir === "children" ? childEdges(s, ix, cur, f) : parentEdges(s, ix, cur, f);
+      const edges = dir === "children" ? childEdges(s, ix, cur, f, only) : parentEdges(s, ix, cur, f, only);
       for (const e of edges) {
         const other = dir === "children" ? e.to : e.from;
         if (seen.has(other)) continue;

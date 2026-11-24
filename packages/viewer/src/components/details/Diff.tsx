@@ -2,7 +2,7 @@ import type { GraphNode } from "@rae/schema";
 import { ActionIconButton, Box, Button, CodeToken, Flex, Stack, Text, textPx } from "@rae/design-system";
 import { IconCodeDiff } from "@rae/design-system/icons";
 import { type ReactNode, useState } from "react";
-import { type ParamSide, type SignatureChange, signatureChanges } from "../../lib/diff.ts";
+import { type ParamSide, propsTypeName, type SignatureChange, signatureChanges } from "../../lib/diff.ts";
 import { useExplorer } from "../../store.ts";
 import { NodeDiffModal } from "../NodeDiffModal.tsx";
 import { hasCode, useNodeDiff } from "../../lib/nodeDiff.ts";
@@ -60,13 +60,17 @@ export function DiffView({ node, change }: { node: GraphNode; change: "added" | 
   const snapshot = useExplorer((s) => s.snapshot);
   const [more, setMore] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
+  const [propsOpen, setPropsOpen] = useState(false);
   const diff = snapshot?.diff;
   if (!snapshot || !diff) return null;
   const before = diff.before[node.id];
   // only the signature here: props / parameters and the return type; the rest is in the code diff
-  const items = change === "changed" && before ? signatureChanges(before, node, { annotations: !!diff.annotations }) : [];
+  const all = change === "changed" && before ? signatureChanges(before, node, { annotations: !!diff.annotations }) : [];
+  // props from a named type (`ButtonProps`): its name once (hover: what's inside) rather than each property
+  const props = groupPropChanges(all, before, node);
+  const items = props ? all.filter((c) => !(c.kind === "param" && c.isProp)) : all;
+  const count = items.length + (props ? 1 : 0);
   const shown = more ? items : items.slice(0, DIFF_ITEMS);
-  const word = (it: Extract<SignatureChange, { kind: "param" }>) => `${it.isProp ? "prop" : "parameter"} ${it.what}`;
   return (
     <Stack gap="2" fontSize={textPx(12.5)}>
       <Flex align="center" gap="2">
@@ -75,46 +79,45 @@ export function DiffView({ node, change }: { node: GraphNode; change: "added" | 
             ? `New in ${diff.head.ref}.`
             : change === "removed"
               ? `Removed: only ${diff.base.ref} (${diff.compared.slice(0, 7)}) has it.`
-              : items.length
-                ? `Signature changed${items.length > DIFF_ITEMS ? ` (${items.length})` : ""}:`
+              : count
+                ? `Signature changed${count > DIFF_ITEMS ? ` (${count})` : ""}:`
                 : "Same signature: the code diff shows what changed."}
         </Text>
         {hasCode(node) && <ActionIconButton label="Show the code diff" icon={<IconCodeDiff />} size="2xs" variant="outline" onClick={() => setCodeOpen(true)} />}
       </Flex>
-      {shown.map((it, i) => (
-        <Box key={i} minW="0">
+      {props && (
+        <Box minW="0">
           <Text fontSize={textPx(11.5)} color="fg.subtle" mb="1">
-            {it.kind === "param" ? word(it) : it.kind === "returned" ? "return value changed" : "return type"}
+            props type changed · {props.changes.length} {props.changes.length === 1 ? "property" : "properties"}
           </Text>
-          {it.kind === "param" ? (
-            <>
-              {it.from && (
-                <ChangeRow sign="−" change="removed">
-                  <ParamText p={it.from} owner={before ?? node} />
-                </ChangeRow>
-              )}
-              {it.to && (
-                <ChangeRow sign="+" change="added">
-                  <ParamText p={it.to} owner={node} />
-                </ChangeRow>
-              )}
-            </>
-          ) : it.kind === "returned" ? (
-            // the same type, marked modified: what's returned changed (the code diff shows how)
-            <ChangeRow sign="~" change="changed" title="The return type is the same; the returned code changed">
-              <TypeText text={it.type} owner={node} />
+          {props.from === props.to ? (
+            <ChangeRow sign="~" change="changed" title="Hover the name to see what's inside">
+              <PropsTypeName name={props.to} owner={node} />
             </ChangeRow>
           ) : (
             <>
               <ChangeRow sign="−" change="removed">
-                <TypeText text={it.from} owner={before ?? node} />
+                <PropsTypeName name={props.from} owner={before ?? node} />
               </ChangeRow>
               <ChangeRow sign="+" change="added">
-                <TypeText text={it.to} owner={node} />
+                <PropsTypeName name={props.to} owner={node} />
               </ChangeRow>
             </>
           )}
+          <Button size="2xs" variant="ghost" px="1.5" mt="0.5" color="fg.muted" onClick={() => setPropsOpen(!propsOpen)}>
+            {propsOpen ? "Hide the property changes" : `Show the ${plural(props.changes.length, "property change")}`}
+          </Button>
+          {propsOpen && (
+            <Stack gap="2" pl="3" mt="1" borderLeftWidth="2px" borderColor="diff.changed.subtle">
+              {props.changes.map((it, i) => (
+                <ItemView key={i} it={it} before={before} node={node} />
+              ))}
+            </Stack>
+          )}
         </Box>
+      )}
+      {shown.map((it, i) => (
+        <ItemView key={i} it={it} before={before} node={node} />
       ))}
       {items.length > DIFF_ITEMS && (
         <Button size="2xs" variant="ghost" alignSelf="start" px="1.5" color="fg.muted" onClick={() => setMore(!more)}>
@@ -123,6 +126,77 @@ export function DiffView({ node, change }: { node: GraphNode; change: "added" | 
       )}
       {codeOpen && <NodeDiffModal node={node} snapshot={snapshot} open={codeOpen} onOpenChange={setCodeOpen} />}
     </Stack>
+  );
+}
+
+/** One signature change: its label, then − before / + after (as in a diff). */
+function ItemView({ it, before, node }: { it: SignatureChange; before?: GraphNode; node: GraphNode }) {
+  const word = (c: Extract<SignatureChange, { kind: "param" }>) => `${c.isProp ? "prop" : "parameter"} ${c.what}`;
+  return (
+    <Box minW="0">
+      <Text fontSize={textPx(11.5)} color="fg.subtle" mb="1">
+        {it.kind === "param" ? word(it) : it.kind === "returned" ? "return value changed" : "return type"}
+      </Text>
+      {it.kind === "param" ? (
+        <>
+          {it.from && (
+            <ChangeRow sign="−" change="removed">
+              <ParamText p={it.from} owner={before ?? node} />
+            </ChangeRow>
+          )}
+          {it.to && (
+            <ChangeRow sign="+" change="added">
+              <ParamText p={it.to} owner={node} />
+            </ChangeRow>
+          )}
+        </>
+      ) : it.kind === "returned" ? (
+        // the same type, marked modified: what's returned changed (the code diff shows how)
+        <ChangeRow sign="~" change="changed" title="The return type is the same; the returned code changed">
+          <TypeText text={it.type} owner={node} />
+        </ChangeRow>
+      ) : (
+        <>
+          <ChangeRow sign="−" change="removed">
+            <TypeText text={it.from} owner={before ?? node} />
+          </ChangeRow>
+          <ChangeRow sign="+" change="added">
+            <TypeText text={it.to} owner={node} />
+          </ChangeRow>
+        </>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * A component's prop changes, when its props come from a named type on both sides (`{ … }: ButtonProps`):
+ * the type's name before and after, and the property changes (shown on demand).
+ */
+function groupPropChanges(all: SignatureChange[], before: GraphNode | undefined, node: GraphNode) {
+  const changes = all.filter((c): c is Extract<SignatureChange, { kind: "param" }> => c.kind === "param" && c.isProp);
+  const from = before && propsTypeName(before);
+  const to = propsTypeName(node);
+  return changes.length && from && to ? { from, to, changes } : undefined;
+}
+
+/** A props type by name, with its keyword (`interface ButtonProps`): the name links and, hovered, shows the declaration. */
+function PropsTypeName({ name, owner }: { name: string; owner: GraphNode }) {
+  const snapshot = useExplorer((s) => s.snapshot);
+  const ident = name.match(/^[A-Za-z_$][\w$]*/)?.[0];
+  const id = ident && owner.typeRefs?.[ident];
+  const keyword = id ? snapshot?.nodes[id]?.typeKind : undefined;
+  return (
+    <Flex align="baseline" minW="0">
+      {keyword && (
+        <Text as="span" whiteSpace="pre">
+          <CodeToken kind="keyword">{keyword} </CodeToken>
+        </Text>
+      )}
+      <Box minW="0" flex="1">
+        <TypeText text={name} owner={owner} />
+      </Box>
+    </Flex>
   );
 }
 

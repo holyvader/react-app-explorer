@@ -116,11 +116,15 @@ function listIndex() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** A folder that is a project (the scan dialog marks it): Next.js when it has a next.config, else any package.json. */
+const projectOf = (dir: string): { project?: "next" | "package" } =>
+  ["next.config.js", "next.config.ts", "next.config.mjs"].some((m) => existsSync(join(dir, m))) ? { project: "next" } : existsSync(join(dir, "package.json")) ? { project: "package" } : {};
+
 function listDir(path: string) {
   const entries = readdirSync(path, { withFileTypes: true })
     .filter((e) => !e.name.startsWith(".") && !SKIP_DIRS.has(e.name))
     .filter((e) => e.isDirectory() || (e.isFile() && SOURCE_FILE.test(e.name)))
-    .map((e) => ({ name: e.name, path: join(path, e.name), kind: e.isDirectory() ? "dir" : "file" }))
+    .map((e) => ({ name: e.name, path: join(path, e.name), kind: e.isDirectory() ? "dir" : "file", ...(e.isDirectory() ? projectOf(join(path, e.name)) : {}) }))
     .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1));
   const markers = ["package.json", "tsconfig.json", "next.config.js", "next.config.ts", "next.config.mjs"].filter((m) => existsSync(join(path, m)));
   return { path, parent: dirname(path) === path ? null : dirname(path), entries, markers };
@@ -271,7 +275,7 @@ async function api(req: Request, url: URL): Promise<Response> {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
     if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
-    let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown };
+    let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown; latest?: unknown };
     let diff: ReturnType<typeof parseDiffRequest>;
     try {
       body = await req.json();
@@ -307,6 +311,7 @@ async function api(req: Request, url: URL): Promise<Response> {
             types: body.types !== false,
             mergeSingleExport: body.merge !== false,
             diff,
+            latest: body.latest === true && !diff,
             signal: job.abort.signal,
             onWarn: (m) => log(`warn: ${m}`),
             onProgress: (m) => log(`scan: ${m}`),

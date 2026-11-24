@@ -1,5 +1,6 @@
 import { ActionIconButton, Box, BrandMark, Button, ContextMenu, Flex, Popover, Select, setColorMode, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useTextSize } from "@rae/design-system";
-import { projectName, shortPath } from "../lib/paths.ts";
+import { projectName } from "../lib/paths.ts";
+import { FolderSwitcher, when } from "./FolderSwitcher.tsx";
 import {
   IconBranch,
   IconChevronDown,
@@ -11,7 +12,6 @@ import {
   IconRedo,
   IconScan,
   IconUndo,
-  IconUpload,
   IconViewOptions,
 } from "@rae/design-system/icons";
 import { useRef, useState } from "react";
@@ -27,20 +27,14 @@ export interface ToolbarProps {
   onPickSnapshot: (file: string) => void;
   onLoadFile: (file: File) => void;
   onScan: () => void;
+  /** Scans a folder or file right away with the remembered settings (Rescan, a pasted path). */
+  onScanPath: (path: string) => void;
   onManageSnapshots: () => void;
   onLibraries: () => void;
 }
 
-const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
-/** "today 14:02", else "3 Nov 14:02": the snapshot's moment, short. */
-const when = (iso: string) => {
-  const d = new Date(iso);
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `${isToday(d) ? "today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
-};
-
-/** The app bar: mark, project and snapshot (a diff's chip and overlay switch), history, view options and Scan. */
-export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onManageSnapshots, onLibraries }: ToolbarProps) {
+/** The app bar: mark, the folder switcher and its snapshot (a diff's chip and overlay switch), history, view options and Scan. */
+export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onScanPath, onManageSnapshots, onLibraries }: ToolbarProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
   const canUndo = useExplorer((s) => s.past.length > 0);
@@ -51,29 +45,21 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
 
   const snapshots = list?.snapshots ?? [];
   const currentEntry = snapshots.find((s) => s.file === current);
-  // the snapshots grouped by the scanned folder (newest first, as the list comes)
-  const groups = new Map<string, typeof snapshots>();
-  for (const s of snapshots) {
-    const g = s.rootDir ? `${projectName(s.rootDir)} — ${shortPath(s.rootDir)}` : "Other";
-    groups.set(g, [...(groups.get(g) ?? []), s]);
-  }
+  // the open folder's snapshots, newest first: the menu of the date beside the switcher
+  const own = snapshot?.rootDir ? snapshots.filter((s) => s.rootDir === snapshot.rootDir).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : [];
   const entries: MenuEntry[] = [
-    ...[...groups].flatMap(([group, items]): MenuEntry[] => [
-      { type: "label", label: group },
-      ...items.map(
-        (s): MenuEntry => ({
-          type: "item",
-          value: s.file,
-          label: s.diff ? `${when(s.createdAt)} · diff ${s.diff.base.split(" ")[0]} ← ${s.diff.head.split(" ")[0]}` : when(s.createdAt),
-          hint: s.file === current ? "open" : s.diff ? `${s.diff.changes} changes` : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
-          onSelect: () => onPickSnapshot(s.file),
-        }),
-      ),
-    ]),
-    ...(snapshots.length ? [{ type: "separator" } as const] : []),
-    { type: "item", value: "scan", label: "Scan a project…", icon: <IconScan size={14} />, onSelect: onScan },
-    { type: "item", value: "manage", label: "Manage snapshots…", icon: <IconHistory size={14} />, onSelect: onManageSnapshots, disabled: !snapshots.length },
-    { type: "item", value: "load", label: "Load snapshot file…", icon: <IconUpload size={14} />, onSelect: () => fileRef.current?.click() },
+    { type: "label", label: `Snapshots of ${snapshot ? projectName(snapshot.rootDir) : "this folder"}` },
+    ...own.map(
+      (s): MenuEntry => ({
+        type: "item",
+        value: s.file,
+        label: s.diff ? `${when(s.createdAt)} · diff ${s.diff.base.split(" ")[0]} ← ${s.diff.head.split(" ")[0]}` : when(s.createdAt),
+        hint: s.file === current ? "open" : s.diff ? `${s.diff.changes} changes` : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
+        onSelect: () => onPickSnapshot(s.file),
+      }),
+    ),
+    { type: "separator" },
+    { type: "item", value: "manage", label: "Manage all snapshots…", icon: <IconHistory size={14} />, onSelect: onManageSnapshots },
   ];
 
   return (
@@ -86,42 +72,40 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
       </Flex>
       <Divider />
 
-      {/* the project and its snapshot: a menu of the snapshots, scanning, loading a file */}
-      <Tooltip content={snapshot ? `Scanned folder: ${snapshot.rootDir}${list ? `\nSnapshots in ${list.dir}` : ""}` : list ? `Snapshots in ${list.dir}` : "Snapshots"}>
-        <Flex
-          as="button"
-          align="center"
-          gap="2"
-          h="30px"
-          px="9px"
-          rounded="l2"
-          fontSize={textPx(12.5)}
-          minW="0"
-          flexShrink={1}
-          cursor="pointer"
-          _hover={{ bg: "bg.muted" }}
-          aria-haspopup="menu"
-          aria-label={`Snapshots: ${snapshot ? projectName(snapshot.rootDir) : "none open"}${currentEntry ? `, ${when(currentEntry.createdAt)}` : ""}`}
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            setMenuAt({ x: r.left, y: r.bottom + 4 });
-          }}
-        >
-          <Text as="span" fontWeight="medium" truncate>
-            {snapshot ? projectName(snapshot.rootDir) : snapshots.length ? "Open a snapshot" : "No project"}
-          </Text>
-          {currentEntry && (
-            <Text as="span" color="fg.subtle" fontFamily="mono" fontSize={textPx(11.5)} whiteSpace="nowrap">
-              · {when(currentEntry.createdAt)}
-            </Text>
-          )}
-          <Box color="fg.subtle" display="inline-flex" flexShrink={0}>
-            <IconChevronDown size={13} />
-          </Box>
-        </Flex>
-      </Tooltip>
-      {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
-      {snapshot?.diff && <DiffModeSelect />}
+      {/* the folder in the middle (switch, rescan, open another), then which of its snapshots is open */}
+      <Flex flex="1" minW="0" align="center" justify="center" gap="1.5">
+        <FolderSwitcher list={list} onPickSnapshot={onPickSnapshot} onScanPath={onScanPath} onBrowse={onScan} onLoadFile={() => fileRef.current?.click()} />
+        {currentEntry && own.length > 0 && (
+          <Tooltip content={`${own.length} snapshot${own.length === 1 ? "" : "s"} of this folder`}>
+            <Flex
+              as="button"
+              align="center"
+              gap="1.5"
+              h="30px"
+              px="2"
+              rounded="l2"
+              flexShrink={0}
+              cursor="pointer"
+              fontFamily="mono"
+              fontSize={textPx(11.5)}
+              color="fg.muted"
+              whiteSpace="nowrap"
+              _hover={{ bg: "bg.muted" }}
+              aria-haspopup="menu"
+              aria-label={`Snapshot from ${when(currentEntry.createdAt)}: choose another`}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenuAt({ x: r.left, y: r.bottom + 4 });
+              }}
+            >
+              <IconHistory size={13} /> {when(currentEntry.createdAt)}
+              <IconChevronDown size={13} />
+            </Flex>
+          </Tooltip>
+        )}
+        {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
+        {snapshot?.diff && <DiffModeSelect />}
+      </Flex>
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
         ref={fileRef}
@@ -134,8 +118,6 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onM
           e.target.value = "";
         }}
       />
-
-      <Box flex="1" minW="0" />
 
       <ToolGroup>
         <BarIcon label="Undo (⌘Z)" icon={<IconUndo />} onClick={undo} disabled={!canUndo} />

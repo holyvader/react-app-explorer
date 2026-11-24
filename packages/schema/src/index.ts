@@ -324,6 +324,11 @@ export interface Snapshot {
   diff?: SnapshotDiff;
   /** How it was scanned: `mergeSingleExport` — files declaring one exported thing became that declaration. */
   options?: { mergeSingleExport?: boolean };
+  /**
+   * Scanned at a commit rather than the checkout: the newest commit of origin's default branch
+   * (`ref`: `origin/main`), fetched and exported to a temporary folder. `rootDir` is still the folder asked for.
+   */
+  commit?: { ref: string; sha: string; subject?: string; date?: string };
   nodes: Record<NodeId, GraphNode>;
   edges: Edge[];
 }
@@ -428,6 +433,8 @@ export interface GitBranch {
   remote: boolean;
   subject: string;
   date: string;
+  /** Who wrote its newest commit. */
+  author?: string;
 }
 
 /** An open pull / merge request, from the refs GitHub (refs/pull/N/head) and GitLab (refs/merge-requests/N/head) publish. */

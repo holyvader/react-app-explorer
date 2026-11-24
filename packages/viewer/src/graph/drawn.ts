@@ -1,7 +1,9 @@
 import type { Edge, GraphNode, NodeKind, Snapshot } from "@rae/schema";
 import { edgeChange } from "../lib/diff.ts";
 import { isFiltered, type LibraryFilter } from "./packages.ts";
+import { propsChipLabel, propsCount } from "../lib/propsCount.ts";
 import { EDGE_GROUP_OF, type EnabledGroups, type GraphIndex } from "./relations.ts";
+import { boundaryOf } from "../lib/boundary.ts";
 
 /**
  * What is drawn on the canvas, derived from the snapshot and the visible ids:
@@ -114,7 +116,10 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
   }
   for (const id of shown) {
     const n = nodes[id]!;
-    const badges: string[] = n.file ? [n.nextRole, n.moduleType].filter((b) => b !== undefined) : [];
+    const badges: string[] = n.file ? [n.nextRole, boundaryOf(n)].filter((b) => b !== undefined) : [];
+    // a component's props chip ("2 + 39 props") widens its card like the badges
+    const props = propsCount(n);
+    if (props) badges.push(propsChipLabel(props));
     elements.push({ id, kind: n.kind, name: n.name, parent: parentOf.get(id) ?? null, ...(badges.length ? { badges } : {}) });
   }
 

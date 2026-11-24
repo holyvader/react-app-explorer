@@ -31,7 +31,11 @@ export function useColumns(ref: RefObject<HTMLElement | null>, fallback = 60): n
     const measure = () => {
       const style = getComputedStyle(box);
       const right = box.getBoundingClientRect().right - parseFloat(style.paddingRight || "0");
-      const room = right - el.getBoundingClientRect().left;
+      // where its first line starts: an inline element broken over lines has a bounding box from
+      // the row's left edge, which gave it more room, laid it out on one line again, and so on,
+      // every frame (Button's `onCopy?: ClipboardEventHandler<HTMLButtonElement>` flickered 1 ↔ 3 lines)
+      const start = el.getClientRects()[0]?.left ?? el.getBoundingClientRect().left;
+      const room = right - start;
       const next = Math.max(20, Math.floor(room / charWidth(el)) - 1);
       setCols((c) => (c === next ? c : next));
     };

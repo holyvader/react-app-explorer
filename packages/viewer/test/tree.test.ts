@@ -38,11 +38,35 @@ describe("branch options", () => {
     const opts = branchOptions([b("fix/b"), b("main"), b("feat/x"), b("origin/feat/y", true), b("origin/main", true), b("feat/a")] as never, (n) => n);
     expect(opts.map((o) => [o.value, o.group])).toEqual([
       ["main", "Branches"],
-      ["feat/a", "feat/"],
-      ["feat/x", "feat/"],
-      ["fix/b", "fix/"],
+      ["feat/a", "feat"],
+      ["feat/x", "feat"],
+      ["fix/b", "fix"],
       ["origin/main", "Remote branches"],
-      ["origin/feat/y", "origin · feat/"],
+      ["origin/feat/y", "origin/feat"],
     ]);
   });
+});
+
+describe("branch rows", () => {
+  test("remote dim, own last part bold; in a prefix group just the rest; second line: author (bold) · subject", async () => {
+    const { branchParts } = await import("../src/lib/branches.ts");
+    expect(branchParts("origin/feat/login-page", true)).toEqual([{ text: "origin/", tone: "dim" }, { text: "feat/" }, { text: "login-page", tone: "strong" }]);
+    expect(branchParts("main")).toEqual([{ text: "main", tone: "strong" }]);
+    expect(branchParts("feat/x")).toEqual([{ text: "feat/" }, { text: "x", tone: "strong" }]);
+    const [o] = branchOptions([{ name: "origin/fix/a", remote: true, sha: "0", subject: "Fix the footer", author: "Ann", ref: "", date: "" }], (n) => n);
+    expect(o!.detail).toBe("Fix the footer");
+    expect(o!.detailLead).toBe("Ann");
+    expect(o!.label).toBe("origin/fix/a");
+    expect(o!.group).toBe("origin/fix");
+    expect(o!.parts).toEqual([{ text: "a", tone: "strong" }]);
+    const [n] = branchOptions([{ name: "feat/ui/top-nav", remote: false, sha: "0", subject: "s", ref: "", date: "" }], (x) => x);
+    expect(n!.parts).toEqual([{ text: "ui/" }, { text: "top-nav", tone: "strong" }]);
+  });
+});
+
+test("remote label: https, scp-like ssh and ssh URLs as host/path", async () => {
+  const { remoteLabel } = await import("../src/lib/branches.ts");
+  expect(remoteLabel("https://github.com/owner/repo.git")).toBe("github.com/owner/repo");
+  expect(remoteLabel("git@github.com:owner/repo.git")).toBe("github.com/owner/repo");
+  expect(remoteLabel("https://user@gitlab.example.com/group/sub/repo")).toBe("gitlab.example.com/group/sub/repo");
 });

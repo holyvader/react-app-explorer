@@ -32,6 +32,8 @@ export {
   History as IconHistory,
   Crosshair as IconFocus,
   Folder as IconFolder,
+  FolderOpen as IconFolderOpen,
+  RefreshCw as IconRescan,
   FileCode as IconFile,
   CornerLeftUp as IconParentDir,
   ScanSearch as IconScan,
@@ -48,6 +50,7 @@ export {
   Braces as IconType,
   Signpost as IconRoute,
   Layers as IconRouteChain,
+  SquareFunction as IconInvokes,
   DatabaseZap as IconCache,
   FileImage as IconAsset,
   TriangleAlert as IconWarning,
@@ -63,3 +66,4 @@ export {
   Moon as IconDark,
 } from "lucide-react";
 export type { LucideIcon as Icon } from "lucide-react";
+export { IconRenders, IconRenderTree } from "./customIcons.ts";

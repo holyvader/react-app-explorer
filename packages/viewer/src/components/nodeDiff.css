@@ -44,22 +44,41 @@
 .rae-cdiff__fold button:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1.5px; }
 
 /* The diff view's "Overlay + code": the node tooltip's left column (TipDiff.tsx), changed lines only. */
-.rae-tip[data-diff] { display: flex; align-items: stretch; max-width: none; max-height: min(560px, var(--room)); }
-.rae-tip[data-diff] .rae-tip__main { min-width: 240px; max-width: 380px; overflow: auto; }
+/* one column, 520px: header, the signature in one line, the changed lines, a footer */
+.rae-tip[data-diff] { display: flex; width: 520px; max-width: calc(100vw - 16px); max-height: min(560px, var(--room)); }
 .rae-tip__diff {
   display: flex;
   flex-direction: column;
-  width: 580px;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
-  border-right: 1px solid var(--chakra-colors-border-muted);
   cursor: auto;
 }
+.rae-diffcard__head .rae-tip__head { flex: 1; min-width: 0; padding: 0; }
+.rae-diffcard__head .rae-tip__path { margin: 2px 0 0; }
+.rae-diffcard__sig {
+  padding: 7px 12px;
+  font: calc(12px * var(--rae-text-scale, 1))/1.6 var(--chakra-fonts-mono);
+  background: var(--chakra-colors-bg-subtle);
+  border-bottom: 1px solid var(--chakra-colors-border-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rae-diffcard__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 12px;
+  border-top: 1px solid var(--chakra-colors-border-muted);
+  font: calc(11.5px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
+  color: var(--chakra-colors-fg-subtle);
+}
+.rae-diffcard__foot span { flex: 1; }
 .rae-diffcard__head {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: calc(34px * var(--rae-text-scale, 1));
-  padding: 0 6px 0 12px;
+  padding: 10px 8px 10px 12px;
   border-bottom: 1px solid var(--chakra-colors-border-muted);
   font: calc(12px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
   color: var(--chakra-colors-fg-muted);
@@ -105,6 +124,6 @@
 .rae-diffcard__open:hover { color: var(--chakra-colors-fg); background: var(--chakra-colors-bg-muted); }
 .rae-diffcard__open:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
 .rae-diffcard__note { padding: 10px 12px; font: calc(12px * var(--rae-text-scale, 1)) var(--chakra-fonts-body); color: var(--chakra-colors-fg-muted); }
-.rae-cdiff.rae-diffcard__code { flex: 1; min-height: 0; max-height: none; border: 0; border-radius: 0 0 0 8px; cursor: text; }
+.rae-cdiff.rae-diffcard__code { flex: 1; min-height: 0; max-height: none; border: 0; border-radius: 0; cursor: text; }
 /* between two runs of changed lines: the unchanged lines left out */
 .rae-diffcard__gap td { height: 7px; padding: 0 !important; background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in oklab, var(--chakra-colors-border-muted) 60%, transparent) 5px 6px); border-block: 1px solid var(--chakra-colors-border-muted); }

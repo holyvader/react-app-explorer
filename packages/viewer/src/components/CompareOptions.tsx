@@ -3,7 +3,7 @@ import { IconBranch } from "@rae/design-system/icons";
 import type { GitOverview, GitRequest, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
 import { useEffect, useMemo, useState } from "react";
 import { fetchGit, fetchGitRequests, fetchGitTools, type ScanSettings } from "../lib/api.ts";
-import { branchOptions, branchPrefix } from "../lib/branches.ts";
+import { branchOptions, branchParts, branchPrefix, prefixGroup } from "../lib/branches.ts";
 import { readSetting, writeSetting } from "../lib/settings.ts";
 import { plural } from "../lib/text.ts";
 
@@ -14,6 +14,11 @@ export interface CompareOptionsProps {
   /** The folder (or entry file) to scan; its git repo is looked up as it changes. */
   path: string;
   onChange: (diff: CompareChoice) => void;
+  /** Inside the scan dialog's Git section: no border of its own. */
+  embedded?: boolean;
+  /** Controlled on / off (the dialog turns it off when "Latest from origin" goes on); its own state otherwise. */
+  on?: boolean;
+  onOnChange?: (on: boolean) => void;
 }
 
 const HEAD = "head:HEAD";
@@ -33,7 +38,7 @@ const toolState = (t: GitToolStatus | undefined) => (!t ? "checking…" : !t.ins
  * host's CLI — gh / glab — when installed and logged in, else git), git's refs (open and closed, no
  * titles), or a CLI explicitly (open ones, with title, author, target branch and link).
  */
-export function CompareOptions({ path, onChange }: CompareOptionsProps) {
+export function CompareOptions({ path, onChange, embedded, on: onProp, onOnChange }: CompareOptionsProps) {
   const target = path.trim();
   // answers are kept with the folder they're for: another folder's are simply not used (no resets)
   const [loaded, setLoaded] = useState<Keyed<{ git: GitOverview }>>();
@@ -47,7 +52,9 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
   const [picked, setPicked] = useState<Record<string, RequestSource>>({});
   const source: RequestSource = repo ? (picked[repo.root] ?? readSetting<RequestSource>(SOURCE_KEY(repo.root), "auto")) : "auto";
 
-  const [on, setOn] = useState(false);
+  const [onOwn, setOnOwn] = useState(false);
+  const on = onProp ?? onOwn;
+  const setOn = (v: boolean) => (onOnChange ? onOnChange(v) : setOnOwn(v));
   const [base, setBase] = useState("");
   const [head, setHead] = useState(HEAD);
   const [fromMergeBase, setFromMergeBase] = useState(true);
@@ -117,14 +124,22 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
     const groups = new Map<string, SelectOption[]>();
     for (const r of list) {
       const g = groupOf(r);
-      groups.set(g, [...(groups.get(g) ?? []), { value: `req:${r.ref}`, label: requestLabel(r), group: g }]);
+      groups.set(g, [...(groups.get(g) ?? []), { value: `req:${r.ref}`, label: requestLabel(r), group: g, ...requestRow(r) }]);
     }
     return [...groups.values()].flat();
   };
-  const requestLabel = (r: GitRequest) => {
-    const num = `${r.provider === "github" ? "#" : "!"}${r.number}`;
-    if (!r.title) return `${num} — ${r.sha.slice(0, 7)}`;
-    return `${num} ${r.title.slice(0, 70)}${r.author ? ` — ${r.author}` : ""}${r.draft ? " (draft)" : ""}${r.baseBranch ? ` → ${r.baseBranch}` : ""}`;
+  const numberOf = (r: GitRequest) => `${r.provider === "github" ? "#" : "!"}${r.number}`;
+  // what the field shows once picked (and what typing matches, with the second line)
+  const requestLabel = (r: GitRequest) => `${numberOf(r)} ${r.title ?? r.headBranch ?? r.sha.slice(0, 7)}`;
+  // in the list: the number and its branch (last part bold), then title · author · draft · → base
+  const requestRow = (r: GitRequest): Pick<SelectOption, "parts" | "detail" | "detailLead"> => {
+    // grouped by the branch's prefix (`feat`): the row is the rest of its name
+    const prefix = r.headBranch ? (branchPrefix(r.headBranch) ?? "") : "";
+    return {
+      parts: [{ text: `${numberOf(r)} `, tone: "dim" }, ...(r.headBranch ? branchParts(r.headBranch.slice(prefix.length)) : [{ text: r.title ?? r.sha.slice(0, 7), tone: "strong" as const }])],
+      detailLead: r.author,
+      detail: [r.headBranch ? r.title : undefined, r.draft ? "draft" : undefined, r.baseBranch ? `→ ${r.baseBranch}` : undefined, r.title ? undefined : r.sha.slice(0, 7)].filter(Boolean).join(" · "),
+    };
   };
   const headOptions: SelectOption[] = [
     { value: HEAD, label: `The checkout${repo.branch ? ` (${repo.branch})` : ""} — ${repo.head.slice(0, 7)}`, group: "Checked out" },
@@ -133,7 +148,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
     ...requestOptions(listed?.requests ?? [], (r) => {
       const what = viaCli ? `Open ${r.provider === "github" ? "pull" : "merge"} requests` : `${r.provider === "github" ? "Pull" : "Merge"} requests (git, open and closed)`;
       const prefix = r.headBranch ? branchPrefix(r.headBranch) : undefined;
-      return prefix ? `${what} · ${prefix}` : what;
+      return prefix ? `${what} · ${prefixGroup(prefix)}` : what;
     }),
     ...branchOptions(git!.branches, (name) => `branch:${name}`),
   ];
@@ -176,7 +191,7 @@ export function CompareOptions({ path, onChange }: CompareOptionsProps) {
   const explicitTool = source === "gh" || source === "glab" ? tools?.tools?.[source] : undefined;
 
   return (
-    <Stack gap="2.5" borderWidth="1px" borderColor={on ? "diff.changed.solid" : "border"} rounded="md" px="3" py="2.5">
+    <Stack gap="2.5" borderWidth={embedded ? 0 : "1px"} borderColor={on ? "diff.changed.solid" : "border"} rounded="md" px="3" py="2.5">
       <SwitchField
         size="sm"
         ariaLabel="Compare (diff mode)"

@@ -1,6 +1,6 @@
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { IconCodeDiff } from "@rae/design-system/icons";
-import { Fragment, useMemo } from "react";
+import { Fragment, type ReactNode, useMemo } from "react";
 import { CHANGE_WORD } from "../lib/diff.ts";
 import type { DiffLine } from "../lib/lineDiff.ts";
 import { useColoured, useNodeDiff } from "../lib/nodeDiff.ts";
@@ -28,8 +28,12 @@ function hunksOf(lines: DiffLine[]): DiffLine[][] {
 /** Whether the column shows every line (unchanged ones too) rather than the changed ones only: remembered. */
 const ALL_KEY = "rae.tipDiffAll";
 
-/** The column: header (change, −/+ counts, all lines or changed only, the dialog's button), then the lines. */
-export function TipDiff({ node, snapshot, onOpenDiff }: { node: GraphNode; snapshot: Snapshot; onOpenDiff: (node: GraphNode) => void }) {
+/**
+ * The tooltip of a changed element, one column: `head` (its name, caption, path) with the change,
+ * −/+ counts and the dialog's button, then `signature` (one line of code), the lines, and a footer
+ * switching between changed lines only and all of them.
+ */
+export function TipDiff({ node, snapshot, onOpenDiff, head, signature }: { node: GraphNode; snapshot: Snapshot; onOpenDiff: (node: GraphNode) => void; head: ReactNode; signature?: ReactNode }) {
   const change = snapshot.diff!.nodes[node.id]!;
   const { diff, error } = useNodeDiff(snapshot, node);
   const [all, setAll] = usePersistentState(ALL_KEY, false);
@@ -41,24 +45,20 @@ export function TipDiff({ node, snapshot, onOpenDiff }: { node: GraphNode; snaps
   return (
     <div className="rae-tip__diff">
       <div className="rae-diffcard__head">
+        {head}
         <span className="rae-diffcard__change" data-change={change}>
           {CHANGE_WORD[change]}
         </span>
-        <span className="rae-diffcard__name">{all ? "All lines" : "Changed lines"}</span>
         {diff && (
           <span className="rae-diffcard__counts" title={`${plural(diff.removed, "line")} removed, ${diff.added} added`}>
             <span data-type="del">−{diff.removed}</span> <span data-type="add">+{diff.added}</span>
           </span>
         )}
-        {diff && changed.length > 0 && (
-          <button type="button" className="rae-diffcard__toggle" aria-pressed={all} onClick={toggleAll}>
-            {all ? "Changed lines only" : "Show all lines"}
-          </button>
-        )}
         <button type="button" className="rae-diffcard__open" aria-label="Show the code diff" title="Show the code diff" onClick={() => onOpenDiff(node)}>
           <IconCodeDiff size={14} />
         </button>
       </div>
+      {signature && <div className="rae-diffcard__sig">{signature}</div>}
       {error && <div className="rae-diffcard__note">Couldn't read the code: {error}</div>}
       {!diff && !error && <div className="rae-diffcard__note">Reading both versions from git…</div>}
       {diff && !changed.length && <div className="rae-diffcard__note">No lines changed in its code.</div>}
@@ -80,6 +80,14 @@ export function TipDiff({ node, snapshot, onOpenDiff }: { node: GraphNode; snaps
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {diff && changed.length > 0 && (
+        <div className="rae-diffcard__foot">
+          <span>{all ? "All lines" : "Changed lines only"}</span>
+          <button type="button" className="rae-diffcard__toggle" aria-pressed={all} onClick={toggleAll}>
+            {all ? "Changed lines only" : "Show all lines"}
+          </button>
         </div>
       )}
     </div>

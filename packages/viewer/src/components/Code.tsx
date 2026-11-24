@@ -20,9 +20,9 @@ export function CodeLines({ lines, render, block, className }: { lines: TokLine[
 }
 
 /** A type, laid out to a width and coloured (no links: tooltips, previews) — first level only: nested objects folded. */
-export function TypeCode({ text, width, start, flat, optional }: { text: string } & LayoutOptions) {
+export function TypeCode({ text, width, start, flat, optional, render }: { text: string; render?: TokenRenderer } & LayoutOptions) {
   const lines = useMemo(() => layoutType(text, { width, start, flat, optional, fold: FIRST_LEVEL }), [text, width, start, flat, optional]);
-  return <CodeLines lines={lines} />;
+  return <CodeLines lines={lines} render={render} />;
 }
 
 /** A definition (interface, alias) for a tooltip: its members, their object values folded (first level only). */

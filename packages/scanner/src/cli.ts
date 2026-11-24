@@ -6,6 +6,7 @@ import { runScanJob } from "./job.ts";
 import { scanDiff } from "./diffScan.ts";
 import { parseDiffRequest } from "./gitApi.ts";
 import { scan, writeSnapshot } from "./scan.ts";
+import { latestTree } from "./latestScan.ts";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -22,6 +23,7 @@ const { values, positionals } = parseArgs({
     request: { type: "string" },
     "request-info": { type: "string" },
     worktree: { type: "boolean", default: false },
+    latest: { type: "boolean", default: false },
     "against-tip": { type: "boolean", default: false },
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
@@ -47,6 +49,7 @@ Options:
   --request-info <j>  diff mode: the request's title / author / url as JSON (shown in the viewer)
   --request <ref>     diff mode: a pull / merge request (refs/pull/N/head, refs/merge-requests/N/head), fetched from origin
   --worktree          diff mode: compare the checkout with its uncommitted changes (untracked files too)
+  --latest            scan the newest commit of origin's default branch (fetched; the checkout isn't touched)
   --against-tip       diff mode: compare with the base's tip instead of the merge-base
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
@@ -75,6 +78,7 @@ if (values.events) {
       mergeSingleExport: !values["no-merge"],
       maxWorkers: values.workers ? Number(values.workers) : undefined,
       signal: controller.signal,
+      latest: values.latest,
       diff:
         values.base || values.head || values.request || values.worktree
           ? (parseDiffRequest({
@@ -94,7 +98,9 @@ if (values.events) {
 
 const warnings: string[] = [];
 const diffMode = !!(values.base || values.head || values.request || values.worktree);
-const snapshot = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, request: values.request, worktree: values.worktree, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(input, o))({
+// --latest: the newest commit of origin's default branch, exported (the checkout isn't touched)
+const latest = values.latest && !diffMode ? await latestTree(input, { onProgress: (m) => console.error(m) }) : undefined;
+const scanned = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, request: values.request, worktree: values.worktree, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(latest?.path ?? input, o))({
   tsconfig: values.tsconfig,
   include: values.include,
   exclude: values.exclude,
@@ -104,6 +110,7 @@ const snapshot = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(i
   maxWorkers: values.workers ? Number(values.workers) : undefined,
   onWarn: (m) => warnings.push(m),
 });
+const snapshot = latest ? latest.finish(scanned) : scanned;
 
 if (values.stdout) {
   process.stdout.write(JSON.stringify(snapshot));

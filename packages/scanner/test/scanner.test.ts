@@ -43,6 +43,13 @@ for (const types of [true, false]) {
       expect(edge(s, "imports", "app/page.tsx", "components/TodoList.tsx")!.importType).toBe("static");
     });
 
+    test("a type brought in with `import type` is a type reference (props written inline: { todo: Todo })", () => {
+      expect(s.nodes["components/TodoItem.tsx#TodoItem"]!.typeRefs).toEqual({ Todo: "lib/data.ts#Todo" });
+      expect(edge(s, "usesType", "components/TodoItem.tsx#TodoItem", "lib/data.ts#Todo")).toBeDefined();
+      // values still never resolve through a type-only import
+      expect(edge(s, "invokes", "components/TodoItem.tsx#TodoItem", "lib/data.ts#Todo")).toBeUndefined();
+    });
+
     test("render conditions", () => {
       expect(edge(s, "renders", "app/dashboard/page.tsx#DashboardPage", "components/Chart.tsx#Chart")!.conditions).toEqual([
         { kind: "ternary-true", expr: 'tab === "chart"' },

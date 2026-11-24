@@ -103,11 +103,15 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
     return removed;
   };
 
+  /** A folder that is a project (the scan dialog marks it): Next.js when it has a next.config, else any package.json. */
+  const projectOf = (dir: string): { project?: "next" | "package" } =>
+    ["next.config.js", "next.config.ts", "next.config.mjs"].some((m) => existsSync(join(dir, m))) ? { project: "next" } : existsSync(join(dir, "package.json")) ? { project: "package" } : {};
+
   const listDir = (path: string) => {
     const entries = readdirSync(path, { withFileTypes: true })
       .filter((e) => !e.name.startsWith(".") && !SKIP_DIRS.has(e.name))
       .filter((e) => e.isDirectory() || (e.isFile() && SOURCE_FILE.test(e.name)))
-      .map((e) => ({ name: e.name, path: join(path, e.name), kind: e.isDirectory() ? "dir" : "file" }))
+      .map((e) => ({ name: e.name, path: join(path, e.name), kind: e.isDirectory() ? "dir" : "file", ...(e.isDirectory() ? projectOf(join(path, e.name)) : {}) }))
       .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "dir" ? -1 : 1));
     const markers = ["package.json", "tsconfig.json", "next.config.js", "next.config.ts", "next.config.mjs"].filter((m) =>
       existsSync(join(path, m)),
@@ -167,7 +171,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         // JSON only: a cross-site form/text POST can't send this without a CORS preflight.
         if (!(req.headers["content-type"] ?? "").startsWith("application/json")) return json(res, 415, { error: "Content-Type must be application/json" });
         if (running) return json(res, 409, { error: "A scan is already running: cancel it first" });
-        let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown };
+        let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown; latest?: unknown };
         let diff: ReturnType<typeof parseDiffRequest>;
         try {
           body = JSON.parse(await readBody(req));
@@ -180,7 +184,7 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         running = true;
         // The CLI's --events mode: NDJSON ScanEvents (progress, structure result, then types),
         // streamed to the viewer line by line. The scan finishes even if the page goes away.
-        const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"]), ...(body.merge !== false ? [] : ["--no-merge"]),
+        const args = [cli, target, "--out", dir, "--events", ...(body.types !== false ? [] : ["--no-types"]), ...(body.merge !== false ? [] : ["--no-merge"]), ...(body.latest === true && !body.diff ? ["--latest"] : []),
           // refs checked by parseDiffRequest (never an option); passed as `--flag=value`, one argument each
           ...(diff ? [...(diff.base ? [`--base=${diff.base}`] : []), ...(diff.head ? [`--head=${diff.head}`] : []), ...(diff.request ? [`--request=${diff.request}`] : []), ...(diff.requestInfo ? [`--request-info=${JSON.stringify(diff.requestInfo)}`] : []), ...(diff.worktree ? ["--worktree"] : []), ...(diff.against === "base" ? ["--against-tip"] : []), ...(!diff.base && !diff.head && !diff.request && !diff.worktree ? ["--head=HEAD"] : [])] : [])];
         const child = spawn(bun, args, { cwd: repoRoot });

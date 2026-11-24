@@ -101,6 +101,17 @@ export type SignatureChange =
   | { kind: "returned"; type: string };
 
 /**
+ * The named type a component takes its props as (its first parameter's annotation: `ButtonProps`,
+ * `Props<T>`), as written when known; undefined for inline objects (`{ … }`) and non-components.
+ */
+export function propsTypeName(n: GraphNode): string | undefined {
+  if (n.kind !== "component") return undefined;
+  const p = n.signature?.params?.[0];
+  const text = (p?.written ?? p?.type)?.trim();
+  return text && !text.startsWith("{") && !text.includes("\n") ? text : undefined;
+}
+
+/**
  * What changed in an element's signature — props or parameters (added, removed, a different type or
  * optionality) and its return type — for the details' "In this diff". The rest (body, boundary,
  * role…) is the code diff's to show. Types are compared as displayed: whitespace, and the

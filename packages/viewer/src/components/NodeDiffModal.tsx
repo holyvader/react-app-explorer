@@ -3,7 +3,7 @@ import { IconInline, IconSplit } from "@rae/design-system/icons";
 import type { GraphNode, Snapshot } from "@rae/schema";
 import { Fragment, useMemo, useState } from "react";
 import { type DiffLine, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
-import { type Coloured, sidesOf, useColoured, useNodeDiff } from "../lib/nodeDiff.ts";
+import { type Coloured, isWholeFile, sidesOf, useColoured, useNodeDiff } from "../lib/nodeDiff.ts";
 import { DiffCode, InlineRow } from "./DiffCode.tsx";
 import { usePersistentState } from "../lib/settings.ts";
 import { plural } from "../lib/text.ts";
@@ -11,6 +11,9 @@ import { plural } from "../lib/text.ts";
 export type DiffMode = "split" | "inline";
 
 const MODE_KEY = "rae.codeDiffMode";
+/** A declaration's diff: its own lines, or its whole file (remembered). */
+const SCOPE_KEY = "rae.codeDiffScope";
+type Scope = "declaration" | "file";
 
 export interface NodeDiffModalProps {
   node: GraphNode;
@@ -26,12 +29,16 @@ export interface NodeDiffModalProps {
  * (`git show`), so nothing in the checkout is touched.
  */
 export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffModalProps) {
-  const { before, after, whole } = useMemo(() => sidesOf(snapshot, node), [snapshot, node]);
+  const [scope, pickScope] = usePersistentState<Scope>(SCOPE_KEY, "declaration");
+  // modules and merged files are a whole file anyway: no choice to make
+  const declaration = !isWholeFile(node);
+  const wholeFile = declaration && scope === "file";
+  const { before, after, whole } = useMemo(() => sidesOf(snapshot, node, wholeFile), [snapshot, node, wholeFile]);
   const [mode, pickMode] = usePersistentState<DiffMode>(MODE_KEY, "split");
   const [showAll, setShowAll] = useState(false);
 
   // both versions from git, and their line diff (shared with the details' "In this diff" header)
-  const { diff: loaded, error } = useNodeDiff(snapshot, node, open);
+  const { diff: loaded, error } = useNodeDiff(snapshot, node, open, wholeFile);
   const lines: DiffLine[] | undefined = loaded?.lines;
   const coloured = useColoured(loaded);
   const counts = { add: loaded?.added ?? 0, del: loaded?.removed ?? 0 };
@@ -61,10 +68,16 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
             <Text as="span" color="diff.removed.fg">
               −{counts.del}
             </Text>
-            {whole ? " · the whole file" : " · the declaration's lines"}
+            {!declaration && whole && " · the whole file"}
           </Text>
         )}
         <Flex flex="1" />
+        {declaration && (
+          <HStack gap="0" bg="bg.emphasized" rounded="l2" p="2px" role="radiogroup" aria-label="What to compare">
+            <ModeButton on={!wholeFile} onClick={() => pickScope("declaration")} label={`${node.name} only`} />
+            <ModeButton on={wholeFile} onClick={() => pickScope("file")} label="Whole file" />
+          </HStack>
+        )}
         <Button size="xs" variant="ghost" rounded="l2" onClick={() => setShowAll(!showAll)}>
           {showAll ? "Fold unchanged lines" : "Show all lines"}
         </Button>
@@ -90,7 +103,7 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   );
 }
 
-function ModeButton({ on, onClick, icon, label }: { on: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function ModeButton({ on, onClick, icon, label }: { on: boolean; onClick: () => void; icon?: React.ReactNode; label: string }) {
   return (
     <Button size="2xs" variant={on ? "solid" : "ghost"} colorPalette={on ? "accent" : undefined} rounded="l1" role="radio" aria-checked={on} onClick={onClick} gap="1.5">
       {icon} {label}
