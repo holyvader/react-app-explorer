@@ -633,11 +633,8 @@
 .rae-canvas[data-lod="compact"] .rae-frame__title .rae-name { font-size: 17px; }
 .rae-canvas[data-lod="compact"] .rae-frame__header .rae-sub { display: none; }
 
-/* Overview: cards are blocks in their kind's colour with a large name; frames keep a large title.
-   Edges keep one screen pixel whatever the zoom, so they read as lines, not a haze. */
-.rae-card[data-lod="overview"] { background: var(--k-soft); border-color: var(--k-mid); }
-.rae-card[data-kind="component"][data-lod="overview"] { --tag-fill: var(--k-soft); --tag-line: var(--k-mid); }
-.rae-card[data-kind="type"][data-lod="overview"]:not([data-change="added"]) { background-color: var(--chakra-colors-bg-subtle); }
+/* Overview: cards keep the background and outline they have at any zoom, with a large name; frames
+   keep a large title. Edges keep one screen pixel whatever the zoom, so they read as lines, not a haze. */
 .rae-card__big {
   position: relative;
   z-index: 1;

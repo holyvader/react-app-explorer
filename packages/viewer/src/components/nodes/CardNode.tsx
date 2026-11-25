@@ -61,7 +61,7 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   const isComponent = node?.kind === "component";
   // types are a blueprint (canvas.css): dashed, a fine grid, corner marks
   const tag = isComponent ? <TagOutline width={width ?? 240} height={height ?? CARD_HEIGHT} /> : node?.kind === "type" && <span className="rae-card__marks" aria-hidden />;
-  // zoomed far out: a block in the kind's colour with its name, large (no icon, caption, chips or actions)
+  // zoomed far out: the card with its name, large (no icon, caption, chips or actions); same background as at any zoom
   if (isBlocks(lod)) {
     const kind = element.kind === "folder" ? "folder" : node?.kind;
     if (!kind) return null;
