@@ -261,7 +261,7 @@ export function Canvas() {
           fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
           onlyRenderVisibleElements
         >
-          <Background variant={BackgroundVariant.Lines} gap={24} lineWidth={1} color={tokenVar("canvas.grid")} />
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1.4} color={tokenVar("canvas.dot")} />
           <FlowPanel position="top-left" className="rae-filters">
             <RelationFilters />
           </FlowPanel>
