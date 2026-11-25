@@ -3,12 +3,13 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute, routeChain, routeOf } from "./graph/drawn.ts";
-import { layoutWithin, type PlacedElement } from "./graph/layout.ts";
+import type { PlacedElement } from "./graph/layout.ts";
+import { type LayoutEffort, type LayoutMode, layoutWithin } from "./graph/squareLayout.ts";
 import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
-import { changesToShow } from "./lib/diff.ts";
+import { changesToShow, withFilesOfChanges } from "./lib/diff.ts";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
@@ -125,8 +126,12 @@ interface ExplorerState {
   /** What is drawn, and where (container-relative positions, containers first). */
   graph: DrawnGraph;
   placed: PlacedElement[];
-  /** Bumped when the drawn graph needs a full ELK layout (the Canvas runs it). */
+  /** Bumped when the drawn graph needs a full layout (the Canvas runs it, graph/squareLayout.ts). */
   layoutToken: number;
+  /** How long that layout may search: `thorough` when the reader asked for it (Re-layout). */
+  layoutEffort: LayoutEffort;
+  /** How full layouts set the diagram out: in squares, or tree-like (graph/squareLayout.ts). Stored. */
+  layoutMode: LayoutMode;
   /** Undo / redo stacks of diagram steps. */
   past: DiagramState[];
   future: DiagramState[];
@@ -180,6 +185,8 @@ interface ExplorerState {
   notify: (message: string | undefined) => void;
   setFolders: (on: boolean) => void;
   relayout: () => void;
+  /** Sets the layout mode and lays the diagram out again with it. */
+  setLayoutMode: (mode: LayoutMode) => void;
   applyLayout: (graph: DrawnGraph, placed: PlacedElement[]) => void;
   dropAt: (id: string, to: CanvasPoint) => void;
   arrange: (id: string) => Promise<void>;
@@ -194,7 +201,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
+const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 
 export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
@@ -240,7 +247,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const added = graph.elements.filter((e) => !placedIds.has(e.id)).length;
     const local = !full && next.placed.length && added <= (place.limit ?? LOCAL_LIMIT) ? placeLocally(next.placed, graph, anchor, place) : null;
     if (local) set({ ...patch, graph, placed: autoPlaceSoleChildren(local) });
-    else set({ ...patch, graph, layoutToken: next.layoutToken + 1 });
+    else set({ ...patch, graph, layoutToken: next.layoutToken + 1, layoutEffort: patch.layoutEffort ?? "quick" });
   };
 
   /** Pushes the current diagram onto the undo stack (call before a diagram change). */
@@ -263,7 +270,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     const local = entry.placed.length ? placeLocally(entry.placed, graph, null) : null;
     const placed = local && autoPlaceSoleChildren(local);
     if (placed) set({ ...extra, visible, selectedId, selection, graph, placed });
-    else set({ ...extra, visible, selectedId, selection, graph, placed: [], layoutToken: s.layoutToken + 1 });
+    else set({ ...extra, visible, selectedId, selection, graph, placed: [], layoutToken: s.layoutToken + 1, layoutEffort: "quick" });
   };
 
   return {
@@ -293,6 +300,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     graph: EMPTY,
     placed: [],
     layoutToken: 0,
+    layoutEffort: "quick",
+    layoutMode: readSetting<LayoutMode>(KEYS.layoutMode, "tree"),
 
     setSnapshot: (snapshot, name) => {
       set({
@@ -347,7 +356,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
 
     addNodes: (ids, opts) => {
       const s = get();
-      const known = ids.filter((id) => isKnown(s.snapshot, id));
+      // in a diff, a changed declaration comes with its file
+      const known = (s.snapshot ? withFilesOfChanges(s.snapshot, ids) : ids).filter((id) => isKnown(s.snapshot, id));
       const present = new Set(s.visible);
       const added = known.filter((id) => !present.has(id));
       const patch: Partial<ExplorerState> = {
@@ -561,9 +571,15 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       redraw({ folders }, null, true);
     },
 
+    setLayoutMode: (layoutMode) => {
+      writeSetting(KEYS.layoutMode, layoutMode);
+      set({ layoutMode });
+      if (get().visible.length) get().relayout();
+    },
+
     relayout: () => {
       record();
-      redraw({}, null, true);
+      redraw({ layoutEffort: "thorough" }, null, true);
     },
 
     applyLayout: (graph, placed) => {
@@ -586,7 +602,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     arrange: async (id) => {
       const graph = get().graph;
       if (!graph.elements.some((e) => e.parent === id)) return;
-      const inside = await layoutWithin(graph, id);
+      const inside = await layoutWithin(graph, id, get().layoutMode);
       if (get().graph !== graph) return;
       const res = arrangeWithin(get().placed, graph, id, inside);
       record();

@@ -19,7 +19,7 @@ src/components/details/ the details panel's sections: Signature (generics, props
 src/components/canvas/  the canvas's parts (react-flow skill): node / edge pipelines, drag, tooltip, keys, marquee
 src/components/picker/  adding: ExplorationPicker (tree picker), QuickAdd (right-click), ElementTree
 src/store.ts            zustand store (single source of UI state)
-src/graph/              pure graph logic (drawn graph, relations, ELK layout, placement engine, library filter), no React; tests in test/
+src/graph/              pure graph logic (drawn graph, relations, square layout by relations, placement engine, library filter), no React; tests in test/
 src/lib/                pure helpers (api, conditions formatting, editor URLs, kind metadata)
 src/components/         React components
 e2e/smoke.ts            headless smoke test (playwright-core)
@@ -28,7 +28,7 @@ e2e/smoke.ts            headless smoke test (playwright-core)
 ## Import rules (lint-enforced)
 - UI comes from `@rae/design-system`, icons from `@rae/design-system/icons`.
 - **Never** import `@chakra-ui/*`, `@emotion/*`, `lucide-react` or `@ark-ui/*` in the viewer. `no-restricted-imports` in `.oxlintrc.json` fails the lint. If a component is missing, add it to the design system first (design-system skill).
-- Otherwise import only from the viewer's own `src/`, `@rae/schema` (types), `@xyflow/react`, and small libs (`zustand`, `elkjs`).
+- Otherwise import only from the viewer's own `src/`, `@rae/schema` (types), `@xyflow/react`, and small libs (`zustand`).
 - Hot-path canvas UI (nodes, edges, labels, tooltip, tree rows) is plain HTML + CSS (`components/canvas.css`, `picker/picker.css`) using the design-system token CSS variables. That doesn't break the rule: nothing there imports Chakra.
 
 ## State

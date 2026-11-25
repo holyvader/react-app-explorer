@@ -17,7 +17,7 @@ import { CARD_HEIGHT, cardWidthOf, frameWidthOf, PADDING, type PlacedElement, SP
  *
  * Work happens in absolute canvas coordinates, converted back to container-
  * relative positions at the end. `null` means "can't settle locally": the caller
- * falls back to a full ELK layout.
+ * falls back to a full layout (squareLayout.ts).
  */
 
 interface Rect {

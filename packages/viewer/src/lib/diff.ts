@@ -54,9 +54,33 @@ export const CHANGE_WORD: Record<ChangeKind, string> = { added: "added", changed
 /** Most changes put on the canvas when a diff opens (declarations first, then files). */
 export const CHANGES_ON_OPEN = 60;
 
+/** The file holding a changed (added, removed) declaration of a diff snapshot, when it's a file node of its own. */
+export function fileOfChange(s: Snapshot, id: string): string | undefined {
+  if (!s.diff?.nodes[id]) return undefined;
+  const m = s.nodes[id]?.moduleId;
+  return m && s.nodes[m] ? m : undefined;
+}
+
 /**
- * What a diff opens with: its changed, added and removed elements — declarations, and the files
- * holding them (as frames, for context) — without libraries and routes. Declarations come first.
+ * Ids to add with the files holding the changed declarations among them: in a diff, a changed
+ * declaration is always drawn inside its file, for context. Each file comes right after the first
+ * declaration it holds.
+ */
+export function withFilesOfChanges(s: Snapshot, ids: readonly string[]): string[] {
+  if (!s.diff) return [...ids];
+  const out = new Set<string>();
+  for (const id of ids) {
+    out.add(id);
+    const file = fileOfChange(s, id);
+    if (file) out.add(file);
+  }
+  return [...out];
+}
+
+/**
+ * What a diff opens with: its changed, added and removed elements — declarations, each with the file
+ * holding it (as a frame, for context), then other changed files — without libraries and routes. At
+ * most `limit` ids; a declaration never comes without its file.
  */
 export function changesToShow(s: Snapshot, limit = CHANGES_ON_OPEN): string[] {
   const d = s.diff;
@@ -68,11 +92,18 @@ export function changesToShow(s: Snapshot, limit = CHANGES_ON_OPEN): string[] {
     if (!n || n.kind === "external" || n.kind === "route") continue;
     (n.kind === "module" ? files : decls).push(id);
   }
-  const picked = decls.slice(0, limit);
-  // the files around the picked declarations, then other changed files, while there's room
-  const around = new Set(picked.map((id) => s.nodes[id]?.moduleId).filter((m): m is string => !!m && !!s.nodes[m]));
-  const rest = files.filter((f) => !around.has(f));
-  return [...picked, ...[...around, ...rest].slice(0, Math.max(0, limit - picked.length))];
+  const out = new Set<string>();
+  for (const id of decls) {
+    const file = fileOfChange(s, id);
+    if (out.size + (file && !out.has(file) ? 2 : 1) > limit) break;
+    out.add(id);
+    if (file) out.add(file);
+  }
+  for (const f of files) {
+    if (out.size >= limit) break;
+    out.add(f);
+  }
+  return [...out];
 }
 
 /** A side of the diff in short: `main 1a2b3c4`, a request ref as `#12`, the working tree as `main + uncommitted`. */

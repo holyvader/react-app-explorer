@@ -3,7 +3,7 @@ import type { Edge, GraphNode, Snapshot } from "@rae/schema";
 import { drawnGraph } from "../src/graph/drawn.ts";
 import { DEFAULT_EXCLUDED } from "../src/graph/packages.ts";
 import { buildTree } from "../src/graph/tree.ts";
-import { applyDiff, changesToShow, edgeChange, isGhost, sideLabel, signatureChanges } from "../src/lib/diff.ts";
+import { applyDiff, changesToShow, withFilesOfChanges, edgeChange, isGhost, sideLabel, signatureChanges } from "../src/lib/diff.ts";
 
 // A hand-made diff snapshot: App renders Footer (new) instead of Old (removed); Header changed.
 const mod = (id: string): GraphNode => ({ id, kind: "module", name: id.split("/").pop()!, filePath: id });
@@ -76,12 +76,29 @@ describe("diff snapshots in the viewer", () => {
     expect(JSON.stringify(buildTree(s, opts(false).filter))).toContain("Old.tsx");
   });
 
-  test("a diff opens with its declarations, then the files around them", () => {
+  test("a diff opens with its declarations, each followed by its file", () => {
     const s = applyDiff(snapshot());
     const ids = changesToShow(s);
-    expect(ids.slice(0, 4).sort()).toEqual(["src/App.tsx#App", "src/Footer.tsx#Footer", "src/Header.tsx#Header", "src/Old.tsx#Old"]);
+    for (const d of ["src/App.tsx#App", "src/Footer.tsx#Footer", "src/Header.tsx#Header", "src/Old.tsx#Old"]) expect(ids).toContain(d);
+    expect(ids.indexOf("src/Header.tsx")).toBe(ids.indexOf("src/Header.tsx#Header") + 1);
     expect(ids).toContain("src/Header.tsx");
     expect(changesToShow(s, 2)).toHaveLength(2);
+  });
+
+  test("a changed declaration never comes without its file", () => {
+    const s = applyDiff(snapshot());
+    const ids = changesToShow(s);
+    for (const id of ids) {
+      const file = s.nodes[id]?.moduleId;
+      if (file) expect(ids).toContain(file);
+    }
+    // a limit too small for both leaves the declaration out rather than its file
+    const two = changesToShow(s, 2);
+    expect(two).toHaveLength(2);
+    expect(two).toContain(s.nodes[two[0]!]!.moduleId!);
+    // adding one changed declaration by hand brings its file; an unchanged one doesn't
+    expect(withFilesOfChanges(s, ["src/Header.tsx#Header"])).toEqual(["src/Header.tsx#Header", "src/Header.tsx"]);
+    expect(withFilesOfChanges(s, ["src/Footer.tsx"])).toEqual(["src/Footer.tsx"]);
   });
 
   test("before → after in words; refs in short", () => {

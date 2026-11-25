@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { Snapshot } from "@rae/schema";
 import { scan } from "../../scanner/src/scan.ts";
 import { drawnGraph } from "../src/graph/drawn.ts";
-import { CARD_HEIGHT, layoutAll, PADDING, type PlacedElement } from "../src/graph/layout.ts";
+import { CARD_HEIGHT, PADDING, type PlacedElement } from "../src/graph/layout.ts";
+import { layoutAll } from "../src/graph/squareLayout.ts";
 import { DEFAULT_EXCLUDED, packageOf } from "../src/graph/packages.ts";
 import { absoluteRect, autoPlaceSoleChildren, movedTo, placeLocally } from "../src/graph/placement.ts";
 
@@ -94,7 +95,7 @@ describe("placement", async () => {
   const g1 = drawnGraph(s, visible, opts());
   const p1 = await layoutAll(g1);
 
-  test("ELK sizes frames around what they hold", () => {
+  test("frames are sized around what they hold", () => {
     const file = p1.find((p) => p.element.id === "app/page.tsx")!;
     const decl = p1.find((p) => p.element.id === "app/page.tsx#HomePage")!;
     expect(file.holds).toBe(true);

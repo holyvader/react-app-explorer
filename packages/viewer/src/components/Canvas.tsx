@@ -15,7 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { collapseFrames } from "../graph/collapse.ts";
-import { layoutAll } from "../graph/layout.ts";
+import { layoutAll } from "../graph/squareLayout.ts";
 import { absoluteRect } from "../graph/placement.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../store.ts";
@@ -106,12 +106,12 @@ export function Canvas() {
   const { adding, boxing } = useCanvasKeys();
   const marquee = useMarquee();
 
-  // Full ELK layout when the store asks for one.
+  // A full layout (graph/squareLayout.ts) when the store asks for one.
   useEffect(() => {
     if (!layoutToken) return;
-    const g = useExplorer.getState().graph;
+    const { graph: g, layoutEffort, layoutMode } = useExplorer.getState();
     let live = true;
-    void layoutAll(g).then((p) => {
+    void layoutAll(g, layoutEffort, layoutMode).then((p) => {
       if (!live) return;
       applyLayout(g, p);
       const s = useExplorer.getState();

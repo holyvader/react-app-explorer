@@ -20,6 +20,12 @@ import type { SnapshotDiff } from "@rae/schema";
 import { EDITORS, type EditorKind, openRequestPage } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { type DiffMode, diffModeOf, useExplorer } from "../store.ts";
+import type { LayoutMode } from "../graph/squareLayout.ts";
+
+const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
+  { value: "square", label: "Square" },
+  { value: "tree", label: "Tree" },
+];
 
 export interface ToolbarProps {
   list?: SnapshotList;
@@ -150,7 +156,8 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const visible = useExplorer((s) => s.visible);
-  const { setEditor, setShowAssets, clear } = useExplorer.getState();
+  const layoutMode = useExplorer((s) => s.layoutMode);
+  const { setEditor, setShowAssets, clear, setLayoutMode } = useExplorer.getState();
   return (
     <Popover
       open={open}
@@ -170,6 +177,9 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
         </Text>
         <Row label="Text size" hint="Panels and toolbar">
           <Select value={textSize} onValueChange={(v) => setTextSize(v as TextSize)} options={TEXT_SIZES} width="130px" size="xs" label="Text size" />
+        </Row>
+        <Row label="Layout" hint={layoutMode === "tree" ? "Callers above what they call" : "Each folder in a square"}>
+          <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as LayoutMode)} options={LAYOUT_MODES} width="130px" size="xs" label="Layout" />
         </Row>
         <SwitchField size="xs" px="3.5" minH="36px" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
         <SwitchField size="xs" px="3.5" minH="36px" label="Asset files" hint="CSS, images, JSON" checked={showAssets} onCheckedChange={setShowAssets} />
