@@ -5,6 +5,7 @@ import { formatCondition } from "../../lib/conditions.ts";
 import { KIND_META, fileNote } from "../../lib/kinds.tsx";
 import { relationToken, relationWord } from "../../lib/relationWords.ts";
 import { useExplorer } from "../../store.ts";
+import { displayName } from "../../lib/displayName.ts";
 
 /* The details panel's relations: Uses / Used by, grouped by kind, and the chips that add or focus an element. */
 
@@ -21,7 +22,7 @@ export function NodeChip({ id, anchor, suffix }: { id: string; anchor: string; s
       onClick={() => useExplorer.getState().addNodes([id], { select: id, focus: id, anchor })}
     >
       <Icon size={12} strokeWidth={2.4} />
-      {n.name}
+      {displayName(n)}
       {suffix && (
         <Text as="span" opacity={0.6} fontWeight="normal">
           · {suffix}
@@ -125,7 +126,7 @@ function RelationRow({ e, side, selectedId }: { e: Edge; side: "from" | "to"; se
       <Box flex="1" minW="0">
         <Flex align="center" gap="2" minW="0">
           <Text fontSize="sm" fontWeight="medium" truncate>
-            {other.name}
+            {displayName(other)}
           </Text>
           <TagChip color={relationToken(e)}>{relationWord(e)}</TagChip>
           {fileNote(other) && (

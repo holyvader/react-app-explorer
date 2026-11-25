@@ -22,6 +22,7 @@ import { CacheView, MiddlewareView, RouteInfoView } from "./details/Route.tsx";
 import { NodeChip, RelationList } from "./details/Relations.tsx";
 import { DiffLines, DiffView } from "./details/Diff.tsx";
 import { boundaryOf } from "../lib/boundary.ts";
+import { displayName, indexFolderOf } from "../lib/displayName.ts";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -90,7 +91,7 @@ export function DetailsPanel() {
         collapsed: !detailsOpen,
         strip: (
           <DetailsStrip
-            name={node.name}
+            name={displayName(node)}
             tile={
               <KindTile kind={node.kind} size={20}>
                 <Icon size={17} />
@@ -109,14 +110,15 @@ export function DetailsPanel() {
           <KindTile kind={node.kind} size={20}>
             <Icon size={20} />
           </KindTile>
-          <Text textStyle="panelTitle" truncate title={node.name}>
-            {node.name}
+          <Text textStyle="panelTitle" truncate title={node.filePath}>
+            {displayName(node)}
           </Text>
         </Flex>
 
         {/* what it is: kind, boundary, Next.js role, then plain tags */}
         <Wrap gap="5px" mt="2.5" align="center">
           <KindChip kind={node.kind}>{kindWord}</KindChip>
+          {indexFolderOf(node) && <TagChip color="fg.muted" mono>index</TagChip>}
           {boundaryOf(node) && <BoundaryChip boundary={boundaryOf(node)!} />}
           {node.nextRole && <KindChip kind="route">{node.nextRole}</KindChip>}
           {change && (

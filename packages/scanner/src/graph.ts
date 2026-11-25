@@ -47,7 +47,9 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       list.push(e.exported);
       exportNamesByLocal.set(local, list);
     }
-    const fileBase = basename(f.absPath).replace(/\.[^.]+$/, "");
+    // `TestComponent/index.tsx`'s default export is `TestComponent (default)`, not `index (default)`
+    const stem = basename(f.absPath).replace(/\.[^.]+$/, "");
+    const fileBase = stem === "index" && dirname(f.absPath) !== info.rootDir ? basename(dirname(f.absPath)) : stem;
     for (const d of f.decls) {
       const did = declId(f.absPath, d.local);
       const exportNames = exportNamesByLocal.get(d.local);

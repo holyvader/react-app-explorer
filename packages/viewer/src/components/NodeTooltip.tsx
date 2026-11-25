@@ -12,6 +12,7 @@ import { showsTipDiff } from "../lib/nodeDiff.ts";
 import { TipDiff } from "./TipDiff.tsx";
 import { plural } from "../lib/text.ts";
 import { boundaryOf } from "../lib/boundary.ts";
+import { displayName } from "../lib/displayName.ts";
 
 /** Characters a laid-out type may take in the tooltip. */
 const TIP_COLUMNS = 52;
@@ -499,7 +500,7 @@ function TooltipBox({ tip, snapshot, index, n, diffCode = false, onOpenDiff, onP
         <Icon size={15} strokeWidth={2.2} />
       </span>
       <div className="rae-tip__titles">
-        <div className="rae-tip__title">{n.name}</div>
+        <div className="rae-tip__title">{displayName(n)}</div>
         <div className="rae-tip__caption">{caption}</div>
         {diff && <div className="rae-tip__path">{path}</div>}
       </div>

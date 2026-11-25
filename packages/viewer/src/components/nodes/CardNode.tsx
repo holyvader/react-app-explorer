@@ -11,6 +11,7 @@ import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { TagOutline } from "./TagOutline.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
 import { boundaryOf } from "../../lib/boundary.ts";
+import { indexFolderOf } from "../../lib/displayName.ts";
 
 /**
  * A single element: a flat card whose corners tell its kind (component rounded, hook pill, function
@@ -110,6 +111,8 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   const boundary = !fileBadges && moduleType && element.parent === null && moduleType !== "server" ? moduleType : undefined;
   // a component's props, as a chip: how many (own + inherited); the node tooltip lists them
   const props = propsCount(node);
+  // an index file goes by its folder's name (graph/drawn.ts); the badge says which file it is
+  const isIndex = !!indexFolderOf(node);
   // the caption: the kind in its colour (not for components: the tag and <Name /> say it), then quiet extras
   const caption: ReactNode[] = [
     !(isComponent && !node.route) && what,
@@ -149,8 +152,13 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
             </div>
           )}
         </div>
-        {full && ((fileBadges && (node.nextRole || moduleType)) || props) && (
+        {full && ((fileBadges && (node.nextRole || moduleType)) || props || isIndex) && (
           <span className="rae-card__badges">
+            {isIndex && (
+              <span className="rae-chip rae-chip--props" title={node.filePath}>
+                index
+              </span>
+            )}
             {props && (
               <span className="rae-chip rae-chip--props">
                 {propsChipLabel(props)}

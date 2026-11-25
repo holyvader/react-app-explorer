@@ -25,6 +25,7 @@ import { isFiltered } from "../graph/packages.ts";
 import { downKinds, hasUndrawn, INVOKES, type EdgeKinds } from "../graph/relations.ts";
 import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
+import { displayName } from "../lib/displayName.ts";
 import { relationFilterOf, useExplorer } from "../store.ts";
 
 /** Each relation, read both ways: what the node points at, and what points at it. */
@@ -53,14 +54,14 @@ function relationMenu(label: string, edges: Edge[], side: "from" | "to", anchor:
   if (!ids.length) return null;
   const { addNodes } = useExplorer.getState();
   const missing = ids.filter((id) => !onCanvas.has(id));
-  ids.sort((a, b) => Number(onCanvas.has(a)) - Number(onCanvas.has(b)) || s.nodes[a]!.name.localeCompare(s.nodes[b]!.name));
+  ids.sort((a, b) => Number(onCanvas.has(a)) - Number(onCanvas.has(b)) || displayName(s.nodes[a]!).localeCompare(displayName(s.nodes[b]!)));
   const items: MenuEntry[] = ids.slice(0, MAX_ITEMS).map((id) => {
     const n = s.nodes[id]!;
     const Icon = KIND_META[n.kind].icon;
     return {
       type: "item",
       value: `${label}:${id}`,
-      label: n.name,
+      label: displayName(n),
       icon: <Icon size={I} />,
       hint: onCanvas.has(id) ? "✓ shown" : n.kind === "external" ? "library" : n.filePath.split("/").slice(-2, -1)[0] ?? "",
       onSelect: () => addNodes([id], { anchor, select: id }),
@@ -256,7 +257,7 @@ export function containsEntries(id: string): MenuEntry[] {
     ...missing.map((m): MenuEntry => {
       const n = s.nodes[m]!;
       const Icon = KIND_META[n.kind].icon;
-      return { type: "item", value: m, label: n.name, icon: <Icon size={I} />, hint: KIND_META[n.kind].label, onSelect: () => st.addNodes([m], { anchor: id }) };
+      return { type: "item", value: m, label: displayName(n), icon: <Icon size={I} />, hint: KIND_META[n.kind].label, onSelect: () => st.addNodes([m], { anchor: id }) };
     }),
   ];
 }

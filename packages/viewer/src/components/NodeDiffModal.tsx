@@ -7,6 +7,7 @@ import { type Coloured, isWholeFile, sidesOf, useColoured, useNodeDiff } from ".
 import { DiffCode, InlineRow } from "./DiffCode.tsx";
 import { usePersistentState } from "../lib/settings.ts";
 import { plural } from "../lib/text.ts";
+import { displayName } from "../lib/displayName.ts";
 
 export type DiffMode = "split" | "inline";
 
@@ -45,7 +46,7 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
 
   const title = (
     <Flex align="baseline" gap="2" minW="0">
-      <Text truncate>{node.name}</Text>
+      <Text truncate>{displayName(node)}</Text>
       <Text as="span" fontFamily="mono" fontSize={textPx(12)} color="fg.subtle" fontWeight="normal" truncate>
         {before && after && before.node.filePath !== after.node.filePath ? `${before.node.filePath} → ${after.node.filePath}` : node.filePath}
       </Text>
