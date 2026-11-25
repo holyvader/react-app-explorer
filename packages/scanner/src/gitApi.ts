@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
 import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
@@ -157,6 +157,27 @@ const SOURCE_MAX = 2 * 1024 * 1024;
  * for the viewer's code diff and code view. Outside a repository, the working tree only. `file` is relative to the scanned folder `dir` (it may climb out of it,
  * like a workspace package's `../../packages/ui/x.tsx`) but must stay inside the repo.
  */
+/** What the code view and code diff read from the working tree: source and style files, nothing hidden. */
+const READABLE = /\.(?:[cm]?[jt]sx?|json|css|scss|sass|less|svg|md|mdx|vue|svelte|astro|graphql|gql)$/i;
+/** A hidden file or folder on the way (`.env`, `.ssh/`); `.` and `..` are left to the containment check. */
+const HIDDEN_SEGMENT = /(?:^|[\\/])\.(?!\.?(?:[\\/]|$))/;
+
+/**
+ * A working-tree file under `root`, read only if it is a source file (`READABLE`), no folder on the
+ * way is hidden (`.ssh`, `.env`…), and its real path (symlinks resolved) stays inside `root`'s.
+ */
+function readWorktree(root: string, file: string): { text: string; truncated?: boolean; missing?: boolean } | { error: string } {
+  if (!READABLE.test(file) || HIDDEN_SEGMENT.test(file)) return { error: "Not a source file" };
+  const abs = resolve(root, file);
+  if (!existsSync(abs)) return { text: "", missing: true };
+  const realRoot = realpathSync(root);
+  const real = realpathSync(abs);
+  const rel = relative(realRoot, real);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the scanned folder" };
+  const text = readFileSync(real, "utf8");
+  return text.length > SOURCE_MAX ? { text: text.slice(0, SOURCE_MAX), truncated: true } : { text };
+}
+
 export async function gitSource(dir: string, sha: string, file: string): Promise<{ text: string; truncated?: boolean; missing?: boolean } | { error: string }> {
   if (sha !== "worktree" && !/^[0-9a-f]{40,64}$/.test(sha)) return { error: "Not a commit sha" };
   if (!file || file.includes("\0") || isAbsolute(file)) return { error: "Invalid file" };
@@ -164,13 +185,11 @@ export async function gitSource(dir: string, sha: string, file: string): Promise
   if (!info) {
     // not a repository: the working tree only, and only inside the scanned folder
     if (sha !== "worktree") return { error: "Not in a git repository" };
-    const root = folderOf(dir);
-    const abs = resolve(root, file);
-    const rel = relative(root, abs);
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the scanned folder" };
-    if (!existsSync(abs)) return { text: "", missing: true };
-    const text = readFileSync(abs, "utf8");
-    return text.length > SOURCE_MAX ? { text: text.slice(0, SOURCE_MAX), truncated: true } : { text };
+    try {
+      return readWorktree(folderOf(dir), file);
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
   }
   const abs = resolve(folderOf(dir), file);
   const rel = relative(info.root, abs);
@@ -178,8 +197,8 @@ export async function gitSource(dir: string, sha: string, file: string): Promise
   try {
     let text: string;
     if (sha === "worktree") {
-      if (!existsSync(abs)) return { text: "", missing: true };
-      text = readFileSync(abs, "utf8");
+      // the working tree: the same limits as outside a repository, within the repository
+      return readWorktree(info.root, rel);
     } else {
       text = await git(info.root, ["show", `${sha}:${rel.split(sep).join("/")}`]).catch((e: Error) => {
         if (/does not exist|exists on disk, but not in/.test(e.message)) return "\0missing";
