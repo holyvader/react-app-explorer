@@ -1,5 +1,6 @@
 import { createSystem, defaultConfig, defineConfig } from "@chakra-ui/react";
 import { textPx } from "./textSize.ts";
+import { KIND_HUES, paperTokens } from "./diagramPalettes.ts";
 
 /**
  * Design tokens for Explorer ("Explorer Final" in Claude Design: Graphite shell, Paper light mode).
@@ -12,14 +13,7 @@ const ok = (l: number, c: number, h: number, a?: number) => `oklch(${l} ${c} ${h
 const scaled = (size: string) => `calc(${size} * var(--rae-text-scale, 1))`;
 const v = (light: string, dark: string) => ({ value: { _light: light, _dark: dark } });
 
-const HUE = { component: 210, hook: 300, serverAction: 55, function: 175, type: 140, route: 355, external: 90 } as const;
-
-const kind = (h: number) => ({
-  solid: v(ok(0.53, 0.14, h), ok(0.76, 0.12, h)),
-  subtle: v(ok(0.96, 0.025, h), ok(0.3, 0.05, h)),
-  muted: v(ok(0.8, 0.06, h), ok(0.45, 0.07, h)),
-  fg: v(ok(0.4, 0.11, h), ok(0.84, 0.09, h)),
-});
+const HUE = KIND_HUES;
 
 /** A Chakra colour palette (solid, contrast, fg, muted, subtle, emphasized, focusRing), for `colorPalette`. */
 const palette = (h: number, solid: [string, string], contrast: [string, string]) => ({
@@ -118,13 +112,12 @@ const config = defineConfig({
         },
         shell: { bg: v("#EFEEEA", "#141518"), border: v("#E2E0DA", "#26282D") },
         panel: { bg: v("#FFFFFF", "#18191D") },
-        canvas: { bg: v("#F6F5F1", "#121316"), grid: v("#F2F0EB", "#1B1C20"), dot: v("#CFCBC2", "#26282D") },
-        card: { bg: v("#FFFFFF", "#23252B"), bgSelected: v("#FFFFFF", "#292B32"), border: v("#C9C5BC", "#4A4D55"), frame: v("#FCFBF9", "#1A1B20") },
+        // The diagram's colours are a palette's (diagramPalettes.ts): Paper here, the others override them.
+        canvas: { ...paperTokens.canvas, grid: v("#F2F0EB", "#1B1C20") },
+        card: paperTokens.card,
         // Selection (selected and related nodes, the selected tree row, the primary action).
         selection: {
-          solid: v(ok(0.56, 0.2, 262), ok(0.7, 0.15, 262)),
-          related: v(ok(0.7, 0.12, 262), ok(0.48, 0.1, 262)),
-          ring: v(ok(0.56, 0.2, 262, 0.18), ok(0.7, 0.15, 262, 0.22)),
+          ...paperTokens.selection,
           rowBg: v(ok(0.94, 0.035, 262), ok(0.24, 0.03, 262)),
           treeRow: v(ok(0.9, 0.06, 262), ok(0.3, 0.06, 262)),
         },
@@ -134,13 +127,7 @@ const config = defineConfig({
         component: palette(HUE.component, [ok(0.6, 0.12, HUE.component), ok(0.76, 0.12, HUE.component)], ["#FFFFFF", "#0E1015"]),
         kind: {
           module: { solid: v("#6F6C66", "#AEB1B8"), subtle: v("#EEEDE9", "#26282D"), muted: v("#B9B5AC", "#33353B"), fg: v("#3D3B37", "#C7C9CE") },
-          component: kind(HUE.component),
-          hook: kind(HUE.hook),
-          serverAction: kind(HUE.serverAction),
-          function: kind(HUE.function),
-          type: kind(HUE.type),
-          route: kind(HUE.route),
-          external: kind(HUE.external),
+          ...paperTokens.kind,
         },
         boundary: {
           server: { solid: v("#8A877F", "#AEB1B8"), subtle: v("#EEEDE9", "#26282D"), muted: v("#D9D6CE", "#33353B"), fg: v("#4A4844", "#C7C9CE") },
@@ -149,21 +136,21 @@ const config = defineConfig({
         },
         // Diff mode: what a branch / pull request added (green), changed (amber), removed (red, as ghosts).
         diff: {
-          added: { solid: v(ok(0.58, 0.15, 150), ok(0.74, 0.16, 150)), subtle: v(ok(0.95, 0.04, 150), ok(0.3, 0.06, 150)), fg: v(ok(0.45, 0.13, 150), ok(0.84, 0.13, 150)) },
-          changed: { solid: v(ok(0.68, 0.15, 80), ok(0.8, 0.15, 85)), subtle: v(ok(0.96, 0.05, 85), ok(0.32, 0.06, 80)), fg: v(ok(0.5, 0.12, 70), ok(0.86, 0.12, 85)) },
-          removed: { solid: v(ok(0.58, 0.19, 25), ok(0.7, 0.17, 25)), subtle: v(ok(0.95, 0.03, 25), ok(0.3, 0.06, 25)), fg: v(ok(0.5, 0.17, 25), ok(0.82, 0.12, 25)) },
+          added: { solid: paperTokens.diff.added, subtle: v(ok(0.95, 0.04, 150), ok(0.3, 0.06, 150)), fg: v(ok(0.45, 0.13, 150), ok(0.84, 0.13, 150)) },
+          changed: { solid: paperTokens.diff.changed, subtle: v(ok(0.96, 0.05, 85), ok(0.32, 0.06, 80)), fg: v(ok(0.5, 0.12, 70), ok(0.86, 0.12, 85)) },
+          removed: { solid: paperTokens.diff.removed, subtle: v(ok(0.95, 0.03, 25), ok(0.3, 0.06, 25)), fg: v(ok(0.5, 0.17, 25), ok(0.82, 0.12, 25)) },
         },
         // Edge stroke, edge label, filter dot and details badge all use these.
         relation: {
-          imports: v("#3D3B37", "#AEB1B8"), // dashed when lazy; faint when type-only
+          imports: paperTokens.relation.imports, // dashed when lazy; faint when type-only
           importsMuted: v("#8A877F", "#6E727A"),
           declares: v("#6F6C66", "#8A8D94"),
-          renders: v(ok(0.5, 0.14, HUE.component), ok(0.76, 0.12, HUE.component)),
-          usesHook: v(ok(0.5, 0.16, HUE.hook), ok(0.76, 0.12, HUE.hook)),
-          invokes: v(ok(0.5, 0.12, HUE.function), ok(0.76, 0.11, HUE.function)),
-          invokesAction: v(ok(0.54, 0.15, HUE.serverAction), ok(0.78, 0.13, HUE.serverAction)),
-          usesType: v(ok(0.5, 0.14, HUE.type), ok(0.76, 0.13, HUE.type)),
-          navigates: v(ok(0.5, 0.17, HUE.route), ok(0.76, 0.13, HUE.route)),
+          renders: paperTokens.relation.renders,
+          usesHook: paperTokens.relation.usesHook,
+          invokes: paperTokens.relation.invokes,
+          invokesAction: paperTokens.relation.invokesAction,
+          usesType: paperTokens.relation.usesType,
+          navigates: paperTokens.relation.navigates,
           fetches: v(ok(0.5, 0.11, 195), ok(0.78, 0.1, 195)), // dash 6 3
           revalidates: v("#6F6C66", "#8A8D94"), // dash 1 3
           invalidates: v(ok(0.45, 0.15, HUE.hook), ok(0.76, 0.12, HUE.hook)), // dash 1 3

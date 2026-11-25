@@ -16,6 +16,7 @@ import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { fetchEditors } from "./lib/editor.ts";
 import { useExplorer } from "./store.ts";
+import { ImpactModal } from "./components/ImpactModal.tsx";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 
 const LAST_SNAPSHOT_KEY = "rae.lastSnapshot";
@@ -170,6 +171,7 @@ export function App() {
         </Flex>
       </Flex>
       <LibrariesModal open={librariesOpen} onOpenChange={setLibrariesOpen} />
+      <ImpactModal />
       <ScanModal open={scanOpen} onOpenChange={setScanOpen} onScanned={(file) => void refreshList(file)} />
       <SnapshotsModal open={snapshotsOpen} onOpenChange={setSnapshotsOpen} list={list} current={snapshotName} onDeleted={(removed) => void afterDelete(removed)} />
       <ConfirmExpansion />

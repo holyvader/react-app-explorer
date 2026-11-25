@@ -53,6 +53,8 @@ export async function startScan(path: string, settings: ScanSettings, onStructur
           case "result": {
             const parse = useExplorer.getState().scan?.parse;
             patch({ file: e.file, stage: e.typesPending ? "types" : undefined, phase: e.typesPending ? "types" : "typed", parse: parse && { done: parse.total, total: parse.total } });
+            // a compare scan: its summary opens once the snapshot is on screen
+            if (settings.diff) useExplorer.getState().openImpactFor(e.file);
             onStructure(e.file);
             if (!e.typesPending) finish();
             break;

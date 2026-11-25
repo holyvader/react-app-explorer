@@ -154,14 +154,24 @@ const SOURCE_MAX = 2 * 1024 * 1024;
 
 /**
  * A file's text at a commit (`git show <sha>:<path>`), or in the working tree (`sha` = "worktree"),
- * for the viewer's code diff. `file` is relative to the scanned folder `dir` (it may climb out of it,
+ * for the viewer's code diff and code view. Outside a repository, the working tree only. `file` is relative to the scanned folder `dir` (it may climb out of it,
  * like a workspace package's `../../packages/ui/x.tsx`) but must stay inside the repo.
  */
 export async function gitSource(dir: string, sha: string, file: string): Promise<{ text: string; truncated?: boolean; missing?: boolean } | { error: string }> {
   if (sha !== "worktree" && !/^[0-9a-f]{40,64}$/.test(sha)) return { error: "Not a commit sha" };
   if (!file || file.includes("\0") || isAbsolute(file)) return { error: "Invalid file" };
   const info = await repoOf(folderOf(dir)).catch(() => undefined);
-  if (!info) return { error: "Not in a git repository" };
+  if (!info) {
+    // not a repository: the working tree only, and only inside the scanned folder
+    if (sha !== "worktree") return { error: "Not in a git repository" };
+    const root = folderOf(dir);
+    const abs = resolve(root, file);
+    const rel = relative(root, abs);
+    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the scanned folder" };
+    if (!existsSync(abs)) return { text: "", missing: true };
+    const text = readFileSync(abs, "utf8");
+    return text.length > SOURCE_MAX ? { text: text.slice(0, SOURCE_MAX), truncated: true } : { text };
+  }
   const abs = resolve(folderOf(dir), file);
   const rel = relative(info.root, abs);
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the repository" };

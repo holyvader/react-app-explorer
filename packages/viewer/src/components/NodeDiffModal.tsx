@@ -8,6 +8,10 @@ import { DiffCode, InlineRow } from "./DiffCode.tsx";
 import { usePersistentState } from "../lib/settings.ts";
 import { plural } from "../lib/text.ts";
 import { displayName } from "../lib/displayName.ts";
+import { codeLinks } from "../lib/codeLinks.ts";
+import { useExplorer } from "../store.ts";
+import { CodeNavBar } from "./codeNav.tsx";
+import { CodeNavContext } from "./codeNavContext.ts";
 
 export type DiffMode = "split" | "inline";
 
@@ -43,6 +47,9 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   const lines: DiffLine[] | undefined = loaded?.lines;
   const coloured = useColoured(loaded);
   const counts = { add: loaded?.added ?? 0, del: loaded?.removed ?? 0 };
+  // names in the code lead on, in this dialog (components/codeNav.tsx)
+  const index = useExplorer((s) => s.index);
+  const nav = useMemo(() => ({ snapshot, links: index ? codeLinks(snapshot, index, node, whole) : new Map<string, string>() }), [snapshot, index, node, whole]);
 
   const title = (
     <Flex align="baseline" gap="2" minW="0">
@@ -54,7 +61,9 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   );
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} size="cover">
+      <CodeNavContext.Provider value={nav}>
       <Flex align="center" gap="3" mb="2.5" fontSize={textPx(12)} wrap="wrap">
+        <CodeNavBar id={node.id} />
         <Text fontFamily="mono" color="diff.removed.fg">
           − {before?.label ?? "(new)"}
         </Text>
@@ -100,6 +109,7 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
       )}
       {lines && lines.length === 0 && <Text color="fg.muted">No lines.</Text>}
       {lines && lines.length > 0 && (mode === "split" ? <SplitView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} /> : <InlineView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} />)}
+      </CodeNavContext.Provider>
     </Modal>
   );
 }

@@ -58,6 +58,7 @@ export {
   ListFilter as IconFilter,
   GitCompareArrows as IconDiff,
   FileDiff as IconCodeDiff,
+  Code as IconCode,
   Columns2 as IconSplit,
   Rows3 as IconInline,
   GitBranch as IconBranch,

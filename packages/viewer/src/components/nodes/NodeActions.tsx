@@ -3,6 +3,7 @@ import {
   IconArrowUp,
   IconChevronsDown,
   IconChevronsUp,
+  IconCode,
   IconCodeDiff,
   IconInvokes,
   IconLayout,
@@ -42,7 +43,7 @@ const I = 12;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff } = useExplorer.getState();
+  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff, showCode } = useExplorer.getState();
   const { element, node, change, parents, children, hiddenParents, hiddenChildren, invokes, hiddenInvokes, can } = data;
   const id = element.id;
   const isComponent = node?.kind === "component";
@@ -50,6 +51,7 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
   return (
     <span className="rae-actions nodrag nopan">
       {/* diff view on: what changed in its code (added: all new, removed: all gone) */}
+      {node && hasCode(node) && <IconBtn label="Show the code" icon={<IconCode size={I} />} onClick={() => showCode(id)} />}
       {node && change && hasCode(node) && <IconBtn label={`Show the code diff (${CHANGE_WORD[change].toLowerCase()} in this diff)`} icon={<IconCodeDiff size={I} />} onClick={() => showCodeDiff(id)} />}
       {/* Only what would add something: no parents/children, or all of them drawn → no button. */}
       {node && can.parents && (

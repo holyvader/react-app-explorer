@@ -1,6 +1,7 @@
 import type { DiffLine } from "../lib/lineDiff.ts";
 import type { Coloured } from "../lib/nodeDiff.ts";
 import type { TokLine } from "../lib/syntax.ts";
+import { CodeToken } from "./codeNav.tsx";
 import "./syntax.css";
 import "./nodeDiff.css";
 
@@ -16,9 +17,8 @@ export function DiffCode({ tokens, text }: { tokens?: TokLine; text: string }) {
   return (
     <>
       {tokens.map((t, i) => (
-        <span key={i} className={`rae-tok--${t.k}`}>
-          {t.t}
-        </span>
+        // names lead to their element inside the code dialog (CodeNavContext); plain elsewhere
+        <CodeToken key={i} tok={t} prev={tokens[i - 1]} />
       ))}
     </>
   );

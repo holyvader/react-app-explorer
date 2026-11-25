@@ -166,7 +166,8 @@ function shapesOf(boxes: readonly Box[], round: Round, gap: Gap, under = false):
     const rows = packedWithin(boxes, limit, gap);
     const width = Math.max(round.least, rows.width + round.across);
     const height = rows.height + round.down;
-    const across = (width + gap.x) / cellX;
+    // in cells, by the boxes themselves: a frame's least width (its header) isn't columns of them
+    const across = (rows.width + round.across + gap.x) / cellX;
     const down = (height + gap.y) / cellY;
     const off = under ? Math.log(across / down / UNDER_ASPECT) ** 2 : Math.log(across / down) ** 2 + Math.log(width / height) ** 2;
     tried.push({ rows, limit, off, room: width * height });

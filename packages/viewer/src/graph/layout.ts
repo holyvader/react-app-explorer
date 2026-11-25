@@ -29,8 +29,8 @@ export const cardWidthOf = (e: Pick<DrawnElement, "name" | "badges"> & { kind?: 
   widthOf(e.name) +
   (e.kind === "component" ? COMPONENT_EXTRA : 0) +
   (e.badges ?? []).reduce((w, b) => w + b.length * 7.2 + 16, e.badges?.length ? 8 : 0);
-/** A frame's least width: its header holds the name, role/boundary chips and six actions. */
-export const frameWidthOf = (name: string) => widthOf(name) + 200;
+/** A frame's least width: its header holds the name, role/boundary chips and seven actions. */
+export const frameWidthOf = (name: string) => widthOf(name) + 224;
 
 /** Room at the top of a frame for its header, and around what it holds. */
 export const PADDING = { top: 48, left: 14, bottom: 20, right: 14 } as const;

@@ -1,4 +1,4 @@
-import { ActionIconButton, Box, BrandMark, Button, ContextMenu, Flex, Popover, Select, setColorMode, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useTextSize } from "@rae/design-system";
+import { ActionIconButton, Box, BrandMark, Button, ContextMenu, DIAGRAM_PALETTES, type DiagramPaletteId, Flex, Popover, Select, setColorMode, setDiagramPalette, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useDiagramPalette, useTextSize } from "@rae/design-system";
 import { projectName } from "../lib/paths.ts";
 import { FolderSwitcher, when } from "./FolderSwitcher.tsx";
 import {
@@ -10,6 +10,7 @@ import {
   IconLibrary,
   IconOpen,
   IconRedo,
+  IconRouteChain,
   IconScan,
   IconUndo,
   IconViewOptions,
@@ -111,6 +112,11 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onS
         )}
         {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
         {snapshot?.diff && <DiffModeSelect />}
+        {snapshot?.diff && (
+          <Button size="xs" h="28px" px="10px" variant="outline" rounded="l2" fontSize={textPx(12)} gap="6px" onClick={() => useExplorer.getState().setImpactOpen(true)}>
+            <IconRouteChain size={13} /> What it affects
+          </Button>
+        )}
       </Flex>
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
       <input
@@ -150,6 +156,7 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
   const [open, setOpen] = useState(false);
   const mode = useColorMode();
   const textSize = useTextSize();
+  const palette = useDiagramPalette();
   const editor = useExplorer((s) => s.editor);
   const editors = useExplorer((s) => s.editors);
   const excluded = useExplorer((s) => s.excluded);
@@ -180,6 +187,9 @@ function ViewOptions({ onLibraries }: { onLibraries: () => void }) {
         </Row>
         <Row label="Layout" hint={layoutMode === "tree" ? "Callers above what they call" : "Each folder in a square"}>
           <Select value={layoutMode} onValueChange={(v) => setLayoutMode(v as LayoutMode)} options={LAYOUT_MODES} width="130px" size="xs" label="Layout" />
+        </Row>
+        <Row label="Diagram colours" hint={DIAGRAM_PALETTES.find((p) => p.value === palette)?.hint}>
+          <Select value={palette} onValueChange={(v) => setDiagramPalette(v as DiagramPaletteId)} options={DIAGRAM_PALETTES} width="130px" size="xs" label="Diagram colours" />
         </Row>
         <SwitchField size="xs" px="3.5" minH="36px" label="Dark mode" checked={mode === "dark"} onCheckedChange={(on) => setColorMode(on ? "dark" : "light")} />
         <SwitchField size="xs" px="3.5" minH="36px" label="Asset files" hint="CSS, images, JSON" checked={showAssets} onCheckedChange={setShowAssets} />

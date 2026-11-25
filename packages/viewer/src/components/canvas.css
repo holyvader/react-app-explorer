@@ -59,6 +59,15 @@
 [data-kind="external"] { --k: var(--chakra-colors-kind-external-solid); --k-soft: var(--chakra-colors-kind-external-subtle); --k-mid: var(--chakra-colors-kind-external-muted); --k-fg: var(--chakra-colors-kind-external-fg); }
 [data-kind="folder"] { --k: var(--chakra-colors-fg-subtle); --k-soft: var(--chakra-colors-bg-subtle); --k-mid: var(--chakra-colors-border-emphasized); --k-fg: var(--chakra-colors-fg-muted); }
 
+/* The Tinted diagram palette (design-system diagramPalettes.ts, <html data-palette>): a card is filled
+   with its kind's tint and outlined in its line, in every state (hover, selected, diff) that builds on
+   the card's own colours. Types keep their blueprint, folders and files their neutral look. */
+html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind="folder"], [data-kind="module"])) {
+  --chakra-colors-card-bg: var(--k-soft);
+  --chakra-colors-card-bg-selected: var(--k-soft);
+  --line: var(--k-mid);
+}
+
 /* ---- cards: 52px, padding 0 12, icon 17, gap 10; the corners tell the kind ---------------- */
 .rae-card {
   position: relative;

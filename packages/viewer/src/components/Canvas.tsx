@@ -28,6 +28,7 @@ import { useMarquee } from "./canvas/useMarquee.ts";
 import { useNodeDrag } from "./canvas/useNodeDrag.ts";
 import { useNodeTooltip } from "./canvas/useNodeTooltip.ts";
 import { ConditionEdge } from "./ConditionEdge.tsx";
+import { NodeCodeModal } from "./NodeCodeModal.tsx";
 import { NodeDiffModal } from "./NodeDiffModal.tsx";
 import { collapseLevelOf, type Lod, LodContext, lodOf, nextLod } from "./lod.ts";
 import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
@@ -84,8 +85,11 @@ function whenReady(attempt: () => boolean | Promise<boolean>, tries = 10) {
 export function Canvas() {
   const snapshot = useExplorer((s) => s.snapshot);
   // the code diff dialog (diff snapshots), opened from a card's action or its tooltip
-  const codeDiffId = useExplorer((s) => s.codeDiffId);
-  const codeDiffOf = codeDiffId ? snapshot?.nodes[codeDiffId] : undefined;
+  // the code dialog: the element its history is at, as code or as its diff (components/codeNav.tsx)
+  const codeEntry = useExplorer((s) => s.codeView?.stack[s.codeView.at]);
+  const codeNode = codeEntry ? snapshot?.nodes[codeEntry.id] : undefined;
+  const codeOf = codeEntry && !codeEntry.diff ? codeNode : undefined;
+  const codeDiffOf = codeEntry?.diff ? codeNode : undefined;
   const index = useExplorer((s) => s.index);
   const graph = useExplorer((s) => s.graph);
   const placed = useExplorer((s) => s.placed);
@@ -279,9 +283,10 @@ export function Canvas() {
         </ReactFlow>
       </LodContext.Provider>
       {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
-      {!drag.dragging && !menu && !codeDiffOf && (
+      {!drag.dragging && !menu && !codeDiffOf && !codeOf && (
         <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} {...tooltip.tooltipProps} />
       )}
+      {codeOf && snapshot && <NodeCodeModal node={codeOf} snapshot={snapshot} onClose={() => useExplorer.getState().showCode(undefined)} />}
       {codeDiffOf && snapshot && <NodeDiffModal node={codeDiffOf} snapshot={snapshot} open onOpenChange={(open) => !open && useExplorer.getState().showCodeDiff(undefined)} />}
       {marquee.box && <div className="rae-marquee" style={marquee.box} />}
       <ExplorationPicker />

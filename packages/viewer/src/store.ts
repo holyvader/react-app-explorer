@@ -10,6 +10,7 @@ import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
 import { changesToShow, withFilesOfChanges } from "./lib/diff.ts";
+import { hasCode } from "./lib/nodeDiff.ts";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
@@ -69,6 +70,9 @@ interface ExplorerState {
   snapshot?: Snapshot;
   snapshotName?: string;
   scan?: ScanState;
+  /** The diff summary (components/ImpactModal.tsx): open, and the scan whose diff opens it once loaded. */
+  impactOpen: boolean;
+  impactFor?: string;
   index?: GraphIndex;
   /** Node ids the user put on the canvas (containers are derived from them). */
   visible: string[];
@@ -89,7 +93,11 @@ interface ExplorerState {
   /** Diff snapshots, with the overlay on: the selected element's changed lines in a card under it. */
   diffCode: boolean;
   /** Diff snapshots: the element whose code diff dialog is open (from its card, its tooltip). */
-  codeDiffId?: string;
+  /**
+   * The code dialog's history (components/codeNav.tsx): each element looked at — its code, or its
+   * diff — and which one is shown. Undefined: closed.
+   */
+  codeView?: { stack: { id: string; diff: boolean }[]; at: number };
   /** A short message over the canvas (e.g. the editor couldn't be opened); clears itself. */
   notice?: string;
   /** The details sidebar's width (px), kept between visits. */
@@ -173,9 +181,19 @@ interface ExplorerState {
   /** The toolbar's diff view: off, the overlay, or the overlay plus the selected element's code changes. */
   setDiffMode: (mode: DiffMode) => void;
   /** Opens (an id) or closes (undefined) an element's code diff dialog. */
+  /** Opens an element's code diff (a new history), or closes the code dialog. */
   showCodeDiff: (id: string | undefined) => void;
+  /** Opens an element's code (a new history), or closes the code dialog. */
+  showCode: (id: string | undefined) => void;
+  /** From the code shown, to another element's: its diff when a diff is shown and it changed, else its code. */
+  codeGo: (id: string) => void;
+  /** Back (-1) or forward (+1) in the code dialog's history. */
+  codeStep: (by: -1 | 1) => void;
   /** Diff snapshots: puts the changes on the canvas (declarations and their files, up to a limit). */
   showChanges: () => void;
+  setImpactOpen: (open: boolean) => void;
+  /** Opens the diff summary once this snapshot (a compare scan's result) is loaded. */
+  openImpactFor: (file: string) => void;
   setRoutes: (on: boolean) => void;
   setSidebarWidth: (width: number) => void;
   setTreeOpen: (open: boolean) => void;
@@ -302,6 +320,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     layoutToken: 0,
     layoutEffort: "quick",
     layoutMode: readSetting<LayoutMode>(KEYS.layoutMode, "tree"),
+    impactOpen: false,
 
     setSnapshot: (snapshot, name) => {
       set({
@@ -322,6 +341,16 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       const saved = loadDiagram(diagramKey(snapshot));
       if (saved) restore(saved);
       else if (snapshot.diff) get().showChanges();
+      // a compare scan just finished: its summary opens over the diagram
+      const openImpact = !!snapshot.diff && get().impactFor === name;
+      set({ impactOpen: openImpact, ...(openImpact ? { impactFor: undefined } : {}) });
+    },
+
+    setImpactOpen: (impactOpen) => set({ impactOpen }),
+    openImpactFor: (impactFor) => {
+      // already loaded (the structure snapshot came first): open now
+      if (get().snapshotName === impactFor && get().snapshot?.diff) set({ impactOpen: true });
+      else set({ impactFor });
     },
 
     showChanges: () => {
@@ -551,7 +580,24 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       redraw({ diffOverlay: on }, null);
     },
 
-    showCodeDiff: (id) => set({ codeDiffId: id }),
+    showCodeDiff: (id) => set({ codeView: id ? { stack: [{ id, diff: true }], at: 0 } : undefined }),
+    showCode: (id) => set({ codeView: id ? { stack: [{ id, diff: false }], at: 0 } : undefined }),
+    codeGo: (id) => {
+      const { codeView, snapshot } = get();
+      if (!codeView) return;
+      const here = codeView.stack[codeView.at]!;
+      if (here.id === id) return;
+      const n = snapshot?.nodes[id];
+      const diff = here.diff && !!n && !!snapshot?.diff?.nodes[id] && hasCode(n);
+      const stack = [...codeView.stack.slice(0, codeView.at + 1), { id, diff }];
+      set({ codeView: { stack, at: stack.length - 1 } });
+    },
+    codeStep: (by) => {
+      const { codeView } = get();
+      if (!codeView) return;
+      const at = Math.min(codeView.stack.length - 1, Math.max(0, codeView.at + by));
+      if (at !== codeView.at) set({ codeView: { ...codeView, at } });
+    },
 
     setDiffMode: (mode) => {
       const code = mode === "code";

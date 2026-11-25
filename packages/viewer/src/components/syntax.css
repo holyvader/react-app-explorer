@@ -19,3 +19,14 @@
 .rae-tok--fold[data-folded] { padding: 0 3px; background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg-muted); }
 .rae-tok--fold:hover { background: var(--chakra-colors-bg-emphasized); color: var(--chakra-colors-fg); }
 .rae-tok--fold:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
+
+/* The code view (NodeCodeModal): line numbers, then the line; names that lead somewhere are buttons. */
+.rae-code-view { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--chakra-colors-border); border-radius: 8px; background: var(--chakra-colors-syntax-bg); padding: 10px 0; line-height: 1.6; font-family: var(--chakra-fonts-mono); }
+.rae-code-view__line { display: grid; grid-template-columns: 4.5em 1fr; min-width: 0; }
+.rae-code-view__line:hover { background: var(--chakra-colors-bg-muted); }
+.rae-code-view__no { text-align: right; padding-right: 14px; color: var(--chakra-colors-fg-subtle); user-select: none; font-variant-numeric: tabular-nums; }
+.rae-code-view .rae-code { white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 14px; }
+.rae-code-view__link { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.rae-code-view__link:hover { text-decoration-style: solid; color: var(--chakra-colors-selection-solid); }
+.rae-code-view__link:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; border-radius: 2px; }
+.rae-code-view__more { padding: 8px 14px 0 calc(4.5em + 14px); color: var(--chakra-colors-fg-subtle); font-style: italic; }
