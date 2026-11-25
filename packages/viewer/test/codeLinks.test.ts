@@ -38,11 +38,12 @@ describe("code links", () => {
     expect(links.get("PageProps")).toBe("app/types.ts#PageProps");
     expect(links.has("Page")).toBe(false);
   });
-  test("a whole file: imports under their local name lead to the declaration exported", () => {
+  test("a whole file: imports under their local name lead to the declaration exported; its own declarations aren't links", () => {
     const s = snapshot();
     const links = codeLinks(s, buildIndex(s), s.nodes["app/page.tsx"]!);
     expect(links.get("load")).toBe("lib/data.ts#getTodos");
-    expect(links.get("Page")).toBe("app/page.tsx#Page");
+    // what the file declares itself is on screen: not a link
+    expect(links.has("Page")).toBe(false);
   });
   test("a declaration shown with its whole file: the file's imports are links too", () => {
     const s = snapshot();

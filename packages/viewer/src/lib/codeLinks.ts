@@ -14,13 +14,20 @@ const IDENT = /^[A-Za-z_$][\w$]*$/;
  * exports under that name, else at the file. The node's own name isn't a link.
  *
  * `wholeFile`: a declaration shown with the rest of its file — the file's names are links.
+ *
+ * When the whole file is shown (a file, or `wholeFile`), what the file declares itself isn't a link:
+ * it's on screen already.
  */
 export function codeLinks(s: Snapshot, index: GraphIndex, node: GraphNode, wholeFile = false): Map<string, NodeId> {
   const links = new Map<string, NodeId>();
   const fileNode = wholeFile && !isWholeFile(node) && node.moduleId ? s.nodes[node.moduleId] : undefined;
+  /** The file shown whole, if it is. */
+  const wholeShown = fileNode ?? (isWholeFile(node) ? node : undefined);
   const add = (name: string | undefined, id: NodeId) => {
     // 3rd-party code isn't the project's: library names stay plain
     if (!name || !IDENT.test(name) || id === node.id || id === fileNode?.id || links.has(name) || s.nodes[id]?.kind === "external") return;
+    // the file's own declarations, when the whole file is on screen
+    if (wholeShown && (s.nodes[id]?.moduleId === wholeShown.id || id === wholeShown.id)) return;
     links.set(name, id);
   };
   const declsOf = (file: NodeId) => (index.out.get(file) ?? []).filter((e) => e.kind === "declares").map((e) => s.nodes[e.to]).filter((d): d is GraphNode => !!d);
@@ -31,7 +38,6 @@ export function codeLinks(s: Snapshot, index: GraphIndex, node: GraphNode, whole
   const owners = [shown];
   if (isWholeFile(shown)) for (const d of declsOf(shown.id)) owners.push(d);
   for (const owner of owners) {
-    if (owner !== shown) add(owner.name, owner.id);
     for (const [name, id] of Object.entries(owner.typeRefs ?? {})) if (s.nodes[id]) add(name, id);
     for (const e of index.out.get(owner.id) ?? []) {
       const target = s.nodes[e.to];

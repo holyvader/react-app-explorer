@@ -98,6 +98,16 @@ Incremental cache: `<root>/.explorer/cache/extract-v<EXTRACT_VERSION>.json`, key
      file's resolved imports.
 6. Adding a new schema field: schema → extract (worker output) → graph (node/edge mapping) → viewer display → test.
 
+## Relations: what counts as a use (test/relations.test.ts)
+Found by re-reading real projects with oxc and comparing every use with the snapshot (Nov 2026); each is a test:
+- **Declarations** are functions, classes, functions wrapped in `memo` / `forwardRef` / `cache` / `unstable_cache` (WRAPPERS), **object constants with functions in them** (`const api = { get: async () => … }`, kind function: their members' code is theirs), and **factory-made components**: a PascalCase (not ALL_CAPS) constant from a component-making callee (`wrapComponent`, `createComponent`, `styled`) or `Object.assign(Root, { … })`, or a tagged template (`` styled.div`…` ``) — `Object.keys(…)`, `createContext()` aren't. A factory component renders what it wraps.
+- **Renders**: the render tree, plus every JSX tag anywhere in the declaration (its own helpers, callbacks: `const row = (x) => <Row/>`), plus a **call to a component** (`{markIconOf(x)}`) or a component passed as a value.
+- **Values are uses** (`isValueUse`): an identifier passed as an argument, in an array or object, a variable's / assignment's value, a condition's branch, returned, a JSX attribute or child — `items.map(format)`, `useReducer(reducer)`, `{ listTags, createTag }`.
+- **Module-level code is the module's, callbacks included** (IIFEs, `describe(…, () => …)`, `createFileRoute(…)({ loader })`, `columns = [{ render }]`); a declaration's own code (`declarationNodes`) is its own. Exported constants' JSX counts too.
+- A call to an export that isn't a declaration (`export const dayjsUtc = dayjs.utc`) is an `invokes` of its **file** (`usesExportOf`).
+- **`export *` barrels**: follow only a re-exported file that exports the name (`exportsName`); `resolveExport` falls back to the file and never says "not here", so the first `export *` used to win every name.
+- `f.aliases` is a plain object: look up with `Object.hasOwn` (an export named `valueOf` / `toString` found `Object.prototype`'s).
+
 ## Merging single-export files (`merge.ts`)
 A module whose only declaration is exported (no private helpers, no extra types) is replaced by that
 declaration, **under the module's id** (`app/page.tsx`, not `app/page.tsx#HomePage`), so imports,

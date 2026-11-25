@@ -25,11 +25,13 @@ export class JsxAnalyzer {
   }
 
   /** Module-level JSX (e.g. `createRoot(el).render(<App />)`), outside of any declaration. */
-  analyzeLoose(stmts: N[]): { tree: RawJsxNode[]; renders: RawRef[] } {
+  analyzeLoose(stmts: N[], isDeclaration: (n: N) => boolean = () => false): { tree: RawJsxNode[]; renders: RawRef[] } {
     const tree: RawJsxNode[] = [];
     for (const stmt of stmts) {
+      // module-level code, callbacks and IIFEs included (`it(…, () => render(<App />))`), but not a
+      // declaration's own code
       walk(stmt, (n) => {
-        if (isFunction(n) || n.type === "ClassDeclaration" || n.type === "ClassExpression") return false;
+        if (isDeclaration(n) || n.type === "ClassDeclaration" || n.type === "ClassExpression") return false;
         if (n.type === "JSXElement" || n.type === "JSXFragment") {
           this.visitExpr(n, [], tree, new Map(), 0);
           return false;

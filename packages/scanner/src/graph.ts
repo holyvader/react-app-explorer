@@ -42,7 +42,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
     for (const e of f.exports) {
       if (!e.local) continue;
       let local = e.local;
-      for (let i = 0; i < 5 && f.aliases[local]; i++) local = f.aliases[local]!;
+      for (let i = 0; i < 5 && Object.hasOwn(f.aliases, local); i++) local = f.aliases[local]!;
       const list = exportNamesByLocal.get(local) ?? [];
       list.push(e.exported);
       exportNamesByLocal.set(local, list);
@@ -126,17 +126,44 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
         const imp = f.imports[direct.from]!;
         result = imp.resolved ? resolveTarget(imp.resolved, direct.imported ?? name, depth + 1) : undefined;
       } else if (name !== "default") {
+        // `export * from './a'; export * from './b'`: the one that exports it (resolveExport alone
+        // never says "not here": it falls back to the file, so the first one used to win every name)
         for (const e of f.exports) {
           if (e.exported !== "*" || e.from === undefined) continue;
           const r = f.imports[e.from]!.resolved;
-          if (r?.kind === "local") result = resolveExport(r.path, name, depth + 1);
-          if (result) break;
+          if (r?.kind === "local" && exportsName(r.path, name)) {
+            result = resolveExport(r.path, name, depth + 1);
+            break;
+          }
         }
       }
       result ??= moduleId(path);
     }
     exportMemo.set(key, result);
     return result;
+  }
+
+  /**
+   * Whether a call that resolved to a file is a use of something it exports that isn't a
+   * declaration (`export const dayjsUtc = dayjs.utc`): a named import of another project file. A
+   * namespace member that isn't found, or the file itself, isn't.
+   */
+  function usesExportOf(t: LocalTarget, target: GraphNode, from: NodeId): boolean {
+    return !!t.importedName && !t.nsPath && target.id !== from && !target.asset && !target.missing;
+  }
+
+  /** Whether a file exports `name`: itself, or through its own `export *`. */
+  function exportsName(path: string, name: string, seen = new Set<string>()): boolean {
+    if (seen.has(path)) return false;
+    seen.add(path);
+    const f = files.get(path);
+    if (!f) return false;
+    if (indexOf(f).exports.has(name)) return true;
+    return f.exports.some((e) => {
+      if (e.exported !== "*" || e.from === undefined) return false;
+      const r = f.imports[e.from]!.resolved;
+      return r?.kind === "local" && exportsName(r.path, name, seen);
+    });
   }
 
   function resolveTarget(r: Resolved, imported: string, depth: number): NodeId | undefined {
@@ -176,7 +203,7 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
 
   /** `types`: a type reference, which may also come through `import type` (values can't). */
   function resolveLocal(f: FileExtract, local: string, depth = 0, types = false): LocalTarget | undefined {
-    for (let i = 0; i < 5 && f.aliases[local]; i++) local = f.aliases[local]!;
+    for (let i = 0; i < 5 && Object.hasOwn(f.aliases, local); i++) local = f.aliases[local]!;
     const ix = indexOf(f);
     if (ix.decls.has(local)) return { id: declId(f.absPath, local) };
     const imp = ix.imports.get(local) ?? (types ? ix.typeImports.get(local) : undefined);
@@ -231,8 +258,9 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
     for (const c of f.moduleCalls ?? []) {
       const t = resolveRef(f, c.local, c.member);
       const target = t && nodes[t.id];
-      if (!target || target.kind === "module" || target.kind === "external" || target.kind === "component") continue;
-      addEdge({ from: mid, to: target.id, kind: target.kind === "serverAction" ? "invokesAction" : "invokes" });
+      if (!target || target.kind === "external" || (target.kind === "module" && !usesExportOf(t, target, mid))) continue;
+      // a component called or passed (`createRoot(…).render(App)`, `withAuth(Page)`) is rendered
+      addEdge({ from: mid, to: target.id, kind: target.kind === "component" ? "renders" : target.kind === "serverAction" ? "invokesAction" : "invokes" });
     }
     for (const r of f.moduleRenders ?? []) {
       const t = resolveRef(f, r.local, r.member);
@@ -276,8 +304,9 @@ export function buildGraph(files: Map<string, FileExtract>, info: ProjectInfo) {
       for (const c of d.calls) {
         const t = resolveRef(f, c.local, c.member);
         const target = t && nodes[t.id];
-        if (!target || target.kind === "module" || target.kind === "external" || target.kind === "component") continue;
-        const kind: EdgeKind = target.kind === "serverAction" ? "invokesAction" : "invokes";
+        if (!target || target.kind === "external" || (target.kind === "module" && !usesExportOf(t, target, mid))) continue;
+        // a component called (a helper returning JSX: `{markIconOf(x)}`) or passed as a value renders it
+        const kind: EdgeKind = target.kind === "component" ? "renders" : target.kind === "serverAction" ? "invokesAction" : "invokes";
         addEdge({ from: did, to: target.id, kind });
       }
 

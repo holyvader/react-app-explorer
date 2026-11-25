@@ -17,7 +17,7 @@ import { codeHash, containsJsx, HOOK_RE, isFunction, memberName, type N, SourceT
 
 export type ResolveFn = (fromFile: string, specifier: string) => Resolved;
 
-const WRAPPERS = /^(memo|forwardRef|observer|styled|withRouter|connect)$/;
+const WRAPPERS = /^(memo|forwardRef|observer|styled|withRouter|connect|cache|unstable_cache)$/;
 const COMPONENT_BASES = /^(React\.)?(Component|PureComponent)$/;
 
 function langOf(path: string): "ts" | "tsx" | "jsx" {
@@ -30,6 +30,10 @@ interface Candidate {
   local: string;
   fn?: N; // function node
   cls?: N; // class node
+  /** An object constant with functions in it (`const api = { get: async () => … }`): its members' code is its. */
+  obj?: N;
+  /** A component a factory makes (`const Stack = wrapComponent(MantineStack)`, `` styled.div`…` ``): the call. */
+  factory?: N;
   nameNode?: N;
   wrapped: boolean;
 }
@@ -83,6 +87,8 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
 
   const types = new Map<string, TypeMember[]>();
   const candidates: Candidate[] = [];
+  /** The nodes declarations are made of (their code is theirs, not the module's). */
+  const declarationNodes = new Set<N>();
 
   /**
    * Names of the types referred to inside some type positions: `Foo`, `Foo<Bar>`, `ns.Foo` (→ `ns`),
@@ -342,6 +348,23 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     }
   }
 
+  /**
+   * Whether `const Name = factory(…)` makes a component: a PascalCase name (not ALL_CAPS), and a
+   * component-making callee (`wrapComponent`, `createComponent`, `styled`), or `Object.assign` onto
+   * a component (`Button = Object.assign(ButtonRoot, { Group })`). `Object.keys(…)`, `createContext()`,
+   * `z.object()` and the like don't.
+   */
+  function isFactoryComponent(name: string, call: N): boolean {
+    if (!/^[A-Z][a-z0-9]*[a-z]/.test(name)) return false;
+    const callee = unwrap(call.callee);
+    if (/component|styled|^wrap/i.test(calleeName(call) ?? "") && !(callee?.type === "MemberExpression" && unwrap(callee.object)?.name === "Object")) return true;
+    if (callee?.type === "MemberExpression" && unwrap(callee.object)?.name === "Object" && callee.property?.name === "assign") {
+      const arg = unwrap(call.arguments?.[0]);
+      return (arg?.type === "Identifier" && /^[A-Z][a-z]/.test(arg.name)) || isFunction(arg);
+    }
+    return false;
+  }
+
   function unwrapWrapperCall(call: N): N | undefined {
     let cur = call;
     while (cur?.type === "CallExpression") {
@@ -375,6 +398,12 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
             const wrapped = unwrapWrapperCall(init);
             if (wrapped?.type === "Identifier") out.aliases[d.id.name] = wrapped.name;
             else if (isFunction(wrapped)) candidates.push({ local: d.id.name, fn: wrapped, nameNode: d.id, wrapped: true });
+            else if (isFactoryComponent(d.id.name, init)) candidates.push({ local: d.id.name, factory: init, nameNode: d.id, wrapped: false });
+          } else if (init?.type === "TaggedTemplateExpression" && /^[A-Z]/.test(d.id.name)) {
+            // const Title = styled.h1`…`
+            candidates.push({ local: d.id.name, factory: init, nameNode: d.id, wrapped: false });
+          } else if (init?.type === "ObjectExpression" && init.properties.some((p: N) => p.type === "Property" && (p.method || isFunction(unwrap(p.value))))) {
+            candidates.push({ local: d.id.name, obj: init, nameNode: d.id, wrapped: false });
           }
         }
         break;
@@ -462,13 +491,14 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
 
   // ---- analyze decl candidates ------------------------------------------------------------
   const jsx = new JsxAnalyzer(src);
+  for (const c of candidates) declarationNodes.add(c.fn ?? c.cls ?? c.obj ?? c.factory);
   for (const c of candidates) {
     const decl = analyzeCandidate(c);
     if (decl) out.decls.push(decl);
   }
 
   function analyzeCandidate(c: Candidate): DeclExtract | undefined {
-    const node = c.fn ?? c.cls;
+    const node = c.fn ?? c.cls ?? c.obj ?? c.factory;
     const directives: string[] = [];
     if (c.fn?.body?.type === "BlockStatement") {
       for (const s of c.fn.body.body) {
@@ -482,16 +512,29 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     let renders: RawRef[] = [];
 
     const isClassComponent = c.cls && COMPONENT_BASES.test(src.slice(c.cls.superClass ?? null));
-    if (directives.includes("use server") || (fileUseServer && isAsync)) kind = "serverAction";
+    if (c.factory) kind = "component";
+    else if (c.obj) kind = "function";
+    else if (directives.includes("use server") || (fileUseServer && isAsync)) kind = "serverAction";
     else if (HOOK_RE.test(c.local)) kind = "hook";
     else if (isClassComponent || (c.fn && (c.wrapped || containsJsx(c.fn.body)) && /^[A-Z]|^default$/.test(c.local))) kind = "component";
     else if (c.fn && containsJsx(c.fn.body)) kind = "component";
     else kind = "function";
 
-    if (kind === "component") {
+    if (kind === "component" && (c.cls || c.fn)) {
       const r = c.cls ? jsx.analyzeClass(c.cls) : jsx.analyzeFunction(c.fn);
       tree = r.tree;
       renders = r.renders;
+    }
+    // A factory-made component renders what it wraps (`wrapComponent(MantineStack)`).
+    if (c.factory?.type === "CallExpression") {
+      const arg = unwrap(c.factory.arguments?.[0]);
+      if (arg?.type === "Identifier" && /^[A-Z]/.test(arg.name)) renders.push({ local: arg.name, conditions: [] });
+      else if (arg?.type === "MemberExpression" && !arg.computed && unwrap(arg.object)?.type === "Identifier") renders.push({ local: unwrap(arg.object).name, member: arg.property.name, conditions: [] });
+    }
+    // JSX the tree doesn't reach — in the component's own helpers and callbacks (`const row = (x) => <Row …/>`,
+    // `renderItem={() => <Item/>}`), or an object constant's members — still renders.
+    for (const ref of jsxRefsIn(c.fn?.body ?? c.cls?.body ?? c.obj)) {
+      if (!renders.some((r) => r.local === ref.local && r.member === ref.member)) renders.push({ ...ref, conditions: [] });
     }
 
     const params: ParamDef[] = c.fn ? c.fn.params.map(paramDef) : [];
@@ -519,7 +562,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       decl.typeParams = typeParamsOf(c.fn.typeParameters);
     }
 
-    const body = c.fn ? c.fn.body : c.cls?.body;
+    const body = c.fn ? c.fn.body : (c.cls?.body ?? c.obj ?? c.factory);
     if (c.fn) decl.returnHash = returnHashOf(c.fn);
     collectBody(body, decl);
     const navs = navigationsIn(body);
@@ -669,6 +712,12 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
             decl.calls.push({ local, member });
           }
         }
+      } else if (n.type === "Identifier" && !seenCalls.has(`${n.name}.`)) {
+        // a function passed or stored as a value: items.map(format), useReducer(reducer), [a, b], { onDone: done }
+        if (isValueUse(n, anc.at(-1))) {
+          seenCalls.add(`${n.name}.`);
+          decl.calls.push({ local: n.name });
+        }
       } else if (n.type === "JSXAttribute" && n.value?.type === "JSXExpressionContainer") {
         // <form action={addTodo}> / onClick={handler} — direct references count as calls.
         const e = unwrap(n.value.expression);
@@ -685,8 +734,19 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     const refs: RawRef[] = [];
     const seen = new Set<string>();
     for (const stmt of stmts) {
-      walk(stmt, (n) => {
-        if (isFunction(n) || n.type === "ClassExpression") return false;
+      // Module-level code is the module's, callbacks and IIFEs included (`(async () => { … })()`,
+      // `describe(…, () => …)`, `createFileRoute(…)({ loader: () => … })`, `columns = [{ render: … }]`);
+      // the code of a declaration (a function, class, object or factory constant) is its own.
+      walk(stmt, (n, anc) => {
+        if (declarationNodes.has(n) || n.type === "ClassExpression") return false;
+        if (n.type === "Identifier") {
+          // a registry or a call's argument: `export const repo = { listTags, createTag }`, `[a, b]`, `app.use(handler)`
+          if (isValueUse(n, anc.at(-1)) && !seen.has(`${n.name}.`)) {
+            seen.add(`${n.name}.`);
+            refs.push({ local: n.name });
+          }
+          return;
+        }
         if (n.type !== "CallExpression" && n.type !== "NewExpression") return;
         const callee = unwrap(n.callee);
         let local: string | undefined;
@@ -704,6 +764,49 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
       });
     }
     return refs;
+  }
+
+  /**
+   * Whether an identifier is a value used where it stands — a function or component passed, stored or
+   * returned: a call's argument, in an array or object, a variable's or assignment's value, a
+   * condition's branch, a returned value, a JSX attribute or child.
+   */
+  function isValueUse(n: N, parent: N | undefined): boolean {
+    if (!parent) return false;
+    switch (parent.type) {
+      case "CallExpression":
+      case "NewExpression":
+        return parent.arguments?.includes(n);
+      case "ArrayExpression":
+      case "JSXExpressionContainer":
+        return true;
+      case "Property":
+        return parent.value === n;
+      case "VariableDeclarator":
+        return parent.init === n;
+      case "AssignmentExpression":
+        return parent.right === n;
+      case "ConditionalExpression":
+        return parent.consequent === n || parent.alternate === n;
+      case "LogicalExpression":
+      case "ReturnStatement":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** Every component tag (`<Foo>`, `<Lib.Foo>`) anywhere under `node`, nested functions included. */
+  function jsxRefsIn(node: N): RawRef[] {
+    const refs: RawRef[] = [];
+    if (!node) return refs;
+    walk(node, (n) => {
+      if (n.type !== "JSXOpeningElement") return;
+      const name = n.name;
+      if (name?.type === "JSXIdentifier" && /^[A-Z]/.test(name.name)) refs.push({ local: name.name });
+      else if (name?.type === "JSXMemberExpression" && name.object?.type === "JSXIdentifier") refs.push({ local: name.object.name, member: name.property.name });
+    });
+    return refs.filter((r, i) => refs.findIndex((o) => o.local === r.local && o.member === r.member) === i);
   }
 
   function calleeName(call: N): string | undefined {
@@ -781,8 +884,12 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     out.moduleCalls = moduleInvocations([...loose, ...exported]);
     if (!out.moduleCalls.length) delete out.moduleCalls;
   }
-  if (loose.length) {
-    const r = jsx.analyzeLoose(loose);
+  const looseJsx = [
+    ...loose,
+    ...program.body.filter((st: N) => st.type === "ExportNamedDeclaration" && st.declaration?.type === "VariableDeclaration").map((st: N) => st.declaration),
+  ];
+  if (looseJsx.length) {
+    const r = jsx.analyzeLoose(looseJsx, (n) => declarationNodes.has(n));
     if (r.tree.length) {
       out.moduleTree = r.tree;
       out.moduleRenders = r.renders;
