@@ -1,30 +1,31 @@
 import { Box, BrandMark, Button, EmptyState, Flex, Spinner, Text } from "@rae/design-system";
-import { IconPlus, IconScan } from "@rae/design-system/icons";
+import { IconFolderOpen, IconPlus } from "@rae/design-system/icons";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "./components/Canvas.tsx";
 import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
 import { FileTree } from "./components/FileTree.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
-import { scanFolder } from "./lib/scanJob.ts";
+import { read, registerProjectHost } from "./lib/projects.ts";
 import { Notice } from "./components/Notice.tsx";
 import { ScanProgress } from "./components/ScanProgress.tsx";
-import { SnapshotsModal } from "./components/SnapshotsModal.tsx";
+import { ProjectsModal } from "./components/ProjectsModal.tsx";
 import { DiffBar } from "./components/DiffBar.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
-import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
+import { fetchSnapshot, fetchSnapshotList, type SnapshotList } from "./lib/api.ts";
 import { fetchEditors } from "./lib/editor.ts";
 import { useExplorer } from "./store.ts";
 import { ImpactModal } from "./components/ImpactModal.tsx";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 
 const LAST_SNAPSHOT_KEY = "rae.lastSnapshot";
+/** The open project was read again once since the page loaded. */
+let startupRefreshDone = false;
 
 export function App() {
   const snapshot = useExplorer((s) => s.snapshot);
-  const snapshotName = useExplorer((s) => s.snapshotName);
   const visible = useExplorer((s) => s.visible);
   const { setSnapshot, setSearchOpen } = useExplorer.getState();
   const [list, setList] = useState<SnapshotList>();
@@ -34,38 +35,71 @@ export function App() {
   const [librariesOpen, setLibrariesOpen] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
 
+  // `quiet`: a background refresh swapping in the fresh snapshot (no loading screen over the diagram)
+  // the newest load wins: one that finishes after a later one started is dropped
+  const loadSeq = useRef(0);
   const load = useCallback(
-    async (file: string) => {
-      setLoading(true);
+    async (file: string, quiet = false) => {
+      const seq = ++loadSeq.current;
+      if (!quiet) setLoading(true);
       setError(undefined);
       try {
-        setSnapshot(await fetchSnapshot(file), file);
+        const snap = await fetchSnapshot(file);
+        if (seq !== loadSeq.current) return;
+        setSnapshot(snap, file);
         writeSetting(LAST_SNAPSHOT_KEY, file);
       } catch (e) {
-        setError((e as Error).message);
+        if (seq === loadSeq.current) setError((e as Error).message);
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
     [setSnapshot],
   );
 
   const refreshList = useCallback(
-    (loadFile?: string) =>
+    (loadFile?: string, quiet = false) =>
       fetchSnapshotList()
         .then((l) => {
           setList(l);
-          // The snapshot opened last time (and its stored diagram) comes back, else the newest.
+          // The project opened last time (what was last read of it, and its diagram), else the newest.
           const last = readSetting(LAST_SNAPSHOT_KEY, "") || null;
           const file = loadFile ?? (l.snapshots.some((x) => x.file === last) ? last! : l.snapshots[0]?.file);
-          if (file) void load(file);
+          if (file) void load(file, quiet);
+          return { l, file };
         })
-        .catch((e: Error) => setError(e.message)),
+        .catch((e: Error) => {
+          setError(e.message);
+          return undefined;
+        }),
     [load],
   );
 
+  // how lib/projects.ts lists and loads snapshots (opening a project: its cache, then a quiet refresh)
+  const listRef = useRef(list);
   useEffect(() => {
-    void refreshList();
+    listRef.current = list;
+  }, [list]);
+  useEffect(() => {
+    registerProjectHost({
+      list: () => listRef.current,
+      load: (file, quiet) => load(file, quiet),
+      relist: async (file, quiet) => {
+        if (file) await refreshList(file, quiet);
+        else setList(await fetchSnapshotList());
+      },
+    });
+  }, [load, refreshList]);
+
+  // On start, as an IDE does: the last project from its cache, then its view read again quietly —
+  // once per page (effects run twice in development: a second read would cancel the first).
+  useEffect(() => {
+    void refreshList().then((r) => {
+      const entry = r?.l.snapshots.find((s) => s.file === r.file);
+      if (startupRefreshDone || !entry?.rootDir || entry.diff) return;
+      startupRefreshDone = true;
+      void read(entry.rootDir, { latest: entry.commit?.ref }, true);
+    });
   }, [refreshList]);
   // which editors "Open in editor" can use (asked once)
   useEffect(() => {
@@ -104,19 +138,10 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [setSearchOpen]);
 
-  const onLoadFile = async (file: File) => {
-    try {
-      setSnapshot(await readSnapshotFile(file), file.name);
-      setError(undefined);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
   return (
     <ReactFlowProvider>
       <Flex direction="column" h="100vh" bg="shell.bg">
-        <Toolbar list={list} current={snapshotName} onPickSnapshot={load} onLoadFile={onLoadFile} onScan={() => setScanOpen(true)} onScanPath={(path) => void scanFolder(path, (file) => void refreshList(file))} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
+        <Toolbar list={list} onScan={() => setScanOpen(true)} onScanPath={(path) => void read(path, {})} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
         {snapshot?.diff && <DiffBar diff={snapshot.diff} />}
         {error && (
           <Box px="4" py="2" bg="red.subtle" color="red.fg" fontSize="sm">
@@ -138,10 +163,10 @@ export function App() {
                 <EmptyState
                   icon={<BrandMark size={72} tile />}
                   title="Explore a React or Next.js app"
-                  description="Scan a project folder to map its components, hooks, routes and how they connect. You can also run `bun run scan <path>` in a terminal, or load a snapshot file."
+                  description="Open a project folder to map its components, hooks, routes and how they connect."
                 >
                   <Button colorPalette="accent" size="sm" onClick={() => setScanOpen(true)}>
-                    <IconScan size={15} /> Scan a project
+                    <IconFolderOpen size={15} /> Open project
                   </Button>
                 </EmptyState>
               </Flex>
@@ -154,7 +179,7 @@ export function App() {
                       <EmptyState
                         icon={<IconPlus />}
                         title="Empty diagram"
-                        description={`${Object.keys(snapshot.nodes).length} scanned nodes. Add one to start exploring.`}
+                        description={`${Object.keys(snapshot.nodes).length} elements. Add one to start exploring.`}
                       >
                         <Button colorPalette="accent" size="sm" onClick={() => setSearchOpen(true)}>
                           <IconPlus size={15} /> Start exploration
@@ -175,7 +200,7 @@ export function App() {
       <LibrariesModal open={librariesOpen} onOpenChange={setLibrariesOpen} />
       <ImpactModal />
       <ScanModal open={scanOpen} onOpenChange={setScanOpen} onScanned={(file) => void refreshList(file)} />
-      <SnapshotsModal open={snapshotsOpen} onOpenChange={setSnapshotsOpen} list={list} current={snapshotName} onDeleted={(removed) => void afterDelete(removed)} />
+      <ProjectsModal open={snapshotsOpen} onOpenChange={setSnapshotsOpen} list={list} current={snapshot?.rootDir} onDeleted={(removed) => void afterDelete(removed)} />
       <ConfirmExpansion />
     </ReactFlowProvider>
   );

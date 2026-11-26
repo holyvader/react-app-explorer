@@ -29,6 +29,35 @@ export function branchOptions(branches: GitOverview["branches"], value: (name: s
   });
 }
 
+/** A row of a prefix group: the item, and its name without the group's prefix. */
+export interface GroupRow<T> {
+  item: T;
+  rest: string;
+}
+
+/**
+ * Items named by a branch (branches, pull requests by their branch) in groups by that branch's
+ * prefix: plain names first (`plain`), then `feat`, `fix`… alphabetically; then the remote ones the
+ * same way (`origin`, `origin/feat`…). Each row keeps the rest of the name (`login-page`); the full
+ * name is still what a search matches, so `feat/login` finds it. Within a group, the items' order.
+ */
+export function groupByPrefix<T>(items: readonly T[], nameOf: (t: T) => string | undefined, remoteOf: (t: T) => boolean, plain: (remote: boolean) => string): { label: string; rows: GroupRow<T>[] }[] {
+  const groups = new Map<string, { label: string; rank: string; rows: GroupRow<T>[] }>();
+  for (const item of items) {
+    const name = nameOf(item) ?? "";
+    const remote = remoteOf(item);
+    const lead = remote ? name.slice(0, name.indexOf("/") + 1) : "";
+    const prefix = branchPrefix(name, remote);
+    const label = prefix ? prefixGroup(prefix, lead) : plain(remote);
+    // local before remote; within each, plain names before prefixes, prefixes A to Z
+    const rank = `${remote ? 1 : 0}${prefix ? `1${prefix}` : "0"}`;
+    const g = groups.get(label) ?? { label, rank, rows: [] };
+    g.rows.push({ item, rest: name.slice(lead.length + (prefix?.length ?? 0)) || name });
+    groups.set(label, g);
+  }
+  return [...groups.values()].sort((a, b) => a.rank.localeCompare(b.rank));
+}
+
 /** A prefix group's label: `feat`, `origin/feat`. */
 export const prefixGroup = (prefix: string, remote = "") => `${remote}${prefix.replace(/\/$/, "")}`;
 

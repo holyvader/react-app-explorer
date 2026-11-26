@@ -22,6 +22,8 @@ import { KIND_META } from "../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../store.ts";
 import "./canvas.css";
 import { CanvasStatusBar } from "./canvas/CanvasChrome.tsx";
+import { ScriptsConsole } from "./scripts/ScriptsConsole.tsx";
+import { useScripts } from "../lib/scripts.ts";
 import { useCanvasEdges } from "./canvas/edges.ts";
 import { useCanvasNodes, useRelated } from "./canvas/nodes.ts";
 import { useCanvasKeys } from "./canvas/useCanvasKeys.ts";
@@ -132,13 +134,18 @@ export function Canvas() {
     if (!layoutToken) return;
     const { graph: g, layoutEffort, layoutMode } = useExplorer.getState();
     let live = true;
-    void layoutOffThread(g, null, layoutEffort, layoutMode).then((p) => {
-      if (!live) return;
-      applyLayout(g, p);
-      const s = useExplorer.getState();
-      // the view goes where the nodes are going, while they glide there (fitView would read where they start)
-      if (!s.focusId && !s.fitIds) whenReady(() => flow.getNodes().length >= p.length && fitPlacement(p));
-    });
+    void layoutOffThread(g, null, layoutEffort, layoutMode, "canvas")
+      .then((p) => {
+        // stale: the diagram changed meanwhile (a newer layout is on its way) — neither placed nor fitted
+        if (!live || useExplorer.getState().graph !== g) return;
+        applyLayout(g, p);
+        const s = useExplorer.getState();
+        // the view goes where the nodes are going, while they glide there (fitView would read where they start)
+        if (!s.focusId && !s.fitIds) whenReady(() => flow.getNodes().length >= p.length && fitPlacement(p));
+      })
+      .catch(() => {
+        /* superseded by a newer layout */
+      });
     return () => {
       live = false;
     };
@@ -204,6 +211,10 @@ export function Canvas() {
       () => void flow.setCenter(r.x + r.width / 2, r.y + r.height / 2, { zoom: Math.max(flow.getZoom(), 0.9), duration: 400 }),
     );
   }, [focusId, placed, flow, consumeFocus]);
+
+  // the open folder's package.json scripts (the status bar's Scripts, ⌘K's `>`)
+  const rootDir = snapshot?.rootDir;
+  useEffect(() => void useScripts.getState().load(rootDir), [rootDir]);
 
   const colorMode = useColorMode();
   const [minimap, setMinimap] = useMinimap();
@@ -323,6 +334,7 @@ export function Canvas() {
           }
         />
       </div>
+      <ScriptsConsole />
       <CanvasStatusBar shortcuts={SHORTCUTS} minimap={minimap} onMinimap={setMinimap} fitPadding={FIT_PADDING} />
     </div>
   );

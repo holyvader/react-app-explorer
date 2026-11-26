@@ -1,18 +1,16 @@
-import { ActionIconButton, Box, BrandMark, Button, ContextMenu, DIAGRAM_PALETTES, type DiagramPaletteId, Flex, Popover, Select, setColorMode, setDiagramPalette, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, type MenuEntry, useColorMode, useDiagramPalette, useTextSize } from "@rae/design-system";
-import { projectName } from "../lib/paths.ts";
-import { FolderSwitcher, when } from "./FolderSwitcher.tsx";
+import { ActionIconButton, Box, BrandMark, Button, DIAGRAM_PALETTES, type DiagramPaletteId, Flex, Popover, Select, Spinner, setColorMode, setDiagramPalette, setTextSize, Stack, SwitchField, Text, TEXT_SIZES, textPx, type TextSize, ToolGroup, Tooltip, useColorMode, useDiagramPalette, useTextSize } from "@rae/design-system";
+import { FolderSwitcher } from "./FolderSwitcher.tsx";
+import { GitControls } from "./git/GitControls.tsx";
 import {
-  IconChevronDown,
   IconClear,
-  IconHistory,
   IconLayout,
   IconLibrary,
   IconRedo,
-  IconScan,
+  IconFolderOpen,
   IconUndo,
   IconViewOptions,
 } from "@rae/design-system/icons";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
 import { useExplorer } from "../store.ts";
@@ -25,9 +23,6 @@ const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
 
 export interface ToolbarProps {
   list?: SnapshotList;
-  current?: string;
-  onPickSnapshot: (file: string) => void;
-  onLoadFile: (file: File) => void;
   onScan: () => void;
   /** Scans a folder or file right away with the remembered settings (Rescan, a pasted path). */
   onScanPath: (path: string) => void;
@@ -35,34 +30,14 @@ export interface ToolbarProps {
   onLibraries: () => void;
 }
 
-/** The app bar: mark, the folder switcher and its snapshot, history, view options and Scan. A diff adds the `DiffBar` under it. */
-export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onScanPath, onManageSnapshots, onLibraries }: ToolbarProps) {
-  const snapshot = useExplorer((s) => s.snapshot);
+/** The app bar: mark, the project switcher and git, history, view options and Open. A comparison adds the `DiffBar` under it. */
+export function Toolbar({ list, onScan, onScanPath, onManageSnapshots, onLibraries }: ToolbarProps) {
   const visible = useExplorer((s) => s.visible);
   const canUndo = useExplorer((s) => s.past.length > 0);
   const canRedo = useExplorer((s) => s.future.length > 0);
   const { relayout, undo, redo } = useExplorer.getState();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-
-  const snapshots = list?.snapshots ?? [];
-  const currentEntry = snapshots.find((s) => s.file === current);
-  // the open folder's snapshots, newest first: the menu of the date beside the switcher
-  const own = snapshot?.rootDir ? snapshots.filter((s) => s.rootDir === snapshot.rootDir).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : [];
-  const entries: MenuEntry[] = [
-    { type: "label", label: `Snapshots of ${snapshot ? projectName(snapshot.rootDir) : "this folder"}` },
-    ...own.map(
-      (s): MenuEntry => ({
-        type: "item",
-        value: s.file,
-        label: s.diff ? `${when(s.createdAt)} · diff ${s.diff.base.split(" ")[0]} ← ${s.diff.head.split(" ")[0]}` : when(s.createdAt),
-        hint: s.file === current ? "open" : s.diff ? `${s.diff.changes} changes` : s.nodeCount ? `${s.nodeCount} nodes` : undefined,
-        onSelect: () => onPickSnapshot(s.file),
-      }),
-    ),
-    { type: "separator" },
-    { type: "item", value: "manage", label: "Manage all snapshots…", icon: <IconHistory size={14} />, onSelect: onManageSnapshots },
-  ];
+  // a quiet refresh in the background: a small note instead of the progress card
+  const updating = useExplorer((s) => !!s.scan?.quiet && (s.scan.phase === "structure" || s.scan.phase === "types"));
 
   return (
     <Flex align="center" gap="2.5" pl="3.5" pr="3" h="44px" flexShrink={0} minW="0" bg="panel.bg" borderBottomWidth="1px" borderColor="border">
@@ -74,50 +49,18 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onS
       </Flex>
       <Divider />
 
-      {/* the folder (switch, rescan, open another), then which of its snapshots is open; a diff's controls are on the Git bar under this one */}
+      {/* the project (switch, refresh, open another), then git (branch, compare); a comparison's controls are on the Git bar under this one */}
       <Flex flex="1" minW="0" align="center" gap="1.5">
-        <FolderSwitcher list={list} onPickSnapshot={onPickSnapshot} onScanPath={onScanPath} onBrowse={onScan} onLoadFile={() => fileRef.current?.click()} />
-        {currentEntry && own.length > 0 && (
-          <Tooltip content={`${own.length} snapshot${own.length === 1 ? "" : "s"} of this folder`}>
-            <Flex
-              as="button"
-              align="center"
-              gap="1.5"
-              h="30px"
-              px="2"
-              rounded="l2"
-              flexShrink={0}
-              cursor="pointer"
-              fontFamily="mono"
-              fontSize={textPx(11.5)}
-              color="fg.muted"
-              whiteSpace="nowrap"
-              _hover={{ bg: "bg.muted" }}
-              aria-haspopup="menu"
-              aria-label={`Snapshot from ${when(currentEntry.createdAt)}: choose another`}
-              onClick={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                setMenuAt({ x: r.left, y: r.bottom + 4 });
-              }}
-            >
-              <IconHistory size={13} /> {when(currentEntry.createdAt)}
-              <IconChevronDown size={13} />
+        <FolderSwitcher list={list} onScanPath={onScanPath} onBrowse={onScan} onManage={onManageSnapshots} />
+        <GitControls />
+        {updating && (
+          <Tooltip content="Reading the latest changes in the background: they show when it's done">
+            <Flex align="center" gap="1.5" px="1.5" flexShrink={0} fontSize={textPx(12)} color="fg.subtle" role="status">
+              <Spinner size="xs" /> Updating…
             </Flex>
           </Tooltip>
         )}
       </Flex>
-      <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
-      <input
-        ref={fileRef}
-        type="file"
-        accept="application/json,.json"
-        hidden
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onLoadFile(f);
-          e.target.value = "";
-        }}
-      />
 
       <ToolGroup>
         <BarIcon label="Undo (⌘Z)" icon={<IconUndo />} onClick={undo} disabled={!canUndo} />
@@ -126,8 +69,8 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onS
         <ViewOptions onLibraries={onLibraries} />
       </ToolGroup>
       <Divider />
-      <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize={textPx(12.5)} fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Scan a project…">
-        <IconScan size={14} /> Scan
+      <Button size="xs" h="30px" px="11px" variant="outline" borderColor="border.emphasized" bg="bg.subtle" _hover={{ bg: "border" }} fontSize={textPx(12.5)} fontWeight="medium" gap="7px" rounded="l2" onClick={onScan} aria-label="Open project…">
+        <IconFolderOpen size={14} /> Open
       </Button>
     </Flex>
   );

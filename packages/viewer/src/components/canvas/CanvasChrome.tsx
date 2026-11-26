@@ -5,8 +5,9 @@ import { useState } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../../graph/relations.ts";
 import { goBack, goForward, useSelectionHistory } from "../../lib/selectionHistory.ts";
 import { useExplorer } from "../../store.ts";
+import { ScriptsChips } from "../scripts/ScriptsChips.tsx";
 
-/* The canvas's own controls, in the status bar docked under it: relation filters, Back / Forward, zoom, minimap, shortcuts. */
+/* The canvas's own controls, in the status bar docked under it: relation filters, package.json scripts, Back / Forward, zoom, minimap, shortcuts. */
 
 /** Each relation filter's swatch: the same colour as its edges, a shape as the second cue. */
 const GROUP_LOOK: Record<EdgeGroup, Pick<ToggleItem, "color" | "shape">> = {
@@ -44,6 +45,8 @@ export function CanvasStatusBar({ shortcuts, minimap, onMinimap, fitPadding }: S
   return (
     <Flex role="toolbar" aria-label="Canvas" align="center" gap="1" h="36px" px="2" flexShrink={0} bg="panel.bg" borderTopWidth="1px" borderColor="border">
       <RelationFilters />
+      <Divider />
+      <ScriptsChips />
       <Box flex="1" />
       <BarIcon label="Back: the previously selected element (⌘ [)" icon={<IconBack />} onClick={goBack} disabled={!canBack} />
       <BarIcon label="Forward: the next selected element (⌘ ])" icon={<IconForward />} onClick={goForward} disabled={!canForward} />

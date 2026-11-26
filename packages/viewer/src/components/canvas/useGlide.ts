@@ -78,8 +78,16 @@ export function useGlide<N extends Node>(setNodes: Dispatch<SetStateAction<N[]>>
     const t0 = performance.now();
     let frame = 0;
     const step = (now: number) => {
-      // a drag started: the nodes stay where they are, the drag takes over
-      if (stopped.current) return setGlide(null);
+      // a drag started: the gliding nodes go straight to where they were going (none left halfway), the drag takes over
+      if (stopped.current) {
+        setNodes((ns) =>
+          ns.map((n) => {
+            const t = glide.to.get(n.id);
+            return t ? { ...n, position: { x: t.x, y: t.y }, width: t.width, height: t.height } : n;
+          }),
+        );
+        return setGlide(null);
+      }
       const k = Math.min(1, (now - t0) / GLIDE_MS);
       const e = ease(k);
       setNodes((ns) =>

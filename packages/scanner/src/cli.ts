@@ -24,6 +24,7 @@ const { values, positionals } = parseArgs({
     "request-info": { type: "string" },
     worktree: { type: "boolean", default: false },
     latest: { type: "boolean", default: false },
+    branch: { type: "string" },
     "against-tip": { type: "boolean", default: false },
     workers: { type: "string" },
     stats: { type: "boolean", default: false },
@@ -50,6 +51,7 @@ Options:
   --request <ref>     diff mode: a pull / merge request (refs/pull/N/head, refs/merge-requests/N/head), fetched from origin
   --worktree          diff mode: compare the checkout with its uncommitted changes (untracked files too)
   --latest            scan the newest commit of origin's default branch (fetched; the checkout isn't touched)
+  --branch <name>     the same for this branch (origin's, else the local one)
   --against-tip       diff mode: compare with the base's tip instead of the merge-base
   --workers <n>       max parser workers (default: cpus - 1)
   --stats             print phase timings
@@ -78,7 +80,7 @@ if (values.events) {
       mergeSingleExport: !values["no-merge"],
       maxWorkers: values.workers ? Number(values.workers) : undefined,
       signal: controller.signal,
-      latest: values.latest,
+      latest: values.branch ?? values.latest,
       diff:
         values.base || values.head || values.request || values.worktree
           ? (parseDiffRequest({
@@ -99,7 +101,7 @@ if (values.events) {
 const warnings: string[] = [];
 const diffMode = !!(values.base || values.head || values.request || values.worktree);
 // --latest: the newest commit of origin's default branch, exported (the checkout isn't touched)
-const latest = values.latest && !diffMode ? await latestTree(input, { onProgress: (m) => console.error(m) }) : undefined;
+const latest = (values.latest || values.branch) && !diffMode ? await latestTree(input, { branch: values.branch, onProgress: (m) => console.error(m) }) : undefined;
 const scanned = await (diffMode ? (o: Parameters<typeof scan>[1]) => scanDiff(input, { ...o, base: values.base, head: values.head, request: values.request, worktree: values.worktree, against: values["against-tip"] ? "base" : "merge-base" }) : (o: Parameters<typeof scan>[1]) => scan(latest?.path ?? input, o))({
   tsconfig: values.tsconfig,
   include: values.include,

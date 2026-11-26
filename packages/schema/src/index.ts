@@ -380,8 +380,12 @@ export interface SnapshotIndexEntry {
   nodeCount: number;
   edgeCount: number;
   durationMs: number;
-  /** Diff snapshots: what they compare (refs and short shas), and how many nodes changed. */
-  diff?: { base: string; head: string; changes: number };
+  /** Which view of the project it is: the folder (working tree), a branch's newest commit, or a comparison. Absent on entries written before it was recorded. */
+  kind?: "worktree" | "branch" | "diff";
+  /** Diff snapshots: what they compare (refs and short shas), how many nodes changed, and how. */
+  diff?: { base: string; head: string; changes: number; worktree?: boolean; against?: "merge-base" | "base" };
+  /** Read from a branch's commit rather than the folder (the latest from origin): which. */
+  commit?: { ref: string; sha: string };
 }
 
 /**
@@ -487,3 +491,33 @@ export interface GitRequestList {
   /** Auto fell back to git: why (not installed, not logged in, the CLI failed). */
   fallback?: string;
 }
+
+// ---- package.json scripts (scanner/src/scripts.ts, /api/scripts) ----------------------------------
+
+export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
+
+export interface ScriptsInfo {
+  /** The folder holding the package.json. */
+  dir: string;
+  name?: string;
+  manager: PackageManager;
+  /** Script name → its command, in package.json's order. */
+  scripts: Record<string, string>;
+}
+
+export interface RunSummary {
+  id: string;
+  dir: string;
+  script: string;
+  command: string;
+  /** `stopped`: ended by Stop (or the app quitting), not by itself. */
+  status: "running" | "exited" | "failed" | "stopped";
+  exitCode: number | null;
+  startedAt: number;
+  endedAt: number | null;
+  /** A local address it printed (a dev server): the first http://localhost:… / 127.0.0.1 one. */
+  url: string | null;
+}
+
+/** A piece of output; `seq` counts pieces from the run's start (old ones are dropped past `LOG_LIMIT`). */
+export type RunEvent = { type: "out"; seq: number; text: string; stream: "stdout" | "stderr" } | { type: "exit"; run: RunSummary };

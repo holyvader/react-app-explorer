@@ -20,7 +20,8 @@ export interface ScanJobOptions extends Omit<ScanOptions, "onCount"> {
   /** Diff mode: scan the folder at two commits and compare them (see scanDiff). */
   diff?: ScanDiffRequest;
   /** Scan the newest commit of origin's default branch (fetched and exported; the checkout isn't touched). Ignored in diff mode. */
-  latest?: boolean;
+  /** Read the newest commit of a branch instead of the folder: origin's default one (`true`), or this one. */
+  latest?: boolean | string;
 }
 
 /** What a UI asks to compare: a base ref, and a head ref or a pull / merge request's ref. */
@@ -86,7 +87,7 @@ export async function runScanJob(input: string, opts: ScanJobOptions, emit: (e: 
       emit({ type: "done" });
       return;
     }
-    const latest = opts.latest ? await latestTree(input, { onProgress: opts.onProgress, signal: opts.signal }) : undefined;
+    const latest = opts.latest ? await latestTree(input, { branch: typeof opts.latest === "string" ? opts.latest : undefined, onProgress: opts.onProgress, signal: opts.signal }) : undefined;
     const asProject = (s: Snapshot) => (latest ? latest.finish(s) : s);
     const structure = await scanStructure(latest?.path ?? input, scanOpts);
     emit({ type: "progress", stage: "graph" });

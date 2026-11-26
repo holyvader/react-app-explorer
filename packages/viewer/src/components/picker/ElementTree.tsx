@@ -1,5 +1,5 @@
 import { IconChevronDown, IconChevronRight, IconClose, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
-import { type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { buildTree, changesTree, openKeys, type TreeNode, visibleRows } from "../../graph/tree.ts";
 import { CHANGE_LETTER, CHANGE_WORD, changeOf } from "../../lib/diff.ts";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
@@ -35,6 +35,11 @@ export interface ElementTreeProps {
   changesOnly?: boolean;
   /** Shown when there are no rows at all (without a filter). */
   emptyText?: string;
+  /**
+   * Commands instead of elements when the filter starts with `prefix` (⌘K's `>`: package.json
+   * scripts): `render` draws them for the text after it, Enter in the box does `run`.
+   */
+  commands?: { prefix: string; render: (term: string) => ReactNode; run: (term: string) => boolean };
 }
 
 const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: "–", partial: "–" };
@@ -43,7 +48,7 @@ const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: 
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
  * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
-export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText }: ElementTreeProps) {
+export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText, commands }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const filter = useRelationFilter({ allGroups: true });
   const diffOverlay = useExplorer((s) => s.diffOverlay);
@@ -56,6 +61,8 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
     return dirs;
   }, [snapshot, diffShown]);
   const [query, setQuery] = useState("");
+  // the text after the commands' prefix, when the filter starts with it
+  const command = commands && query.startsWith(commands.prefix) ? query.slice(commands.prefix.length).trim() : null;
   // the filter box hidden: its text no longer filters
   if (hideFilter && query) setQuery("");
   const list = useRef<HTMLDivElement>(null);
@@ -143,6 +150,13 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           aria-label={mode === "browse" ? "Filter files" : "Filter elements"}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
+            if (command !== null) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                list.current?.querySelector<HTMLElement>("button")?.focus();
+              } else if (e.key === "Enter" && commands!.run(command)) e.preventDefault();
+              return;
+            }
             if (e.key === "ArrowDown") {
               e.preventDefault();
               focusRow(0);
@@ -172,7 +186,12 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           </button>
         )}
       </div>
-      <div className="rae-tree" role="tree" aria-label={mode === "browse" ? "Files" : "Scanned elements"} ref={list}>
+      {command !== null ? (
+        <div className="rae-tree" ref={list}>
+          {commands!.render(command)}
+        </div>
+      ) : (
+      <div className="rae-tree" role="tree" aria-label={mode === "browse" ? "Files" : "Project elements"} ref={list}>
         {rows.length === 0 && <div className="rae-tree__empty">{!query && emptyText ? emptyText : "Nothing matches."}</div>}
         {rows.map((r, i) => {
           const n = r.node;
@@ -264,6 +283,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
         })}
         {truncated && <div className="rae-tree__more">More elements: refine the filter.</div>}
       </div>
+      )}
     </>
   );
 }

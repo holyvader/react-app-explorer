@@ -161,6 +161,18 @@ export async function scan(input: string, opts: ScanOptions = {}): Promise<Snaps
 }
 
 /** `main 1a2b3c4`; a ref that is a sha (or its start) just as the short sha. */
+/** What an index entry records of a snapshot's view: which one it is, its branch or comparison. */
+export function indexViewOf(snapshot: Pick<Snapshot, "diff" | "commit">): Pick<SnapshotIndexEntry, "kind" | "diff" | "commit"> {
+  const d = snapshot.diff;
+  if (d)
+    return {
+      kind: "diff",
+      diff: { base: refLabel(d.base.ref, d.compared), head: refLabel(d.head.ref, d.head.sha), changes: Object.keys(d.nodes).length, ...(d.head.worktree ? { worktree: true } : {}), against: d.against },
+    };
+  if (snapshot.commit) return { kind: "branch", commit: { ref: snapshot.commit.ref, sha: snapshot.commit.sha } };
+  return { kind: "worktree" };
+}
+
 const refLabel = (ref: string, sha: string) => (sha.startsWith(ref) ? sha.slice(0, 7) : `${ref} ${sha.slice(0, 7)}`);
 
 /** Writes `<out>/<timestamp>.json` and updates `<out>/index.json` (same file → replaced). Returns the snapshot path. */
@@ -187,9 +199,7 @@ export function writeSnapshot(snapshot: Snapshot, outDir: string): string {
     nodeCount: Object.keys(snapshot.nodes).length,
     edgeCount: snapshot.edges.length,
     durationMs: snapshot.stats.durationMs,
-    ...(snapshot.diff
-      ? { diff: { base: refLabel(snapshot.diff.base.ref, snapshot.diff.compared), head: refLabel(snapshot.diff.head.ref, snapshot.diff.head.sha), changes: Object.keys(snapshot.diff.nodes).length } }
-      : {}),
+    ...indexViewOf(snapshot),
   });
   writeFileSync(indexPath, JSON.stringify(index, null, 2));
   return path;

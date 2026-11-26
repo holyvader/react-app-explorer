@@ -1,7 +1,7 @@
 import type { Snapshot } from "@rae/schema";
 import { fetchSnapshot, runScan, type ScanSettings, serverLogFile } from "./api.ts";
 import { type ScanState, useExplorer } from "../store.ts";
-import { readSetting, writeSetting } from "./settings.ts";
+import { readSetting } from "./settings.ts";
 
 /** The last folder or file scanned from the UI, and whether single-export files are merged (remembered). */
 export const SCAN_PATH_KEY = "rae.scanPath";
@@ -16,7 +16,7 @@ let running: AbortController | undefined;
 /** A failure always says why — and, in the desktop app, where the details are. */
 const failed = (why: string | undefined): Partial<ScanState> => ({
   phase: "failed",
-  message: `${why?.trim() || "The scan failed for an unknown reason."}${serverLogFile ? `\nDetails: ${serverLogFile}` : ""}`,
+  message: `${why?.trim() || "Opening the project failed for an unknown reason."}${serverLogFile ? `\nDetails: ${serverLogFile}` : ""}`,
 });
 
 const patch = (p: Partial<ScanState>) => {
@@ -30,45 +30,65 @@ const patch = (p: Partial<ScanState>) => {
  * (`onStructure`); the type pass continues and its typed snapshot replaces the loaded one in place.
  * Lives outside components so it survives dialogs closing; `cancelScan` stops it.
  */
-export async function startScan(path: string, settings: ScanSettings, onStructure: (file: string) => void): Promise<void> {
+/** How a read ended: the snapshot it wrote, and whether it is complete (typed when types were asked for, the type pass not failed). */
+export interface ScanOutcome {
+  file?: string;
+  ok: boolean;
+}
+
+export async function startScan(path: string, settings: ScanSettings, onStructure: (file: string) => void, opts: { quiet?: boolean } = {}): Promise<ScanOutcome> {
   clearTimeout(clearTimer);
   running?.abort();
   const controller = new AbortController();
   running = controller;
-  useExplorer.getState().setScan({ path, phase: "structure", stage: "discover", withTypes: settings.types, startedAt: Date.now() });
+  // once another read starts, this one no longer owns the progress state, nor loads anything
+  const mine = () => running === controller;
+  const set = (p: Partial<ScanState>) => mine() && patch(p);
+  const quiet = !!opts.quiet;
+  let file: string | undefined;
+  let ok = false;
+  useExplorer.getState().setScan({ path, phase: "structure", stage: "discover", withTypes: settings.types, startedAt: Date.now(), quiet });
   try {
     await runScan(
       path,
       settings,
       (e) => {
+        if (!mine()) return;
         switch (e.type) {
           case "progress":
-            if (e.stage === "parse" && e.total) patch({ stage: "parse", parse: { done: e.done ?? 0, total: e.total } });
+            if (e.stage === "parse" && e.total) set({ stage: "parse", parse: { done: e.done ?? 0, total: e.total } });
             else if (e.stage === "types" && e.total !== undefined) {
               const prev = useExplorer.getState().scan?.types;
               const loading = e.loading ?? prev?.loading ?? false;
-              patch({ phase: "types", stage: "types", types: { done: e.done ?? 0, total: e.total, loading, since: prev?.since ?? Date.now() } });
-            } else patch({ stage: e.stage });
+              set({ phase: "types", stage: "types", types: { done: e.done ?? 0, total: e.total, loading, since: prev?.since ?? Date.now() } });
+            } else set({ stage: e.stage });
             break;
           case "result": {
+            file = e.file;
+            if (!e.typesPending) ok = true;
             const parse = useExplorer.getState().scan?.parse;
-            patch({ file: e.file, stage: e.typesPending ? "types" : undefined, phase: e.typesPending ? "types" : "typed", parse: parse && { done: parse.total, total: parse.total } });
-            // a compare scan: its summary opens once the snapshot is on screen
-            if (settings.diff) useExplorer.getState().openImpactFor(e.file);
-            onStructure(e.file);
+            set({ file: e.file, stage: e.typesPending ? "types" : undefined, phase: e.typesPending ? "types" : "typed", parse: parse && { done: parse.total, total: parse.total } });
+            // a compare scan: its summary opens once the snapshot is on screen (not on a quiet refresh)
+            if (settings.diff && !quiet) useExplorer.getState().openImpactFor(e.file);
+            // quiet: the cached copy (typed) stays until the fresh one is typed too
+            if (!quiet || !e.typesPending) onStructure(e.file);
             if (!e.typesPending) finish();
             break;
           }
           case "types":
-            patch({ phase: "typed", typed: e.typed, message: e.typed ? undefined : (e.warnings.at(-1) ?? "The type pass failed") });
-            void fetchSnapshot(e.file).then((snap) => applyTyped(e.file, snap));
+            ok = e.typed;
+            set({ phase: "typed", typed: e.typed, message: e.typed ? undefined : (e.warnings.at(-1) ?? "The type pass failed") });
+            // quiet: only a typed result replaces the typed copy on screen
+            if (quiet) {
+              if (e.typed) onStructure(e.file);
+            } else void fetchSnapshot(e.file).then((snap) => applyTyped(e.file, snap));
             finish(e.typed ? DONE_LINGER_MS : 8000);
             break;
           case "error":
-            patch(failed(e.message));
+            set(failed(e.message));
             break;
           case "cancelled":
-            patch({ phase: "cancelled" });
+            set({ phase: "cancelled" });
             finish(DONE_LINGER_MS);
             break;
           case "done":
@@ -79,27 +99,27 @@ export async function startScan(path: string, settings: ScanSettings, onStructur
     );
     // the stream ended without an outcome (server stopped mid-scan)
     const s = useExplorer.getState().scan;
-    if (s && (s.phase === "structure" || s.phase === "types")) patch(failed("The connection to the scanner closed before the scan finished."));
+    if (mine() && s && (s.phase === "structure" || s.phase === "types")) {
+      ok = false;
+      set(failed("The connection to the app closed before the project was read."));
+    }
   } catch (e) {
+    ok = false;
+    if (!mine()) return { file, ok }; // superseded: the new read owns the state now
     if (controller.signal.aborted) {
-      patch({ phase: "cancelled" });
+      set({ phase: "cancelled" });
       finish(DONE_LINGER_MS);
-    } else patch(failed((e as Error).message));
+    } else set(failed((e as Error).message));
   } finally {
     if (running === controller) running = undefined;
   }
+  return { file, ok };
 }
 
 /**
  * Stops the running scan: the request is aborted, and the server stops parsing or kills the type
  * checker. A structure snapshot already loaded stays (without types).
  */
-/** Scans a folder with the remembered settings (types on): the folder switcher's Rescan and pasted paths. */
-export function scanFolder(path: string, onStructure: (file: string) => void): Promise<void> {
-  writeSetting(SCAN_PATH_KEY, path);
-  return startScan(path, { types: true, merge: readMergeSetting() }, onStructure);
-}
-
 export function cancelScan() {
   running?.abort();
 }

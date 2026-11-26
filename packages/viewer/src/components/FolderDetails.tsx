@@ -75,7 +75,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
               {name}
             </Text>
             <Text fontSize="xs" color="fg.muted" mt="0.5">
-              Folder · {c.files.length} {c.files.length === 1 ? "file" : "files"} · {total} scanned {total === 1 ? "element" : "elements"}
+              Folder · {c.files.length} {c.files.length === 1 ? "file" : "files"} · {total} {total === 1 ? "element" : "elements"}
             </Text>
           </Box>
           <ActionIconButton label="Minimize the details" icon={<IconDetailsClose />} size="sm" onClick={() => useExplorer.getState().setDetailsOpen(false)} />

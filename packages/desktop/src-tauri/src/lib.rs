@@ -115,7 +115,12 @@ pub fn run() {
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
-            if let Some(child) = handle.state::<Sidecar>().0.lock().unwrap().take() {
+            if let Some(mut child) = handle.state::<Sidecar>().0.lock().unwrap().take() {
+                // first ask it to stop the package.json scripts it runs (their own process groups,
+                // which a kill of the sidecar alone would leave running), then kill it
+                if child.write(b"quit\n").is_ok() {
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                }
                 let _ = child.kill();
             }
         }

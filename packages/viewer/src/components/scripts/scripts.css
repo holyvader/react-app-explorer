@@ -1,0 +1,72 @@
+/* The Scripts console (ScriptsConsole.tsx): a sheet over the canvas, just above its status bar. */
+.rae-scripts {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 44px;
+  height: min(340px, calc(100% - 120px));
+  z-index: 20;
+  display: flex;
+  border: 1px solid var(--chakra-colors-border-emphasized);
+  border-radius: 10px;
+  background: var(--chakra-colors-panel-bg);
+  box-shadow: var(--chakra-shadows-popover);
+  overflow: hidden;
+  outline: none;
+  animation: rae-scripts-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes rae-scripts-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rae-scripts { animation: none; }
+}
+.rae-scripts__list {
+  width: 230px;
+  flex-shrink: 0;
+  padding: 8px 6px;
+  border-right: 1px solid var(--chakra-colors-border);
+  overflow-y: auto;
+}
+.rae-scripts__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+  padding-right: 4px;
+}
+.rae-scripts__row:hover { background: var(--chakra-colors-bg-muted); }
+.rae-scripts__row[data-on] { background: var(--chakra-colors-bg-emphasized); }
+.rae-scripts__row:not(:hover):not([data-on]) > button:last-child { visibility: hidden; }
+.rae-scripts__row > button:last-child:focus-visible { visibility: visible; }
+.rae-scripts__pick {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding-left: 10px;
+  cursor: pointer;
+  font-size: calc(13px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg);
+}
+.rae-scripts__pick:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: -1px; border-radius: 6px; }
+.rae-scripts__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rae-scripts__port { font-family: var(--chakra-fonts-mono); font-size: calc(11px * var(--rae-text-scale, 1)); color: var(--chakra-colors-diff-added-fg); }
+.rae-scripts__log {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 14px;
+  overflow: auto;
+  font-family: var(--chakra-fonts-mono);
+  font-size: calc(12px * var(--rae-text-scale, 1));
+  line-height: 1.6;
+  color: var(--chakra-colors-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}

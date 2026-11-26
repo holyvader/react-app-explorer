@@ -7,6 +7,8 @@ import { folderExpansion, folderPath } from "../../graph/folder.ts";
 import { isFiltered } from "../../graph/packages.ts";
 import { useExplorer, useRelationFilter } from "../../store.ts";
 import { ElementTree, type TickState } from "./ElementTree.tsx";
+import { matchingScripts, useScripts } from "../../lib/scripts.ts";
+import { ScriptCommands } from "../scripts/ScriptCommands.tsx";
 
 /**
  * What the diagram draws, chosen in one place: the scanned
@@ -93,7 +95,25 @@ export function ExplorationPicker() {
         </div>
       }
     >
-      <ElementTree mode="toggle" onActivate={onActivate} tickOf={tickOf} inputRef={input} />
+      <ElementTree
+        mode="toggle"
+        onActivate={onActivate}
+        tickOf={tickOf}
+        inputRef={input}
+        placeholder="Filter by name or path… (> runs a script)"
+        commands={{
+          prefix: ">",
+          render: (term) => <ScriptCommands term={term} onRun={() => setSearchOpen(false)} />,
+          run: (term) => {
+            const { info, run } = useScripts.getState();
+            const first = info && matchingScripts(term, info.scripts)[0];
+            if (!first) return false;
+            void run(first);
+            setSearchOpen(false);
+            return true;
+          },
+        }}
+      />
       <div className="rae-picker-foot">
         <span style={{ flex: 1 }}>Click once to draw, again for all inside a file or folder, once more to take them off.</span>
         <output>

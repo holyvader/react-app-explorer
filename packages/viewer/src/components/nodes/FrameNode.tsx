@@ -145,7 +145,7 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
             {title}
           </div>
           {route && <div className="rae-sub">{routeCaption(route)}</div>}
-          {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} scanned elements</div>}
+          {folder && data.scannedCount !== undefined && <div className="rae-sub">{data.scannedCount} elements</div>}
         </div>
         {detailed && route?.rendering && (
           <span className="rae-chip" data-render={renderingKey(route.rendering)} title={route.rendering.reasons.join("\n")}>

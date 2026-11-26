@@ -439,7 +439,7 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 
 /* ---- canvas chrome: the status bar under the canvas (CanvasStatusBar), the minimap -------- */
 /* the canvas fills what the status bar leaves */
-.rae-canvas-shell { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.rae-canvas-shell { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; }
 .rae-canvas-shell > .rae-canvas { flex: 1; min-height: 0; height: auto; }
 .rae-canvas .react-flow__panel { margin: 12px; }
 .rae-canvas .react-flow__minimap {

@@ -1,0 +1,93 @@
+/* Git in the top bar (GitControls.tsx): the branch chip, the Compare button and its panel's rows. */
+.rae-git-chip,
+.rae-git-compare {
+  all: unset;
+  box-sizing: border-box;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-radius: var(--chakra-radii-l2);
+  font-size: calc(12.5px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rae-git-chip:hover,
+.rae-git-compare:hover { background: var(--chakra-colors-bg-muted); }
+.rae-git-chip:focus-visible,
+.rae-git-compare:focus-visible,
+.rae-git-pr:focus-visible,
+.rae-git-branch:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
+.rae-git-chip > svg { color: var(--chakra-colors-fg-subtle); flex-shrink: 0; }
+.rae-git-chip__name { font-family: var(--chakra-fonts-mono); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.rae-git-chip__tag { font-size: calc(11px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); padding: 0 5px; border-radius: 4px; background: var(--chakra-colors-bg-muted); }
+.rae-git-chip__dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--chakra-colors-diff-changed-solid); flex-shrink: 0; }
+.rae-git-compare { border: 1px solid var(--chakra-colors-border-emphasized); padding: 0 10px; }
+.rae-git-compare > svg { color: var(--chakra-colors-fg-subtle); }
+/* comparing now: the Git bar's colour */
+.rae-git-compare[data-on] { background: var(--chakra-colors-diff-changed-subtle); border-color: var(--chakra-colors-diff-changed-solid); color: var(--chakra-colors-diff-changed-fg); }
+.rae-git-compare[data-on] > svg { color: inherit; }
+
+.rae-git-pr {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: calc(13px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg);
+}
+.rae-git-pr:hover { background: var(--chakra-colors-bg-muted); }
+.rae-git-pr__num { font-family: var(--chakra-fonts-mono); color: var(--chakra-colors-diff-added-fg); }
+.rae-git-pr__title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rae-git-pr__meta { grid-column: 2; font-size: calc(11.5px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rae-git-branch {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: calc(12.5px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg);
+}
+.rae-git-branch:hover { background: var(--chakra-colors-bg-muted); }
+.rae-git-branch[aria-current] { background: var(--chakra-colors-selection-rowBg); }
+.rae-git-branch__tag { margin-left: 8px; font-family: var(--chakra-fonts-body); font-size: calc(10.5px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); padding: 0 5px; border-radius: 4px; background: var(--chakra-colors-bg-muted); }
+.rae-git-branch__name { font-family: var(--chakra-fonts-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rae-git-branch__note { font-size: calc(11.5px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rae-git-stop {
+  all: unset;
+  cursor: pointer;
+  font-size: calc(12px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg);
+  padding: 4px 10px;
+  border-radius: var(--chakra-radii-l2);
+  border: 1px solid var(--chakra-colors-border-emphasized);
+}
+.rae-git-stop:hover { background: var(--chakra-colors-bg-muted); }
+
+/* a prefix group's header (`origin/feat`), stuck to the top of its list while scrolling */
+.rae-git-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px 4px;
+  font-family: var(--chakra-fonts-mono);
+  font-size: calc(11px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg-subtle);
+  background: var(--chakra-colors-bg-panel);
+}
+.rae-git-author { font-weight: 600; color: var(--chakra-colors-fg); }

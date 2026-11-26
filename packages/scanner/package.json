@@ -17,6 +17,8 @@
     "./scan": "./src/scan.ts",
     "./job": "./src/job.ts",
     "./git": "./src/gitApi.ts",
-    "./editors": "./src/editors.ts"
+    "./editors": "./src/editors.ts",
+    "./scripts": "./src/scripts.ts",
+    "./snapshot-index": "./src/snapshotIndex.ts"
   }
 }

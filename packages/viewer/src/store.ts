@@ -61,6 +61,11 @@ export interface ScanState {
   /** Errors (phase "failed") or the reason types are missing (phase "typed" with typed: false). */
   message?: string;
   typed?: boolean;
+  /**
+   * A refresh in the background (a cached copy is on screen): no progress card while it runs, the
+   * fresh snapshot loaded only once it is complete (types included). Failures still show.
+   */
+  quiet?: boolean;
 }
 
 /** The diff view: nothing marked, the overlay (colours, ghosts), or the overlay plus the selection's changed lines. */

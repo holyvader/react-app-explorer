@@ -125,7 +125,7 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
           <div className="rae-card__text">
             <div className="rae-name">{element.name}</div>
             <div className="rae-card__caption">
-              folder<span className="rae-card__extra">{data.scannedCount !== undefined ? ` · ${data.scannedCount} scanned elements` : ""}</span>
+              folder<span className="rae-card__extra">{data.scannedCount !== undefined ? ` · ${data.scannedCount} elements` : ""}</span>
             </div>
           </div>
         </div>

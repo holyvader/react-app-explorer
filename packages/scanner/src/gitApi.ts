@@ -3,9 +3,9 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
 import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
 import type { ScanDiffRequest } from "./job.ts";
-import { git, GIT_MISSING, gitPath, listBranches, listRequests, repoOf } from "./git.ts";
+import { git, GIT_MISSING, gitPath, isBranchName, listBranches, listRequests, repoOf } from "./git.ts";
 
-export { gitPath };
+export { gitPath, isBranchName };
 
 /*
  * What the viewer's scan dialog asks about git (GET /api/git, /api/git/requests), shared by the
@@ -25,6 +25,45 @@ export async function gitOverview(path: string): Promise<GitOverview> {
   } catch (e) {
     return { repo: null, branches: [], error: (e as Error).message };
   }
+}
+
+/** A git command's failure in one line (its last line of output usually says why). */
+const why = (e: unknown) => ((e as Error).message ?? String(e)).trim().split("\n").filter(Boolean).pop() ?? "git failed";
+
+/**
+ * Fetch (as an IDE's "Fetch"): origin's branches and their newest commits, branches gone from origin
+ * pruned. The checkout isn't touched. Then the repo as it is now.
+ */
+export async function gitFetch(path: string): Promise<GitOverview> {
+  const info = await repoOf(folderOf(path)).catch(() => null);
+  if (!info) return { repo: null, branches: [], error: "Not in a git repository" };
+  if (!info.remote) return { ...(await gitOverview(path)), error: "No origin remote to fetch from" };
+  try {
+    await git(info.root, ["fetch", "--prune", "--quiet", info.remote.name], undefined, 180_000);
+  } catch (e) {
+    return { ...(await gitOverview(path)), error: `Couldn't fetch: ${why(e)}` };
+  }
+  return gitOverview(path);
+}
+
+/**
+ * Update the project (as an IDE's "Update Project", the safe way): pull the checked-out branch from
+ * its upstream, fast-forward only. Refused with uncommitted changes, a detached HEAD or a branch that
+ * has diverged — nothing is merged or rebased here; the user does that in their own tools.
+ */
+export async function gitPull(path: string): Promise<GitOverview> {
+  const now = await gitOverview(path);
+  const repo = now.repo;
+  if (!repo) return { ...now, error: now.error ?? "Not in a git repository" };
+  if (!repo.branch) return { ...now, error: "Not on a branch (detached HEAD): nothing to update" };
+  if (repo.dirty) return { ...now, error: "There are uncommitted changes: commit or stash them first" };
+  try {
+    await git(repo.root, ["pull", "--ff-only", "--quiet"], undefined, 180_000);
+  } catch (e) {
+    const msg = why(e);
+    return { ...(await gitOverview(path)), error: /not possible to fast-forward|diverg/i.test(msg) ? `${repo.branch} has diverged from its upstream: merge or rebase it in your own tools` : `Couldn't update: ${msg}` };
+  }
+  return gitOverview(path);
 }
 
 /** Tool statuses, briefly remembered (`auth status` may ask the host): per tool and host. */
@@ -173,7 +212,7 @@ function readWorktree(root: string, file: string): { text: string; truncated?: b
   const realRoot = realpathSync(root);
   const real = realpathSync(abs);
   const rel = relative(realRoot, real);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the scanned folder" };
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) return { error: "Outside the project folder" };
   const text = readFileSync(real, "utf8");
   return text.length > SOURCE_MAX ? { text: text.slice(0, SOURCE_MAX), truncated: true } : { text };
 }

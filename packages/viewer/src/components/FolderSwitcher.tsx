@@ -1,5 +1,6 @@
 import { Box, Button, chakra, Flex, Kbd, Popover, Text, textPx } from "@rae/design-system";
-import { IconFolder, IconFolderOpen, IconRescan, IconSearch, IconUpload } from "@rae/design-system/icons";
+import { IconFolder, IconFolderOpen, IconRescan, IconSearch, IconSettings } from "@rae/design-system/icons";
+import { diffRequestOf, openView, read } from "../lib/projects.ts";
 import type { Framework } from "@rae/schema";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { SnapshotList } from "../lib/api.ts";
@@ -7,26 +8,19 @@ import { expandHome, looksLikePath, scannedFolders } from "../lib/folders.ts";
 import { projectName, shortPath } from "../lib/paths.ts";
 import { useExplorer } from "../store.ts";
 
-const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
 /** "today 14:02", else "3 Nov 14:02": a snapshot's moment, short. */
-export const when = (iso: string) => {
-  const d = new Date(iso);
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `${isToday(d) ? "today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" })} ${time}`;
-};
 
 const FRAMEWORK: Record<Framework, string> = { "next-app": "Next.js", "next-pages": "Next.js", react: "React" };
 const MOD = typeof navigator !== "undefined" && /Mac|iP(hone|ad)/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
 export interface FolderSwitcherProps {
   list?: SnapshotList;
-  /** Opens a snapshot (a recent folder's newest). */
-  onPickSnapshot: (file: string) => void;
-  /** Scans a folder or file right away, with the remembered settings. */
+  /** Opens a folder or file right away, with the remembered settings (a pasted path). */
   onScanPath: (path: string) => void;
-  /** The scan dialog: browse for a folder, choose settings, compare branches. */
+  /** The open dialog: browse for a folder. */
   onBrowse: () => void;
-  onLoadFile: () => void;
+  /** Manage projects: remove the ones no longer needed. */
+  onManage: () => void;
 }
 
 type Item = { key: string; run: () => void };
@@ -34,9 +28,9 @@ type Item = { key: string; run: () => void };
 /**
  * The folder being explored, in the middle of the bar, like an editor's project switcher. Opens
  * (click or ⌘O) a search over the recently scanned folders: pick one to open its newest snapshot,
- * paste a path and press Enter to scan it, rescan the current one, browse, or load a snapshot file.
+ * paste a path and press Enter to scan it, rescan the current one, browse, or manage projects.
  */
-export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onLoadFile }: FolderSwitcherProps) {
+export function FolderSwitcher({ list, onScanPath, onBrowse, onManage }: FolderSwitcherProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -74,9 +68,10 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
   // everything ↑ / ↓ / Enter reach, in order
   const items: Item[] = [
     ...(asPath ? [{ key: "path", run: () => onScanPath(asPath) }] : []),
-    ...recent.map((f) => ({ key: f.dir, run: () => onPickSnapshot(f.latest.file) })),
+    // a recent project: what was last read of it at once, refreshed behind it
+    ...recent.map((f) => ({ key: f.dir, run: () => void openView(f.dir, { kind: "worktree" }) })),
     { key: "browse", run: onBrowse },
-    { key: "load", run: onLoadFile },
+    { key: "manage", run: onManage },
   ];
   const activeKey = items[Math.min(active, items.length - 1)]?.key;
   const run = (key: string) => {
@@ -93,9 +88,9 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
       align="center"
       gap="2"
       h="30px"
-      w="full"
-      maxW="460px"
+      maxW="320px"
       minW="0"
+      flexShrink={1}
       pl="10px"
       pr="6px"
       rounded="l2"
@@ -114,16 +109,13 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
       </Box>
       {name ? (
         <>
-          <Text as="span" fontWeight="semibold" whiteSpace="nowrap">
+          <Text as="span" fontWeight="semibold" truncate minW="0">
             {name}
-          </Text>
-          <Text as="span" flex="1" minW="0" truncate textAlign="start" fontFamily="mono" fontSize={textPx(11.5)} color="fg.subtle">
-            {shortPath(currentDir!)}
           </Text>
         </>
       ) : (
         <Text as="span" flex="1" minW="0" truncate textAlign="start" color="fg.subtle">
-          {snapshot ? "Snapshot file (no folder)" : "Open a folder to explore…"}
+          Open a folder to explore…
         </Text>
       )}
       <Kbd size="sm" flexShrink={0}>
@@ -167,7 +159,7 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
       <Box overflowY="auto" maxH="min(60vh, 520px)" fontSize={textPx(12.5)}>
         {asPath && (
           <Section>
-            <Row k="path" active={activeKey} onRun={run} onHover={hover} icon={<IconRescan size={14} />} name={`Scan ${projectName(asPath)}`} path={asPath} meta={<Kbd size="sm">Enter</Kbd>} />
+            <Row k="path" active={activeKey} onRun={run} onHover={hover} icon={<IconRescan size={14} />} name={`Open ${projectName(asPath)}`} path={asPath} meta={<Kbd size="sm">Enter</Kbd>} />
           </Section>
         )}
         {currentDir && !asPath && !q && (
@@ -183,10 +175,12 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
                 flexShrink={0}
                 onClick={() => {
                   close();
-                  onScanPath(currentDir);
+                  // the view on screen, read again in the background: a comparison compared again
+                  if (snapshot?.diff) void read(currentDir, { diff: diffRequestOf(snapshot.diff) }, true);
+                  else void read(currentDir, { latest: snapshot?.commit?.ref }, true);
                 }}
               >
-                <IconRescan size={13} /> Rescan
+                <IconRescan size={13} /> Refresh
               </Button>
             </Flex>
           </Section>
@@ -204,25 +198,18 @@ export function FolderSwitcher({ list, onPickSnapshot, onScanPath, onBrowse, onL
                 name={projectName(f.dir)}
                 path={shortPath(f.dir)}
                 framework={f.framework}
-                meta={
-                  <>
-                    {when(f.latest.createdAt)}
-                    <br />
-                    {f.count} snapshot{f.count === 1 ? "" : "s"}
-                  </>
-                }
               />
             ))}
           </Section>
         )}
         {q && !asPath && recent.length === 0 && (
           <Text px="4" py="3" color="fg.subtle">
-            No recent folder matches “{query.trim()}”. Paste a full path to scan a new one.
+            No recent folder matches “{query.trim()}”. Paste a full path to open another.
           </Text>
         )}
         <Section>
-          <Row k="browse" active={activeKey} onRun={run} onHover={hover} icon={<IconFolderOpen size={14} />} name="Browse for a folder…" hint="choose scan settings, compare branches" />
-          <Row k="load" active={activeKey} onRun={run} onHover={hover} icon={<IconUpload size={14} />} name="Load a snapshot file…" />
+          <Row k="browse" active={activeKey} onRun={run} onHover={hover} icon={<IconFolderOpen size={14} />} name="Browse for a folder…" />
+          <Row k="manage" active={activeKey} onRun={run} onHover={hover} icon={<IconSettings size={14} />} name="Manage projects…" hint="remove the ones you no longer need" />
         </Section>
       </Box>
     </Popover>

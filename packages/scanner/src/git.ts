@@ -170,12 +170,37 @@ export async function fetchRequest(root: string, request: Pick<RequestRef, "ref"
  * Fetches a branch's newest commit from `remote` (into FETCH_HEAD only: no local branch or ref is
  * created or moved) and returns its sha.
  */
+/**
+ * Whether a branch name is one git allows (`git check-ref-format --branch`'s rules): never an option
+ * (`-…`), no whitespace, control characters, `~ ^ : ? * [ \`, `..`, `@{`, `//`, no part starting
+ * with `.` or ending with `.lock`, not ending with `/` or `.`. Non-ASCII letters and `+ @ #` are fine.
+ */
+export function isBranchName(name: string): boolean {
+  if (!name || name.length > 250 || name.startsWith("-") || name === "@") return false;
+  for (const ch of name) {
+    const c = ch.charCodeAt(0);
+    if (c <= 0x20 || c === 0x7f || "~^:?*[\\".includes(ch)) return false;
+  }
+  if (name.includes("..") || name.includes("@{") || name.includes("//") || name.endsWith("/") || name.endsWith(".")) return false;
+  return name.split("/").every((part) => part && !part.startsWith(".") && !part.endsWith(".lock"));
+}
+
+let fetchCount = 0;
+/**
+ * Fetches a branch's newest commit from `remote`; its sha. Into a ref of its own (removed after),
+ * not FETCH_HEAD: a fetch running at the same time (Fetch, a pull request) rewrites that.
+ */
 export async function fetchBranch(root: string, branch: string, remote = "origin"): Promise<string> {
-  if (!branch || branch.startsWith("-") || !/^[\w./-]+$/.test(branch)) throw new GitError(`Not a branch name: ${branch}`);
-  await git(root, ["fetch", "--quiet", "--no-tags", remote, `refs/heads/${branch}`], undefined, 60_000).catch((e: Error) => {
-    throw new GitError(`Couldn't fetch ${branch} from ${remote}: ${e.message.trim().split("\n").pop()}`);
-  });
-  return (await git(root, ["rev-parse", "FETCH_HEAD^{commit}"])).trim();
+  if (!isBranchName(branch)) throw new GitError(`Not a branch name: ${branch}`);
+  const into = `refs/rae/fetch/${process.pid}-${++fetchCount}`;
+  try {
+    await git(root, ["fetch", "--quiet", "--no-tags", remote, `+refs/heads/${branch}:${into}`], undefined, 60_000).catch((e: Error) => {
+      throw new GitError(`Couldn't fetch ${branch} from ${remote}: ${e.message.trim().split("\n").pop()}`);
+    });
+    return (await git(root, ["rev-parse", `${into}^{commit}`])).trim();
+  } finally {
+    await git(root, ["update-ref", "-d", into]).catch(() => {});
+  }
 }
 
 export type FileStatus = "added" | "modified" | "deleted" | "renamed";

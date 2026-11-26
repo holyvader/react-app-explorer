@@ -41,14 +41,6 @@ export async function fetchSnapshot(file: string): Promise<Snapshot> {
   return normalizeSnapshot(await res.json());
 }
 
-export async function readSnapshotFile(file: File): Promise<Snapshot> {
-  const data = JSON.parse(await file.text());
-  if (!data || typeof data !== "object" || !data.nodes || !Array.isArray(data.edges)) {
-    throw new Error("Not a scanner snapshot (missing nodes/edges)");
-  }
-  return normalizeSnapshot(data as Snapshot);
-}
-
 export interface FsListing {
   path: string;
   parent: string | null;
@@ -75,8 +67,8 @@ export interface ScanSettings {
   merge: boolean;
   /** Diff mode: compare `head` (a branch / sha) or `request` (a PR / MR ref) with `base`. */
   diff?: { base?: string; head?: string; request?: string; requestInfo?: { title?: string; author?: string; url?: string }; worktree?: boolean; against?: "merge-base" | "base" };
-  /** Scan the newest commit of origin's default branch (fetched first; the checkout isn't touched). Not with `diff`. */
-  latest?: boolean;
+  /** Read the newest commit of a branch (fetched first; the checkout isn't touched): origin's default one (`true`), or this one. Not with `diff`. */
+  latest?: boolean | string;
 }
 
 /** The git repo a folder is in, with its branches. */
@@ -104,6 +96,14 @@ export async function fetchGitTools(path: string, refresh = false): Promise<GitT
 }
 
 /** Pull / merge requests on origin, from `source` (a network call): git's refs, or the host's CLI. */
+/** Fetch (git fetch --prune) or Update project (pull, fast-forward only): the repo after it, `error` when it didn't. */
+export async function gitAction(action: "fetch" | "pull", path: string): Promise<GitOverview> {
+  const res = await fetch(`/api/git/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? `git ${action} failed`);
+  return data;
+}
+
 export async function fetchGitRequests(path: string, source: RequestSource = "auto"): Promise<GitRequestList> {
   const res = await fetch(`/api/git/requests?path=${encodeURIComponent(path)}&source=${source}`);
   const data = await res.json();
@@ -112,15 +112,23 @@ export async function fetchGitRequests(path: string, source: RequestSource = "au
 }
 
 export async function runScan(path: string, { types, merge, diff, latest }: ScanSettings, onEvent: (e: ScanEvent) => void, signal?: AbortSignal): Promise<void> {
-  const res = await fetch("/api/scan", {
-    signal,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, types, merge, diff, latest: latest && !diff ? true : undefined }),
-  });
+  const ask = () =>
+    fetch("/api/scan", {
+      signal,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, types, merge, diff, latest: latest && !diff ? latest : undefined }),
+    });
+  let res = await ask();
+  // busy: a read just cancelled is still winding down on the server (it stops the type checker, a
+  // copy being exported…): asked again for a few seconds before giving up
+  for (let tries = 0; res.status === 409 && tries < 30 && !signal?.aborted; tries++) {
+    await new Promise((ok) => setTimeout(ok, 200));
+    res = await ask();
+  }
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? `Scan failed (${res.status})`);
+    throw new Error(data.error ?? `Couldn't open the project (${res.status})`);
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = "";

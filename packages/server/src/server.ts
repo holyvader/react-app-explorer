@@ -11,9 +11,12 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { gitOverview, gitPath, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
+import { gitFetch, gitOverview, gitPath, gitPull, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
 import { installedEditors } from "@rae/scanner/editors";
+import { followRun, listRuns, listScripts, runScript, stopAllRuns, stopRun, type RunEvent } from "@rae/scanner/scripts";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
+import { upgradeIndex } from "@rae/scanner/snapshot-index";
+import { isBranchName } from "@rae/scanner/git";
 
 const { values } = parseArgs({
   options: {
@@ -105,7 +108,7 @@ function listIndex() {
   const indexPath = join(snapshotsDir, "index.json");
   if (existsSync(indexPath)) {
     try {
-      return JSON.parse(readFileSync(indexPath, "utf8"));
+      return upgradeIndex(snapshotsDir, JSON.parse(readFileSync(indexPath, "utf8")));
     } catch {
       /* fall back to listing */
     }
@@ -171,7 +174,7 @@ async function api(req: Request, url: URL): Promise<Response> {
       return json({ error: "Invalid JSON body" }, 400);
     }
     const files = (body.files ?? []).filter((f) => typeof f === "string");
-    if (scanning?.file && files.map((f) => basename(f)).includes(scanning.file)) return json({ error: "That snapshot is still being scanned: cancel the scan first" }, 409);
+    if (scanning?.file && files.map((f) => basename(f)).includes(scanning.file)) return json({ error: "That snapshot is still being written: cancel the opening first" }, 409);
     const removed = deleteSnapshots(files);
     log(`deleted ${removed.length} snapshot(s): ${removed.join(", ")}`);
     return json({ removed });
@@ -238,13 +241,27 @@ async function api(req: Request, url: URL): Promise<Response> {
     return json({ ok: true });
   }
   if (path.startsWith("/api/snapshots/")) {
-    const file = basename(decodeURIComponent(path.slice("/api/snapshots/".length)));
+    let file: string;
+    try {
+      file = basename(decodeURIComponent(path.slice("/api/snapshots/".length)));
+    } catch {
+      return json({ error: "Bad snapshot name" }, 400);
+    }
     const full = join(snapshotsDir, file);
     if (!file.endsWith(".json") || !existsSync(full)) return json({ error: "not found" }, 404);
     return new Response(Bun.file(full), { headers: { "Content-Type": "application/json" } });
   }
 
   // git, for diff scans: the repo a folder is in and its branches; open pull / merge requests (network)
+  // Fetch / Update project (git fetch --prune; pull --ff-only of the checked-out branch)
+  if (path === "/api/git/fetch" || path === "/api/git/pull") {
+    if (req.method !== "POST") return json({ error: "POST only" }, 405);
+    if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
+    const body = (await req.json().catch(() => ({}))) as { path?: unknown };
+    if (typeof body.path !== "string" || !body.path) return json({ error: "path is required" }, 400);
+    log(`git ${path.endsWith("fetch") ? "fetch" : "pull"}: ${body.path}`);
+    return json(path.endsWith("fetch") ? await gitFetch(resolve(body.path)) : await gitPull(resolve(body.path)));
+  }
   if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools" || path === "/api/git/source") {
     const q = url.searchParams.get("path");
     if (!q) return json({ error: "path is required" }, 400);
@@ -258,6 +275,62 @@ async function api(req: Request, url: URL): Promise<Response> {
       return json(await gitTools(resolve(q)));
     }
     return json(await gitRequests(resolve(q), (url.searchParams.get("source") ?? "auto") as Parameters<typeof gitRequests>[1]));
+  }
+
+  // package.json scripts: list, run by name, stop, follow the output (NDJSON). Same as the Vite plugin.
+  if (path === "/api/scripts") {
+    const q = url.searchParams.get("path");
+    if (!q) return json({ error: "path is required" }, 400);
+    const info = listScripts(resolve(q));
+    return json({ ...info, runs: "error" in info ? [] : listRuns(info.dir) }, "error" in info ? 404 : 200);
+  }
+  if (path === "/api/scripts/run" || path === "/api/scripts/stop") {
+    if (req.method !== "POST") return json({ error: "POST only" }, 405);
+    if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
+    let body: { path?: unknown; script?: unknown; id?: unknown };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
+    const r =
+      path === "/api/scripts/run"
+        ? typeof body.path === "string" && typeof body.script === "string"
+          ? await runScript(resolve(body.path), body.script)
+          : { error: "path and script are required" }
+        : typeof body.id === "string"
+          ? stopRun(body.id)
+          : { error: "id is required" };
+    if (!("error" in r)) log(`script ${path.endsWith("run") ? "run" : "stop"}: ${r.script} in ${r.dir}`);
+    return json(r, "error" in r ? 400 : 200);
+  }
+  if (path === "/api/scripts/log") {
+    const id = url.searchParams.get("id") ?? "";
+    const from = Number(url.searchParams.get("from") ?? 0) || 0;
+    const enc = new TextEncoder();
+    let stop: (() => void) | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const send = (e: RunEvent) => {
+          try {
+            controller.enqueue(enc.encode(JSON.stringify(e) + "\n"));
+            if (e.type === "exit") controller.close();
+          } catch {
+            stop?.();
+          }
+        };
+        stop = followRun(id, from, send);
+        if (!stop) {
+          controller.enqueue(enc.encode(JSON.stringify({ type: "missing" }) + "\n"));
+          controller.close();
+        }
+      },
+      cancel() {
+        stop?.();
+      },
+    });
+    req.signal.addEventListener("abort", () => stop?.());
+    return new Response(stream, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" } });
   }
 
   if (path === "/api/fs") {
@@ -274,7 +347,7 @@ async function api(req: Request, url: URL): Promise<Response> {
   if (path === "/api/scan") {
     if (req.method !== "POST") return json({ error: "POST only" }, 405);
     if (!(req.headers.get("content-type") ?? "").startsWith("application/json")) return json({ error: "Content-Type must be application/json" }, 415);
-    if (scanning) return json({ error: "A scan is already running: cancel it first" }, 409);
+    if (scanning) return json({ error: "A project is already opening: cancel it first" }, 409);
     let body: { path?: string; types?: boolean; merge?: boolean; diff?: unknown; latest?: unknown };
     let diff: ReturnType<typeof parseDiffRequest>;
     try {
@@ -285,6 +358,8 @@ async function api(req: Request, url: URL): Promise<Response> {
     }
     const target = body.path ? resolve(body.path) : "";
     if (!target || !existsSync(target)) return json({ error: `Path not found: ${target || "(empty)"}` }, 400);
+    // a branch to read: one git allows, else refused (never quietly the working tree instead)
+    if (typeof body.latest === "string" && !isBranchName(body.latest.replace(/^origin\//, ""))) return json({ error: `Not a branch name: ${body.latest}` }, 400);
     const job: ScanJob = { abort: new AbortController() };
     scanning = job;
     // NDJSON stream of ScanEvents: progress, the structure result, then types in the background.
@@ -311,7 +386,7 @@ async function api(req: Request, url: URL): Promise<Response> {
             types: body.types !== false,
             mergeSingleExport: body.merge !== false,
             diff,
-            latest: body.latest === true && !diff,
+            latest: diff ? false : body.latest === true || (typeof body.latest === "string" ? body.latest : false),
             signal: job.abort.signal,
             onWarn: (m) => log(`warn: ${m}`),
             onProgress: (m) => log(`scan: ${m}`),
@@ -353,4 +428,12 @@ const server = Bun.serve({
 });
 
 log(`listening on 127.0.0.1:${server.port}`);
+
+// The app asks to quit on stdin before it kills this process (a kill alone would leave the
+// package.json scripts running, in their own process groups); a closed stdin means the same.
+process.stdin.on("data", (d) => {
+  // a short grace for the scripts to stop, then they're killed (the app waits 400 ms in all)
+  if (String(d).includes("quit")) void stopAllRuns(150).then(() => process.exit(0));
+});
+process.stdin.on("end", () => void stopAllRuns(150));
 console.log(`RAE_SERVER_URL=http://127.0.0.1:${server.port}`);
