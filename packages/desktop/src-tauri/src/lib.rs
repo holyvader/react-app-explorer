@@ -3,7 +3,10 @@
 //! to the sidecar over HTTP like it does to Vite in development — no Tauri IPC is exposed to it.
 
 use std::sync::Mutex;
-use tauri::{Manager, RunEvent, Url};
+use tauri::{
+    menu::{Menu, MenuItem, Submenu},
+    Manager, RunEvent, Url,
+};
 use tauri_plugin_shell::{process::{CommandChild, CommandEvent}, ShellExt};
 
 /// The running sidecar, killed when the app exits.
@@ -41,6 +44,19 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Sidecar(Mutex::new(None)))
         .setup(|app| {
+            // the default menus plus Develop → Web Inspector (⌥⌘I): the `devtools` feature keeps the
+            // inspector in release builds, for checking how WebKit renders the diagram (e.g. Layers)
+            let menu = Menu::default(app.handle())?;
+            let inspector = MenuItem::with_id(app, "web-inspector", "Web Inspector", true, Some("Alt+CmdOrCtrl+I"))?;
+            menu.append(&Submenu::with_items(app, "Develop", true, &[&inspector])?)?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|handle, event| {
+                if event.id() == "web-inspector" {
+                    if let Some(window) = handle.get_webview_window("main") {
+                        window.open_devtools();
+                    }
+                }
+            });
             // TypeScript 7's native binary ships as a resource folder, with the lib.*.d.ts files it needs.
             let tsgo = app.path().resource_dir()?.join("tsgo").join(format!("tsc{}", std::env::consts::EXE_SUFFIX));
             let snapshots = app.path().app_data_dir()?.join("snapshots");
