@@ -73,6 +73,10 @@ const SHORTCUTS: Shortcut[] = [
 /** Fitting keeps clear of the canvas chrome: the relation filters on top, the controls and minimap below. */
 const FIT_PADDING = { top: "48px", bottom: "48px", left: "48px", right: "48px" } as const;
 const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 350 } as const;
+/** How far inside the canvas edge revealed elements must be to count as in view (screen px). */
+const REVEAL_MARGIN = 48;
+/** Revealing zooms out to at most this share of the current zoom to keep the current view; beyond it, it goes to them. */
+const REVEAL_MIN_SCALE = 0.5;
 
 /**
  * Runs a viewport change once React Flow knows the nodes: with hundreds of new nodes its
@@ -115,6 +119,37 @@ export function Canvas() {
       const bounds = { x, y, width: Math.max(...top.map((p) => p.x + p.width)) - x, height: Math.max(...top.map((p) => p.y + p.height)) - y };
       const { width, height, minZoom } = flowStore.getState();
       void flow.setViewport(getViewportForBounds(bounds, width, height, minZoom, FIT.maxZoom, FIT_PADDING), { duration: Math.max(FIT.duration, GLIDE_MS) });
+      return true;
+    },
+    [flow, flowStore],
+  );
+  /**
+   * Brings placed elements into view with the least change: nothing when they are already in view;
+   * otherwise it zooms out just enough to show them beside what is in view now (never zooming in),
+   * or, when they are too far for that, goes to them. Reads where they are going (`placed`), not
+   * where they are drawn while gliding there.
+   */
+  const reveal = useCallback(
+    (placing: readonly PlacedElement[], ids: readonly string[]) => {
+      const rects = ids.map((id) => absoluteRect(placing, id)).filter((r) => !!r);
+      if (!rects.length) return false;
+      const x = Math.min(...rects.map((r) => r.x));
+      const y = Math.min(...rects.map((r) => r.y));
+      const bounds = { x, y, width: Math.max(...rects.map((r) => r.x + r.width)) - x, height: Math.max(...rects.map((r) => r.y + r.height)) - y };
+      const { width, height, minZoom, transform } = flowStore.getState();
+      const [tx, ty, zoom] = transform;
+      const pad = REVEAL_MARGIN / zoom;
+      const view = { x: -tx / zoom + pad, y: -ty / zoom + pad, width: width / zoom - 2 * pad, height: height / zoom - 2 * pad };
+      const inView =
+        bounds.x >= view.x && bounds.y >= view.y && bounds.x + bounds.width <= view.x + view.width && bounds.y + bounds.height <= view.y + view.height;
+      if (inView) return true;
+      const ux = Math.min(view.x, bounds.x);
+      const uy = Math.min(view.y, bounds.y);
+      const union = { x: ux, y: uy, width: Math.max(view.x + view.width, bounds.x + bounds.width) - ux, height: Math.max(view.y + view.height, bounds.y + bounds.height) - uy };
+      let next = getViewportForBounds(union, width, height, minZoom, zoom, FIT_PADDING);
+      // so far away that keeping the current view would shrink everything: go to them instead
+      if (next.zoom < zoom * REVEAL_MIN_SCALE) next = getViewportForBounds(bounds, width, height, minZoom, Math.max(zoom, FIT.maxZoom), FIT_PADDING);
+      void flow.setViewport(next, { duration: Math.max(FIT.duration, GLIDE_MS) });
       return true;
     },
     [flow, flowStore],
@@ -198,8 +233,8 @@ export function Canvas() {
     const drawn = fitIds.filter((id) => placed.some((p) => p.element.id === id));
     if (!drawn.length) return;
     consumeFocus();
-    whenReady(() => drawn.every((id) => flow.getNode(id)) && flow.fitView({ ...FIT, nodes: drawn.map((id) => ({ id })) }));
-  }, [fitIds, focusId, placed, flow, consumeFocus]);
+    whenReady(() => drawn.every((id) => flow.getNode(id)) && reveal(placed, drawn));
+  }, [fitIds, focusId, placed, flow, consumeFocus, reveal]);
 
   // Center on a newly added node once it is placed.
   useEffect(() => {

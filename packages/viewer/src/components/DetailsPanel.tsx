@@ -1,7 +1,7 @@
 import type { GraphNode } from "@rae/schema";
 import { ActionIconButton, BoundaryChip, Box, Button, Code, CodeChip, CodeToken, Eyebrow, Flex, HStack, KindChip, KindTile, Panel, PanelBar, PanelHeader, Stack, TagChip, Text, textPx, Wrap } from "@rae/design-system";
 import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconInvokes, IconOpen, IconPlus, IconRenders, IconRenderTree, IconRouteChain } from "@rae/design-system/icons";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { childEdges, downKinds, INVOKES, parentEdges } from "../graph/relations.ts";
 import { CHANGE_WORD } from "../lib/diff.ts";
 import { canOpenEditor, EDITORS, editorUrl, openInEditor } from "../lib/editor.ts";
@@ -12,6 +12,7 @@ import { DetailsStrip } from "./DetailsStrip.tsx";
 import { FolderDetails } from "./FolderDetails.tsx";
 import { routeOf } from "../graph/drawn.ts";
 import { RenderTree } from "./RenderTree.tsx";
+import { countElements } from "../lib/renderTree.ts";
 import { SourceCode } from "./Code.tsx";
 import { TypeText } from "./TypeText.tsx";
 import { Section } from "./Section.tsx";
@@ -23,6 +24,7 @@ import { NodeChip, RelationList } from "./details/Relations.tsx";
 import { DiffLines, DiffView } from "./details/Diff.tsx";
 import { boundaryOf } from "../lib/boundary.ts";
 import { displayName, indexFolderOf } from "../lib/displayName.ts";
+import { contextsProvided, contextsRead, contextUses } from "../lib/contexts.ts";
 
 /**
  * Details of the selected element. Shares its visual language with the canvas and the node
@@ -69,6 +71,18 @@ export function DetailsPanel() {
       .filter((h) => h.targetId && snapshot?.nodes[h.targetId]?.kind === "hook" && h.targetId !== node.id)
       .reduce((m, h) => m.set(h.targetId!, (m.get(h.targetId!) ?? 0) + 1), new Map<string, number>()),
   ].map(([id, count]) => ({ id, count }));
+  // React's and libraries' hooks: their names once, as a quiet line under the project's own
+  const otherHooks = [
+    ...new Set(
+      (node.hooksUsed ?? [])
+        .filter((h) => !(h.targetId && snapshot?.nodes[h.targetId]?.kind === "hook"))
+        .map((h) => h.hook.replace(/^React\./, "")),
+    ),
+  ];
+  // React contexts: read (directly or through its hooks), and provided (a component's <X.Provider>)
+  const reads = contextsRead(snapshot, node);
+  const provides = node.kind === "component" ? contextsProvided(node) : [];
+  const contexts = reads.length + provides.length ? contextUses(snapshot) : undefined;
   const open = node.absPath && hasEditor ? editorUrl(editor, node.absPath, node.loc?.line, node.loc?.col) : undefined;
   const change = diffOverlay ? snapshot?.diff?.nodes[node.id] : undefined;
   const kindWord = node.route ? routeCaption(node.route) : (node.kind === "type" && node.typeKind && node.typeKind !== "type" ? node.typeKind : meta.label).toLowerCase();
@@ -82,6 +96,23 @@ export function DetailsPanel() {
     (e) => e.kind !== "declares" && e.kind !== "renders" && e.kind !== "routeFile" && !(e.kind === "usesHook" && customHookIds.has(e.to)),
   );
   const usedBy = relations.parents.filter((e) => e.kind !== "declares" && !(e.kind === "runsBefore" && node.route?.middleware?.id === e.from));
+  // An exported declaration nothing imports, renders or calls: probably dead code. Unfiltered (the
+  // relation filter hides edges, not uses); framework entry points (pages, layouts, routes) aside.
+  const unusedExport =
+    !!node.exported && !node.nextRole && !node.route && node.kind !== "module" && node.kind !== "external" && !(index.in.get(node.id) ?? []).some((e) => e.kind !== "declares");
+  const fnLike = node.kind === "hook" || node.kind === "function" || node.kind === "serverAction";
+  const hasProps = !!(node.props?.length || node.signature?.params.length || node.typeParams?.length);
+  // what it doesn't have, said once at the end rather than as sections saying "None"
+  const nothing = [
+    node.kind === "component" && !hasProps && "no props",
+    fnLike && node.signature && !node.signature.params.length && "no inputs",
+    (node.kind === "component" || fnLike) && !reads.length && !provides.length && "no context",
+    (node.kind === "component" || node.kind === "hook") && !customHooks.length && !otherHooks.length && "no hooks",
+    // Uses leaves out what Renders and Hooks list: with those, it's only "nothing else"
+    !uses.length && (renders.length || customHooks.length ? "uses nothing else" : "uses nothing"),
+    !usedBy.length && !unusedExport && "used by nothing shown",
+    snapshot.diff && !change && "not changed in this diff",
+  ].filter((t): t is string => !!t);
   const declared = node.kind === "module" ? (index.out.get(node.id) ?? []).filter((e) => e.kind === "declares").map((e) => snapshot.nodes[e.to]).filter((d): d is GraphNode => !!d) : [];
 
   return (
@@ -121,11 +152,6 @@ export function DetailsPanel() {
           {indexFolderOf(node) && <TagChip color="fg.muted" mono>index</TagChip>}
           {boundaryOf(node) && <BoundaryChip boundary={boundaryOf(node)!} />}
           {node.nextRole && <KindChip kind="route">{node.nextRole}</KindChip>}
-          {change && (
-            <TagChip color={`diff.${change}.solid`}>
-              {CHANGE_WORD[change]}
-            </TagChip>
-          )}
           {tags.map((t) => (
             <CodeChip key={t} fontFamily="body">
               {t}
@@ -167,6 +193,8 @@ export function DetailsPanel() {
             </Button>
           )}
         </Flex>
+
+        {change && snapshot.diff && <DiffBanner node={node} change={change} />}
 
         {node.missing && (
           <Text fontSize="xs" color="fg.muted" bg="bg.subtle" rounded="l2" px="2.5" py="2">
@@ -222,12 +250,6 @@ export function DetailsPanel() {
         </Flex>
       </PanelHeader>
 
-      {change && snapshot?.diff && (
-        <Section title="In this diff" defaultOpen={false} aside={<DiffLines key={node.id} node={node} />}>
-          <DiffView key={node.id} node={node} change={change} />
-        </Section>
-      )}
-
       {node.cache && (
         <Section title="Cache">
           <CacheView node={node} />
@@ -261,7 +283,7 @@ export function DetailsPanel() {
       )}
 
       {/* components: their props (no output: a component always returns an element) */}
-      {node.kind === "component" ? (
+      {node.kind === "component" && hasProps ? (
         <Section title="Props" count={node.props?.length || undefined}>
           <ComponentProps node={node} />
         </Section>
@@ -287,19 +309,68 @@ export function DetailsPanel() {
       )}
 
       {node.signature && node.kind !== "module" && node.kind !== "external" && node.kind !== "component" && (
-        <Section title="Inputs & output">
+        <Section title="Signature">
           <Signature node={node} />
         </Section>
       )}
 
-      {customHooks.length > 0 && (
-        <Section title="Custom hooks" count={customHooks.length}>
+      {customHooks.length + otherHooks.length > 0 && (
+        <Section title="Hooks" count={customHooks.length + otherHooks.length}>
           {/* just names: the details (arguments, types) are on the hook itself — click to go there */}
-          <Wrap gap="1.5">
-            {customHooks.map(({ id, count }) => (
-              <NodeChip key={id} id={id} anchor={node.id} suffix={count > 1 ? `×${count}` : undefined} />
+          <Stack gap="1.5">
+            {customHooks.length > 0 && (
+              <Wrap gap="1.5">
+                {customHooks.map(({ id, count }) => (
+                  <NodeChip key={id} id={id} anchor={node.id} suffix={count > 1 ? `×${count}` : undefined} />
+                ))}
+              </Wrap>
+            )}
+            {otherHooks.length > 0 && (
+              <Text fontFamily="mono" fontSize={textPx(11.5)} color="fg.muted">
+                {otherHooks.join(" · ")}
+              </Text>
+            )}
+          </Stack>
+        </Section>
+      )}
+
+      {contexts && (
+        <Section title="Context" count={reads.length + provides.length}>
+          <Stack gap="1.5">
+            {provides.map((name) => (
+              <ContextRow key={`p:${name}`} label="Provides" name={name}>
+                <ReadBy ids={contexts.get(name)?.readers ?? []} anchor={node.id} />
+              </ContextRow>
             ))}
-          </Wrap>
+            {reads.map(({ name, via }) => (
+              <ContextRow
+                key={`r:${name}`}
+                label="Reads"
+                name={name}
+                below={(contexts.get(name)?.providers ?? [])
+                  .filter((p) => p !== node.id)
+                  .map((p, i) => (
+                    <HStack key={p} gap="1.5">
+                      {i === 0 && (
+                        <Text as="span" fontSize="xs" color="fg.subtle">
+                          from
+                        </Text>
+                      )}
+                      <NodeChip id={p} anchor={node.id} />
+                    </HStack>
+                  ))}
+              >
+                {via && (
+                  <>
+                    <Text as="span" fontSize="xs" color="fg.subtle">
+                      via
+                    </Text>
+                    <NodeChip id={via} anchor={node.id} />
+                  </>
+                )}
+              </ContextRow>
+            ))}
+          </Stack>
         </Section>
       )}
 
@@ -346,17 +417,36 @@ export function DetailsPanel() {
       )}
 
       {node.renderTree && node.renderTree.length > 0 && (
-        <Section title="Render tree">
+        <Section title="Render tree" count={countElements(node.renderTree)}>
           <RenderTree nodes={node.renderTree} />
         </Section>
       )}
 
-      <Section title="Uses" count={uses.length} defaultOpen={uses.length <= 30}>
-        <RelationList edges={uses} side="to" />
-      </Section>
-      <Section title="Used by" count={usedBy.length}>
-        <RelationList key={node.id} edges={usedBy} side="from" limit={USED_BY_LIMIT} />
-      </Section>
+      {uses.length > 0 && (
+        <Section title="Uses" count={uses.length} defaultOpen={uses.length <= 30}>
+          <RelationList edges={uses} side="to" />
+        </Section>
+      )}
+      {usedBy.length > 0 && (
+        <Section title="Used by" count={usedBy.length}>
+          <RelationList key={node.id} edges={usedBy} side="from" limit={USED_BY_LIMIT} />
+        </Section>
+      )}
+
+      {(unusedExport || nothing.length > 0) && (
+        <Stack gap="2" px="4" py="3" borderTopWidth="1px" borderColor="border.muted">
+          {unusedExport && (
+            <Text fontSize="xs" color="diff.changed.fg" bg="diff.changed.subtle" rounded="l2" px="2.5" py="2">
+              Not used anywhere: exported, but nothing imports, renders or calls it.
+            </Text>
+          )}
+          {nothing.length > 0 && (
+            <Text fontSize="xs" color="fg.muted">
+              {nothing.join(" · ").replace(/^./, (c) => c.toUpperCase())}
+            </Text>
+          )}
+        </Stack>
+      )}
 
       <Section title="Details" defaultOpen={false}>
         <Stack gap="3">
@@ -380,3 +470,60 @@ export function DetailsPanel() {
 
 /** "Used by" shows this many entries until expanded. */
 const USED_BY_LIMIT = 5;
+
+/** The diff, said where the element is named: what happened to it and how many lines, the details under it. */
+function DiffBanner({ node, change }: { node: GraphNode; change: "added" | "removed" | "changed" }) {
+  return (
+    <Stack gap="2" mt="2.5" px="2.5" py="2" rounded="l2" bg={`diff.${change}.subtle`}>
+      <Flex align="center" gap="2">
+        <Text fontSize="xs" fontWeight="semibold" color={`diff.${change}.fg`}>
+          {CHANGE_WORD[change]}
+        </Text>
+        <Box flex="1" />
+        <DiffLines key={node.id} node={node} />
+      </Flex>
+      <DiffView key={node.id} node={node} change={change} />
+    </Stack>
+  );
+}
+
+/** One context it provides or reads: "Provides" / "Reads", its name, then where it comes from or goes. */
+function ContextRow({ label, name, children, below }: { label: string; name: string; children?: ReactNode; below?: ReactNode[] }) {
+  return (
+    <Flex gap="1.5" align="flex-start">
+      <Text as="span" fontSize="xs" color="fg.muted" w="56px" flexShrink={0} lineHeight="20px">
+        {label}
+      </Text>
+      <Stack gap="1" minW="0">
+        <Flex gap="1.5" align="center" wrap="wrap">
+          <CodeChip>{name}</CodeChip>
+          {children}
+        </Flex>
+        {below?.length ? (
+          <Flex gap="1.5" align="center" wrap="wrap">
+            {below}
+          </Flex>
+        ) : null}
+      </Stack>
+    </Flex>
+  );
+}
+
+/** "read by N": how many declarations read a context it provides; a click draws them. */
+function ReadBy({ ids, anchor }: { ids: string[]; anchor: string }) {
+  const snapshot = useExplorer((s) => s.snapshot);
+  if (!ids.length) return null;
+  const names = ids.map((id) => (snapshot?.nodes[id] ? displayName(snapshot.nodes[id]) : id));
+  return (
+    <Text
+      as="button"
+      fontSize="xs"
+      color="fg.subtle"
+      _hover={{ color: "fg" }}
+      title={`Add to the diagram: ${names.join(", ")}`}
+      onClick={() => useExplorer.getState().addNodes(ids, { anchor, fit: true })}
+    >
+      · read by {ids.length}
+    </Text>
+  );
+}

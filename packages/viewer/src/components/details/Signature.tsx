@@ -4,11 +4,11 @@ import { SourceCode } from "../Code.tsx";
 import { TypeText } from "../TypeText.tsx";
 import { shownReturn, shownType } from "../../lib/typeText.ts";
 import { CODE_BOX } from "./codeBox.ts";
-import { CodeRow } from "./CodeRows.tsx";
+import { CodeRow, Params } from "./CodeRows.tsx";
 import { useExplorer } from "../../store.ts";
 import { namedPropsType, propsTypeDeclaration } from "../../graph/privateProps.ts";
 
-/* The details panel's signature sections: generics, a component's props, inputs & output. */
+/* The details panel's signature sections: generics, a component's props, the signature line. */
 
 /**
  * Generic type parameters (`T extends Item = Item`, one per row) and, for interfaces, what they
@@ -137,29 +137,40 @@ function ParamRows({ node, params, mt }: { node: GraphNode; params: ParamDef[]; 
   );
 }
 
-/** Type parameters (if generic), inputs (one parameter per row) and output; object types over several lines. */
+/** Parameters that read well on one line: short, and no object type written out. */
+const INLINE_PARAMS = 48;
+function fitsOneLine(params: ParamDef[]): boolean {
+  const text = params.map((p) => `${p.name}: ${shownType(p) ?? ""}${p.default ? ` = ${p.default}` : ""}`).join(", ");
+  return text.length <= INLINE_PARAMS && !/[{\n]/.test(text);
+}
+
+/**
+ * The signature on one line, `name(a: A, b?: B) → R` (type parameters first if it's generic);
+ * longer parameter lists take a line each, indented, like formatted code.
+ */
 export function Signature({ node }: { node: GraphNode }) {
   const sig = node.signature!;
-  const box = CODE_BOX;
+  const inline = fitsOneLine(sig.params);
   return (
     <Stack gap="3">
       {node.typeParams?.length ? <Generics node={node} /> : null}
-      <Box>
-        <Eyebrow>Inputs</Eyebrow>
-        {sig.params.length ? (
-          <ParamRows node={node} params={sig.params} mt="1.5" />
+      <Box {...CODE_BOX} wordBreak="break-word">
+        {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
+        <CodeToken kind="name">{node.name}</CodeToken>
+        <CodeToken kind="punct">(</CodeToken>
+        {inline ? (
+          <Params params={sig.params} owner={node} />
         ) : (
-          <Text fontSize="sm" color="fg.muted" mt="1">
-            None
-          </Text>
+          sig.params.map((p, i) => (
+            <Box key={i} pl="4">
+              <Params params={[p]} owner={node} />
+              <CodeToken kind="punct">,</CodeToken>
+            </Box>
+          ))
         )}
-      </Box>
-      <Box>
-        <Eyebrow>Output</Eyebrow>
-        <Box {...box} mt="1.5" wordBreak="break-word">
-          {node.isAsync && <CodeToken kind="keyword">async </CodeToken>}
-          <TypeText text={shownReturn(sig) ?? "unknown"} owner={node} />
-        </Box>
+        <CodeToken kind="punct">)</CodeToken>
+        <CodeToken kind="punct"> → </CodeToken>
+        <TypeText text={shownReturn(sig) ?? "unknown"} owner={node} />
       </Box>
     </Stack>
   );
