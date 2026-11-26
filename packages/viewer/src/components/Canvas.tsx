@@ -7,13 +7,16 @@ import {
   MiniMap,
   type NodeChange,
   ReactFlow,
+  getViewportForBounds,
   useReactFlow,
   useStore,
+  useStoreApi,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { collapseFrames } from "../graph/collapse.ts";
-import { layoutAll } from "../graph/squareLayout.ts";
+import { layoutOffThread } from "../graph/layoutOffThread.ts";
+import type { PlacedElement } from "../graph/layout.ts";
 import { absoluteRect } from "../graph/placement.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../store.ts";
@@ -23,6 +26,7 @@ import { useCanvasEdges } from "./canvas/edges.ts";
 import { useCanvasNodes, useRelated } from "./canvas/nodes.ts";
 import { useCanvasKeys } from "./canvas/useCanvasKeys.ts";
 import { useMarquee } from "./canvas/useMarquee.ts";
+import { atStart, glideOf, GLIDE_MS, useGlide } from "./canvas/useGlide.ts";
 import { useNodeDrag } from "./canvas/useNodeDrag.ts";
 import { useNodeTooltip } from "./canvas/useNodeTooltip.ts";
 import { ConditionEdge } from "./ConditionEdge.tsx";
@@ -98,6 +102,21 @@ export function Canvas() {
   const diffOverlay = useExplorer((s) => s.diffOverlay);
   const { select, consumeFocus, applyLayout } = useExplorer.getState();
   const flow = useReactFlow();
+  const flowStore = useStoreApi();
+  /** Fits the view to a placing (its top-level elements' bounds), gliding as long as the nodes do. */
+  const fitPlacement = useCallback(
+    (placing: readonly PlacedElement[]) => {
+      const top = placing.filter((p) => p.element.parent === null);
+      if (!top.length) return false;
+      const x = Math.min(...top.map((p) => p.x));
+      const y = Math.min(...top.map((p) => p.y));
+      const bounds = { x, y, width: Math.max(...top.map((p) => p.x + p.width)) - x, height: Math.max(...top.map((p) => p.y + p.height)) - y };
+      const { width, height, minZoom } = flowStore.getState();
+      void flow.setViewport(getViewportForBounds(bounds, width, height, minZoom, FIT.maxZoom, FIT_PADDING), { duration: Math.max(FIT.duration, GLIDE_MS) });
+      return true;
+    },
+    [flow, flowStore],
+  );
   // the level of detail: a bucket of the zoom (with some hysteresis), so this re-renders only when it changes
   const lodRef = useRef<Lod | null>(null);
   const lod = useStore((s) => (lodRef.current = lodRef.current ? nextLod(s.transform[2], lodRef.current) : lodOf(s.transform[2])));
@@ -113,16 +132,17 @@ export function Canvas() {
     if (!layoutToken) return;
     const { graph: g, layoutEffort, layoutMode } = useExplorer.getState();
     let live = true;
-    void layoutAll(g, layoutEffort, layoutMode).then((p) => {
+    void layoutOffThread(g, null, layoutEffort, layoutMode).then((p) => {
       if (!live) return;
       applyLayout(g, p);
       const s = useExplorer.getState();
-      if (!s.focusId && !s.fitIds) whenReady(() => flow.getNodes().length >= p.length && flow.fitView(FIT));
+      // the view goes where the nodes are going, while they glide there (fitView would read where they start)
+      if (!s.focusId && !s.fitIds) whenReady(() => flow.getNodes().length >= p.length && fitPlacement(p));
     });
     return () => {
       live = false;
     };
-  }, [layoutToken, applyLayout, flow]);
+  }, [layoutToken, applyLayout, flow, fitPlacement]);
 
   const filter = useRelationFilter();
   // diff snapshots, overlay on: what changed is marked
@@ -138,19 +158,23 @@ export function Canvas() {
   // changes ("adjust state during render"). A node whose source didn't change keeps its local
   // object (with React Flow's measurements), so memoized nodes skip re-rendering and React Flow
   // doesn't re-measure everything; changed nodes carry their measurements over.
+  // What moves glides there (canvas/useGlide.ts): the nodes start where they are drawn now.
   const [nodes, setNodes] = useState(selectedNodes);
   const [synced, setSynced] = useState(selectedNodes);
+  const drag = useNodeDrag(setNodes, tooltip.hide);
+  const startGlide = useGlide(setNodes, drag.dragging);
   if (synced !== selectedNodes) {
     const before = new Map(synced.map((n) => [n.id, n]));
     const local = new Map(nodes.map((n) => [n.id, n]));
     setSynced(selectedNodes);
-    setNodes(
-      selectedNodes.map((n) => {
-        const mine = local.get(n.id);
-        if (!mine) return n;
-        return before.get(n.id) === n ? mine : ({ ...n, measured: mine.measured } as ElementFlowNode);
-      }),
-    );
+    const next = selectedNodes.map((n) => {
+      const mine = local.get(n.id);
+      if (!mine) return n;
+      return before.get(n.id) === n ? mine : ({ ...n, measured: mine.measured } as ElementFlowNode);
+    });
+    const glide = drag.dragging ? null : glideOf(nodes, next);
+    setNodes(glide ? atStart(next, glide) : next);
+    startGlide(glide);
   }
 
   // Selection is entirely the store's: React Flow's own "select" changes (it marks clicked nodes
@@ -160,7 +184,6 @@ export function Canvas() {
     if (kept.length) setNodes((ns) => applyNodeChanges(kept, ns));
   }, []);
 
-  const drag = useNodeDrag(setNodes, tooltip.hide);
 
   // Fit expanded nodes into view once they are placed.
   useEffect(() => {

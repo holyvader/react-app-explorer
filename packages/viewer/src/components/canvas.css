@@ -25,10 +25,6 @@
   outline: none;
 }
 
-/* Elements glide to a new placement — never while dragging (a frame's content would trail). */
-.rae-canvas:not([data-dragging]) .react-flow__node {
-  transition: transform 220ms var(--ease), width 220ms var(--ease), height 220ms var(--ease);
-}
 
 /* Selection: everything not selected or related fades — under a veil of canvas colour, never
    `opacity`. A translucent node gets a compositing layer of its own in WebKit (the desktop app),
@@ -404,9 +400,6 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 /* The selection's edges keep their relation colour, drawn a touch heavier. */
 .react-flow__edge.rae-edge--related path.react-flow__edge-path { --ew: 2px; }
 
-@media (prefers-reduced-motion: reduce) {
-  .rae-canvas .react-flow__node { transition: none !important; }
-}
 
 /* Relation labels: mono, in the relation's colour, on a patch of canvas so no line runs through.
    One line (relation, then its condition quietly): local placement leaves 32px between rows. */

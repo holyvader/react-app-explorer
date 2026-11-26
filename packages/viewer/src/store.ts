@@ -4,7 +4,8 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute, routeChain, routeOf } from "./graph/drawn.ts";
 import type { PlacedElement } from "./graph/layout.ts";
-import { type LayoutEffort, type LayoutMode, layoutWithin } from "./graph/squareLayout.ts";
+import { layoutOffThread } from "./graph/layoutOffThread.ts";
+import type { LayoutEffort, LayoutMode } from "./graph/squareLayout.ts";
 import { folderExpansion, folderPath, foldersAbove } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
@@ -651,7 +652,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     arrange: async (id) => {
       const graph = get().graph;
       if (!graph.elements.some((e) => e.parent === id)) return;
-      const inside = await layoutWithin(graph, id, get().layoutMode);
+      const inside = await layoutOffThread(graph, id, "thorough", get().layoutMode);
       if (get().graph !== graph) return;
       const res = arrangeWithin(get().placed, graph, id, inside);
       record();

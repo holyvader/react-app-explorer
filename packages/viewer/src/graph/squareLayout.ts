@@ -11,9 +11,10 @@ import { CARD_HEIGHT, cardWidthOf, FILE_PADDING, fileListOf, isFileFrame, leastW
  * folder tree (invisible), each block set out in a square, the blocks in a square in turn, further
  * apart. Libraries make one block, routes another.
  *
- * In `tree` mode, a container of files is set out tree-like instead (`withTreeBlocks`): levels down
- * the relations, callers above what they call; what hangs under one element is a square block under
- * it; the levels one under another. Folder blocks still come first: a tree is grown inside each.
+ * In `tree` mode, a container of files is set out tree-like instead (`withTreeBlocks`): levels along
+ * the relations, callers to the left of what they call (a file's rows meet edges at their left and
+ * right ends); what hangs off one element is a block beside it, taller than wide; the levels side by
+ * side. Folder blocks still come first: a tree is grown inside each.
  *
  * It is a search, not a formula. It starts with what is joined set side by side (the element joined
  * to most first, then each time the one joined most to those already set out) or a force-directed
@@ -25,7 +26,11 @@ import { CARD_HEIGHT, cardWidthOf, FILE_PADDING, fileListOf, isFileFrame, leastW
  * only the container it changed and those round it.
  *
  * Edges are read as the canvas draws them (graph/floating.ts): a straight line between the centres
- * of their two ends. Positions come out relative to the container, as React Flow reads them.
+ * of their two ends — or, at a row of a file's list, from the row's left or right end, whichever
+ * faces the other end's centre. An edge leaving a row away from where it goes has to curl back round
+ * (`loops`): it counts nearly as much as a crossing. An edge running right to left (`backward`) counts
+ * a little: callers read left of what they call, as in a tree. Relations inside one file aren't drawn, so they
+ * aren't read. Positions come out relative to the container, as React Flow reads them.
  */
 
 /** How long the search may go on, and how many placings it may try. */
@@ -34,11 +39,11 @@ interface SearchLimit {
   tries: number;
 }
 export type LayoutEffort = "thorough" | "quick";
-/** `square`: each container's elements in a square. `tree`: files in levels, callers above what they call (see `withTreeBlocks`). */
+/** `square`: each container's elements in a square. `tree`: files in levels, callers left of what they call (see `withTreeBlocks`). */
 export type LayoutMode = "square" | "tree";
 const LIMITS: Record<LayoutEffort, SearchLimit> = {
   /** A placing the reader asked for (Re-layout, Tidy up): worth a moment's wait. */
-  thorough: { ms: 1500, tries: 50000 },
+  thorough: { ms: 800, tries: 50000 },
   /** One the diagram does itself (first draw, a big expansion): not to be waited for. */
   quick: { ms: 300, tries: 50000 },
 };
@@ -51,14 +56,14 @@ interface Gap {
 const GAP: Gap = { x: 48, y: 48 };
 /** Between folder blocks: wider, so a folder reads as one. */
 const GROUP_GAP: Gap = { x: 96, y: 96 };
-/** In a tree: between the blocks of one level, and between levels (room for the edges running down). */
-const TREE_GAP: Gap = { x: 64, y: 64 };
-const LEVEL_GAP = 112;
-/** How wide a tree's levels may run, for each unit of its height. */
+/** In a tree: between the blocks of one level, and between levels (room for the edges running across). */
+const TREE_GAP: Gap = { x: 64, y: 48 };
+const LEVEL_GAP = 144;
+/** How wide a tree may run, for each unit of its height: its levels' columns are as tall as makes it so. */
 const TREE_ASPECT = 1.6;
 /**
- * What hangs under one element in a tree is set out this many cells across for each down: edges
- * come in from above, and a block stacked down would have them run through its own top row.
+ * What hangs off one element in a tree is set out this many cells down for each across: edges come
+ * in from the left, and a block spread across would have them run through its own first column.
  */
 const UNDER_ASPECT = 2;
 
@@ -153,8 +158,8 @@ type Rows = ReturnType<typeof packedWithin>;
  * rows, until it has three columns for each row; only those within `SHAPE_SLACK` of the squarest are
  * kept. The search starts from the squarest and may step to a narrower or wider one.
  *
- * Given `under` (a block hanging under one element in a tree), the shape aimed at is `UNDER_ASPECT`
- * cells across for each down instead, read in cells alone.
+ * Given `under` (a block hanging off one element in a tree), the shape aimed at is `UNDER_ASPECT`
+ * cells down for each across instead, read in cells alone.
  */
 function shapesOf(boxes: readonly Box[], round: Round, gap: Gap, under = false): { shapes: Rows[]; widths: number[]; squarest: number } {
   const cellX = boxes.reduce((sum, b) => sum + b.width, 0) / Math.max(1, boxes.length) + gap.x;
@@ -169,9 +174,9 @@ function shapesOf(boxes: readonly Box[], round: Round, gap: Gap, under = false):
     // in cells, by the boxes themselves: a frame's least width (its header) isn't columns of them
     const across = (rows.width + round.across + gap.x) / cellX;
     const down = (height + gap.y) / cellY;
-    const off = under ? Math.log(across / down / UNDER_ASPECT) ** 2 : Math.log(across / down) ** 2 + Math.log(width / height) ** 2;
+    const off = under ? Math.log((across * UNDER_ASPECT) / down) ** 2 : Math.log(across / down) ** 2 + Math.log(width / height) ** 2;
     tried.push({ rows, limit, off, room: width * height });
-    if (rows.next === Infinity || across >= down * (under ? UNDER_ASPECT * 2 : WIDE_ENOUGH)) break;
+    if (rows.next === Infinity || across >= down * (under ? 2 / UNDER_ASPECT : WIDE_ENOUGH)) break;
     limit = rows.next;
   }
   const least = Math.min(...tried.map((t) => t.off));
@@ -180,41 +185,41 @@ function shapesOf(boxes: readonly Box[], round: Round, gap: Gap, under = false):
   return { shapes: kept.map((t) => t.rows), widths: kept.map((t) => t.limit), squarest };
 }
 
-/** Boxes in rows no wider than `limit` (a box wider starts its own), each row centred under the widest. */
-function centeredRows(boxes: readonly Box[], limit: number, gap: Gap): Rows {
-  const rows: { items: number[]; width: number; height: number }[] = [];
+/** Boxes in columns no taller than `limit` (a box taller starts its own), each column centred beside the tallest. */
+function centeredColumns(boxes: readonly Box[], limit: number, gap: Gap): Rows {
+  const columns: { items: number[]; width: number; height: number }[] = [];
   boxes.forEach((b, i) => {
-    const row = rows.at(-1);
-    if (row && row.width + gap.x + b.width <= limit) {
-      row.items.push(i);
-      row.width += gap.x + b.width;
-      row.height = Math.max(row.height, b.height);
-    } else rows.push({ items: [i], width: b.width, height: b.height });
+    const column = columns.at(-1);
+    if (column && column.height + gap.y + b.height <= limit) {
+      column.items.push(i);
+      column.height += gap.y + b.height;
+      column.width = Math.max(column.width, b.width);
+    } else columns.push({ items: [i], width: b.width, height: b.height });
   });
-  const width = Math.max(0, ...rows.map((r) => r.width));
+  const height = Math.max(0, ...columns.map((c) => c.height));
   const at: { x: number; y: number }[] = [];
-  let y = 0;
-  for (const row of rows) {
-    let x = (width - row.width) / 2;
-    for (const i of row.items) {
+  let x = 0;
+  for (const column of columns) {
+    let y = (height - column.height) / 2;
+    for (const i of column.items) {
       at[i] = { x, y };
-      x += boxes[i]!.width + gap.x;
+      y += boxes[i]!.height + gap.y;
     }
-    y += row.height + gap.y;
+    x += column.width + gap.x;
   }
-  return { at, width, height: Math.max(0, y - gap.y), next: Infinity };
+  return { at, width: Math.max(0, x - gap.x), height, next: Infinity };
 }
 
-/** Boxes one under another, each centred under the widest. */
-function stacked(boxes: readonly Box[], gap: number): Rows {
-  const width = Math.max(0, ...boxes.map((b) => b.width));
-  let y = 0;
+/** Boxes side by side, left to right, each centred beside the tallest. */
+function levelsAcross(boxes: readonly Box[], gap: number): Rows {
+  const height = Math.max(0, ...boxes.map((b) => b.height));
+  let x = 0;
   const at = boxes.map((b) => {
-    const spot = { x: (width - b.width) / 2, y };
-    y += b.height + gap;
+    const spot = { x, y: (height - b.height) / 2 };
+    x += b.width + gap;
     return spot;
   });
-  return { at, width, height: Math.max(0, y - gap), next: Infinity };
+  return { at, width: Math.max(0, x - gap), height, next: Infinity };
 }
 
 // ---- folder blocks -----------------------------------------------------------------------------
@@ -315,7 +320,7 @@ function withoutFolderBlocks(placed: readonly PlacedElement[], original: Readonl
 
 /** How the trees are set out: which containers are trees and levels, what each element hangs under. */
 interface Trees {
-  /** `stack`: a tree (its levels one under another); `rows`: a level (its blocks in centred rows). Others: a square. */
+  /** `stack`: a tree (its levels side by side); `rows`: a level (its blocks in centred columns). Others: a square. */
   mode: Map<string | null, "stack" | "rows">;
   /** A level below the first, and the level above it: its blocks go in the order of their parents there. */
   above: Map<string, string>;
@@ -337,13 +342,13 @@ const TREE_FROM = 3;
 /**
  * The graph with containers of files set out as trees: each container whose elements are files or
  * folders (no folder blocks among them, not a file's own declarations — `canBeTree`) with at least
- * `TREE_FROM` joined elements. Levels go down the relations, callers above what they call:
+ * `TREE_FROM` joined elements. Levels go along the relations, callers left of what they call:
  *
  * - the roots: what nothing in the container calls (in a cycle nothing outside reaches: the one
  *   calling out most), the most joined first;
- * - each next level: what the level above calls and nothing has placed yet, each hanging under the
- *   one there that calls it most; what hangs under one element is a square block of its own;
- * - what is joined to nothing in the container: a square block at the bottom.
+ * - each next level: what the level before calls and nothing has placed yet, each hanging off the
+ *   one there that calls it most; what hangs off one element is a block of its own, taller than wide;
+ * - what is joined to nothing in the container: a square block at the end.
  *
  * Every block is a `GROUP` element: invisible, taken out of the result.
  */
@@ -354,7 +359,7 @@ function withTreeBlocks(graph: DrawnGraph, canBeTree: (container: string | null)
   const levelBlocks: DrawnElement[] = [];
   const otherBlocks: DrawnElement[] = [];
   for (const [container, kids] of childrenOf(graph.elements)) {
-    if (kids.length < TREE_FROM || kids.some((k) => isGroup(k.id)) || !canBeTree(container)) continue;
+    if (kids.length < TREE_FROM || !canBeTree(container)) continue;
     const ids = kids.map((k) => k.id);
     const out = new Map(ids.map((a) => [a, ids.filter((b) => b !== a && flow(a, b) > 0)]));
     const inflow = new Map(ids.map((b) => [b, ids.reduce((sum, a) => sum + (a === b ? 0 : flow(a, b)), 0)]));
@@ -438,7 +443,7 @@ function withTreeBlocks(graph: DrawnGraph, canBeTree: (container: string | null)
     for (const b of [...levels, ...blocks]) trees.treeOf.set(b, container);
   }
   if (!levelBlocks.length) return { graph, trees };
-  // the levels top to bottom, then what is joined to nothing: the stack goes as listed
+  // the levels left to right, then what is joined to nothing: the stack goes as listed
   return {
     graph: { elements: [...levelBlocks, ...otherBlocks, ...graph.elements.map((e) => (reparented.has(e.id) ? { ...e, parent: reparented.get(e.id)! } : e))], relations: graph.relations },
     trees,
@@ -474,8 +479,8 @@ const frameRound = (e: DrawnElement): Round => {
 /**
  * What sets out the graph inside `root` (the canvas when null): each container's elements in a
  * square, in the order `kidsOf` gives, each frame sized round what it holds — or, for a tree, its
- * levels one under another (`stacked`) and each level's blocks in centred rows (`centeredRows`), as
- * wide as makes the whole tree about `TREE_ASPECT`. A square container is set out at its squarest
+ * levels side by side (`levelsAcross`) and each level's blocks in centred columns (`centeredColumns`),
+ * as tall as makes the whole tree about `TREE_ASPECT` times as wide. A square container is set out at its squarest
  * width the first time, and at that width after (a swap moves boxes, not the shape) until `reshape`
  * steps it to a narrower or wider one. A container's packing is kept until `forget` is told it
  * changed. `root`'s own elements are placed from the corner of what they cover, shaped as inside it.
@@ -493,21 +498,21 @@ function placerOf(root: DrawnElement | null, kidsOf: (parent: string | null) => 
     return e ? frameRound(e) : NOTHING_ROUND;
   };
   const gapOf = (kids: readonly DrawnElement[]) => (kids.some((k) => isGroup(k.id)) ? GROUP_GAP : GAP);
-  /** Whether a container is a block hanging under one element in a tree. */
+  /** Whether a container is a block hanging off one element in a tree. */
   const isUnder = (parent: string | null) => parent !== null && isGroup(parent) && trees.under.has(parent);
-  /** How wide a tree's levels may run: about `TREE_ASPECT` times as wide as the tree is tall. */
-  const rowLimit = (level: string) => {
+  /** How tall a tree's levels may run: the tree about `TREE_ASPECT` times as wide as it is tall. */
+  const columnLimit = (level: string) => {
     const tree = trees.treeOf.get(level) ?? null;
     let area = 0;
-    let widest = 0;
+    let tallest = 0;
     for (const l of kidsOf(tree))
       if (trees.mode.get(l.id) === "rows")
         for (const k of kidsOf(l.id)) {
           const s = sizeOf(k);
           area += (s.width + TREE_GAP.x) * (s.height + TREE_GAP.y);
-          widest = Math.max(widest, s.width);
+          tallest = Math.max(tallest, s.height);
         }
-    return Math.max(widest, Math.sqrt(area * TREE_ASPECT));
+    return Math.max(tallest, Math.sqrt(area / TREE_ASPECT));
   };
   const block = (parent: string | null): Block => {
     const kept = cache.get(parent);
@@ -530,8 +535,8 @@ function placerOf(root: DrawnElement | null, kidsOf: (parent: string | null) => 
     const sized = kids.map(sizeOf);
     const mode = trees.mode.get(parent);
     let rows: Rows;
-    if (mode === "stack") rows = stacked(sized, LEVEL_GAP);
-    else if (mode === "rows") rows = centeredRows(sized, rowLimit(parent!), TREE_GAP);
+    if (mode === "stack") rows = levelsAcross(sized, LEVEL_GAP);
+    else if (mode === "rows") rows = centeredColumns(sized, columnLimit(parent!), TREE_GAP);
     else {
       const gap = gapOf(kids);
       const width = widths.get(parent);
@@ -629,6 +634,10 @@ export interface Tangle {
   through: number;
   /** Pairs of edges that cross. */
   crossings: number;
+  /** Edges leaving a row away from where they go, curling back round to it. */
+  loops: number;
+  /** Edges running right to left: against the reading direction (callers left of what they call). */
+  backward: number;
   /** All edges' lengths together. */
   length: number;
 }
@@ -636,10 +645,13 @@ export interface Tangle {
 /** What each is worth: an edge through a card is worse than a crossing, a crossing than a long way round. */
 const THROUGH = 10;
 const CROSSING = 8;
+const LOOP = 6;
+/** A hint, not a rule: far less than a crossing, more than most lengths. */
+const BACKWARD = 3;
 const LENGTH = 1 / 1000;
 /** A container set out one shape off its squarest: less than a crossing it clears, more than most edges it only shortens. */
 const SHAPE = 1.5;
-const weightOf = ({ through, crossings, length }: Tangle) => through * THROUGH + crossings * CROSSING + length * LENGTH;
+const weightOf = ({ through, crossings, loops, backward, length }: Tangle) => through * THROUGH + crossings * CROSSING + loops * LOOP + backward * BACKWARD + length * LENGTH;
 
 /** Which side of the line a → b the point p is on. */
 const sideOf = (ax: number, ay: number, bx: number, by: number, px: number, py: number) => (bx - ax) * (py - ay) - (by - ay) * (px - ax);
@@ -654,6 +666,8 @@ function tangleReaderOf(graph: DrawnGraph) {
   const index = new Map(graph.elements.map((e, i) => [e.id, i]));
   const parentOf = graph.elements.map((e) => (e.parent === null ? -1 : (index.get(e.parent) ?? -1)));
   const drawn = graph.elements.map((e) => !isGroup(e.id));
+  // a row of a file's list: edges meet it at its left or right end (graph/floating.ts rowEnd)
+  const row = graph.elements.map((e) => e.parent !== null && isFileFrame(graph.elements[index.get(e.parent) ?? -1]));
   /** Whether `outer` is drawn round `inner`, at any depth. */
   const isRound = (outer: number, inner: number) => {
     for (let at = parentOf[inner]!; at >= 0; at = parentOf[at]!) if (at === outer) return true;
@@ -667,6 +681,8 @@ function tangleReaderOf(graph: DrawnGraph) {
     const a = index.get(r.source);
     const b = index.get(r.target);
     if (a === undefined || b === undefined || a === b || isRound(a, b) || isRound(b, a)) continue;
+    // two rows of one file: not drawn (canvas/edges.ts)
+    if (row[a] && row[b] && parentOf[a] === parentOf[b]) continue;
     const key = a < b ? `${a} ${b}` : `${b} ${a}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -687,6 +703,8 @@ function tangleReaderOf(graph: DrawnGraph) {
   const bottom = new Float64Array(count);
   const midX = new Float64Array(count);
   const midY = new Float64Array(count);
+  const endAX = new Float64Array(edges);
+  const endBX = new Float64Array(edges);
 
   /** Whether the segment a → b runs through the box of `at` (Liang–Barsky clipping). */
   const runsThrough = (ax: number, ay: number, bx: number, by: number, at: number) => {
@@ -728,16 +746,30 @@ function tangleReaderOf(graph: DrawnGraph) {
         midX[at] = (left[at]! + right[at]!) / 2;
         midY[at] = (top[at]! + bottom[at]!) / 2;
       }
+      // each edge's ends as drawn: a row's left or right end (whichever faces the other's centre), else the centre
+      for (let one = 0; one < edges; one++) {
+        const a = from[one]!;
+        const b = to[one]!;
+        endAX[one] = row[a] ? (midX[b]! < midX[a]! ? left[a]! : right[a]!) : midX[a]!;
+        endBX[one] = row[b] ? (midX[a]! < midX[b]! ? left[b]! : right[b]!) : midX[b]!;
+      }
       let through = 0;
       let crossings = 0;
+      let loops = 0;
+      let backward = 0;
       let length = 0;
       for (let one = 0; one < edges; one++) {
         const a = from[one]!;
         const b = to[one]!;
-        const ax = midX[a]!;
+        const ax = endAX[one]!;
         const ay = midY[a]!;
-        const bx = midX[b]!;
+        const bx = endBX[one]!;
         const by = midY[b]!;
+        // leaving a row's right end for a point left of it (or its left end for one right of it): it curls back
+        if (row[a] && (ax === right[a] ? bx < ax : bx > ax)) loops++;
+        else if (row[b] && (bx === right[b] ? ax < bx : ax > bx)) loops++;
+        // ends side by side (not one over the other) with the target to the left
+        if (right[b]! <= left[a]!) backward++;
         length += Math.hypot(bx - ax, by - ay);
         const x0 = Math.min(ax, bx);
         const x1 = Math.max(ax, bx);
@@ -753,15 +785,15 @@ function tangleReaderOf(graph: DrawnGraph) {
           const d = to[other]!;
           // two edges of one card meet at it; they don't cross
           if (c === a || c === b || d === a || d === b) continue;
-          const cx = midX[c]!;
+          const cx = endAX[other]!;
           const cy = midY[c]!;
-          const dx = midX[d]!;
+          const dx = endBX[other]!;
           const dy = midY[d]!;
           if (Math.max(cx, dx) < x0 || Math.min(cx, dx) > x1 || Math.max(cy, dy) < y0 || Math.min(cy, dy) > y1) continue;
           if (sideOf(ax, ay, bx, by, cx, cy) * sideOf(ax, ay, bx, by, dx, dy) < 0 && sideOf(cx, cy, dx, dy, ax, ay) * sideOf(cx, cy, dx, dy, bx, by) < 0) crossings++;
         }
       }
-      return { through, crossings, length };
+      return { through, crossings, loops, backward, length };
     },
   };
 }
@@ -903,6 +935,15 @@ function forceOrder(start: readonly DrawnElement[], joins: (a: string, b: string
   return out;
 }
 
+/**
+ * What a change must gain to be kept: anything about the shape of the edges (each is worth 1 or
+ * more), or about 20 px of length in all. Below it, a search would go on shortening edges by a few
+ * pixels a try until out of time, for a placing no one could tell apart.
+ */
+const WORTH = 0.02;
+/** Shakes in a row that found nothing better: the search stops there, however much time is left. */
+const STALE = 25;
+
 /** A small seeded random source (mulberry32): the same graph, the same shakes. */
 function randomOf(seed: number) {
   let t = seed >>> 0;
@@ -933,7 +974,7 @@ export function squareLayout(graph: DrawnGraph, within: string | null = null, ef
   const up = (id: string) => parentOf.get(id) ?? null;
   const joins = joinsOf(read);
   const holds = (id: string) => children.has(id);
-  // a tree's levels stay top to bottom, as listed; every other container starts with what is joined side by side
+  // a tree's levels stay left to right, as listed; every other container starts with what is joined side by side
   const order = new Map([...children].map(([parent, kids]) => [parent, trees.mode.get(parent) === "stack" ? kids : sideBySide(kids, joins, holds)]));
   /** A container's elements in order; a tree's level below the first: its blocks in the order of what they hang under. */
   const kidsOf = (parent: string | null): readonly DrawnElement[] => {
@@ -962,7 +1003,7 @@ export function squareLayout(graph: DrawnGraph, within: string | null = null, ef
     const forgotten = placer.forget(container, up);
     const placed = placer.place();
     const weight = weigh(placed);
-    if (weight < least - 1e-9) {
+    if (weight < least - WORTH) {
       best = placed;
       least = weight;
       return true;
@@ -1028,12 +1069,14 @@ export function squareLayout(graph: DrawnGraph, within: string | null = null, ef
   // again, going back to the best placing when that ends up no better.
   const random = randomOf(read.elements.length * 7919 + read.relations.length);
   const saveAll = () => ({ placer: placer.save(), orders: new Map([...order].map(([k, v]) => [k, [...v]])), best, least });
-  // nothing through a card, nothing crossing: only lengths left to shorten, not worth shaking for
+  // nothing through a card, nothing crossing, nothing curling back: only lengths left to shorten, not worth shaking for
   const untangled = () => {
     const t = reader.read(best);
-    return t.through === 0 && t.crossings === 0;
+    return t.through === 0 && t.crossings === 0 && t.loops === 0;
   };
-  for (let more = climb(); more && containers.length && !untangled(); ) {
+  // shakes that brought nothing, in a row: past `STALE`, more are unlikely to
+  let stale = 0;
+  for (let more = climb(); more && containers.length && !untangled() && stale < STALE; ) {
     const saved = saveAll();
     const [parent, kids] = containers[Math.floor(random() * containers.length)]!;
     for (let k = 0; k < 2; k++) {
@@ -1046,7 +1089,11 @@ export function squareLayout(graph: DrawnGraph, within: string | null = null, ef
     best = placer.place();
     least = weigh(best);
     more = climb();
-    if (least < saved.least - 1e-9) continue;
+    if (least < saved.least - WORTH) {
+      stale = 0;
+      continue;
+    }
+    stale++;
     placer.load(saved.placer);
     for (const [k, v] of saved.orders) order.get(k)!.splice(0, v.length, ...v);
     best = saved.best;

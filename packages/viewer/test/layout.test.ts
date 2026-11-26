@@ -98,19 +98,19 @@ describe("tree layout", () => {
     return at;
   };
 
-  test("callers above what they call, level by level", () => {
+  test("callers left of what they call, level by level", () => {
     const graph: DrawnGraph = {
       elements: ["src/app.ts", "src/routes.ts", "src/api.ts", "src/db.ts"].map(file),
       relations: relationsOf([["src/app.ts", "src/routes.ts"], ["src/app.ts", "src/api.ts"], ["src/routes.ts", "src/db.ts"], ["src/api.ts", "src/db.ts"]]),
     };
     const at = absolute(squareLayout(graph, null, "thorough", "tree"));
-    const y = (id: string) => at.get(id)!.y;
-    expect(y("src/app.ts")).toBeLessThan(y("src/routes.ts"));
-    expect(y("src/routes.ts")).toBe(y("src/api.ts"));
-    expect(y("src/api.ts")).toBeLessThan(y("src/db.ts"));
+    const x = (id: string) => at.get(id)!.x;
+    expect(x("src/app.ts")).toBeLessThan(x("src/routes.ts"));
+    expect(x("src/routes.ts")).toBe(x("src/api.ts"));
+    expect(x("src/api.ts")).toBeLessThan(x("src/db.ts"));
   });
 
-  test("what hangs under one element is a block under it; the unjoined go last", () => {
+  test("what hangs off one element is a block beside it, taller than wide; the unjoined go last", () => {
     const kids = Array.from({ length: 6 }, (_, i) => `src/k${i}.ts`);
     const graph: DrawnGraph = {
       elements: ["src/hub.ts", ...kids, "src/alone.ts"].map(file),
@@ -119,17 +119,17 @@ describe("tree layout", () => {
     const at = absolute(squareLayout(graph, null, "thorough", "tree"));
     const hub = at.get("src/hub.ts")!;
     const block = kids.map((k) => at.get(k)!);
-    for (const k of block) expect(k.y).toBeGreaterThan(hub.y + hub.height);
-    // a square block, not one long row
-    expect(new Set(block.map((k) => k.y)).size).toBeGreaterThan(1);
-    expect(at.get("src/alone.ts")!.y).toBeGreaterThan(Math.max(...block.map((k) => k.y)));
+    for (const k of block) expect(k.x).toBeGreaterThan(hub.x + hub.width);
+    // a block, taller than wide, not one long row
+    expect(new Set(block.map((k) => k.y)).size).toBeGreaterThan(new Set(block.map((k) => k.x)).size);
+    expect(at.get("src/alone.ts")!.x).toBeGreaterThan(Math.max(...block.map((k) => k.x)));
   });
 
   test("a cycle is placed, its parts in levels", () => {
     const graph: DrawnGraph = { elements: ["src/a.ts", "src/b.ts", "src/c.ts"].map(file), relations: relationsOf([["src/a.ts", "src/b.ts"], ["src/b.ts", "src/c.ts"], ["src/c.ts", "src/a.ts"]]) };
     const placed = squareLayout(graph, null, "quick", "tree");
     expect(placed.length).toBe(3);
-    expect(new Set(placed.map((p) => p.y)).size).toBe(3);
+    expect(new Set(placed.map((p) => p.x)).size).toBe(3);
   });
 
   test("a file's declarations are its list; folders stay apart", () => {
@@ -159,7 +159,44 @@ describe("tree layout", () => {
     const db = boxOf(["src/db/users.ts", "src/db/posts.ts", "src/db/pool.ts"]);
     const apart = ui.x + ui.width <= db.x || db.x + db.width <= ui.x || ui.y + ui.height <= db.y || db.y + db.height <= ui.y;
     expect(apart).toBe(true);
-    // and inside db, callers above: users and posts over pool
-    expect(at.get("src/db/users.ts")!.y).toBeLessThan(at.get("src/db/pool.ts")!.y);
+    // and inside db, callers to the left: users and posts before pool
+    expect(at.get("src/db/users.ts")!.x).toBeLessThan(at.get("src/db/pool.ts")!.x);
+  });
+
+  test("rows meet edges at their ends: a file whose row a row renders goes to its right, not under it", () => {
+    // as in a real diagram: a file's row renders a row of another file; a third file joined to both
+    const elements: DrawnElement[] = [
+      file("src/ui/detail.tsx"), card("src/ui/detail.tsx#Props", "src/ui/detail.tsx"), card("src/ui/detail.tsx#Detail", "src/ui/detail.tsx"),
+      file("src/ui/exploration.tsx"), card("src/ui/exploration.tsx#Exploration", "src/ui/exploration.tsx"), card("src/ui/exploration.tsx#noScanOf", "src/ui/exploration.tsx"),
+      file("src/ui/view.tsx"), card("src/ui/view.tsx#View", "src/ui/view.tsx"),
+    ];
+    const graph: DrawnGraph = {
+      elements,
+      relations: relationsOf([["src/ui/detail.tsx#Detail", "src/ui/exploration.tsx#Exploration"], ["src/ui/view.tsx#View", "src/ui/detail.tsx#Detail"], ["src/ui/exploration.tsx#Exploration", "src/ui/exploration.tsx#noScanOf"]]),
+    };
+    for (const mode of ["tree", "square"] as const) {
+      const placed = squareLayout(graph, null, "thorough", mode);
+      const at = absolute(placed);
+      const detail = at.get("src/ui/detail.tsx")!;
+      const exploration = at.get("src/ui/exploration.tsx")!;
+      // the tree reads left to right; a square may set it either way, so long as nothing curls back
+      if (mode === "tree") expect(exploration.x).toBeGreaterThanOrEqual(detail.x + detail.width);
+      expect(tangleOf(graph, placed)).toMatchObject({ loops: 0, crossings: 0, through: 0 });
+    }
+  });
+
+  test("an edge leaving a row away from where it goes is read as a loop", () => {
+    const elements: DrawnElement[] = [file("a.tsx"), card("a.tsx#A", "a.tsx"), file("b.tsx"), card("b.tsx#B", "b.tsx")];
+    const graph: DrawnGraph = { elements, relations: relationsOf([["a.tsx#A", "b.tsx#B"]]) };
+    const at = (ax: number, ay: number, bx: number, by: number): PlacedElement[] => [
+      { element: elements[0]!, holds: true, x: ax, y: ay, width: 300, height: 100 },
+      { element: elements[1]!, holds: false, x: 0, y: 68, width: 300, height: 30 },
+      { element: elements[2]!, holds: true, x: bx, y: by, width: 300, height: 100 },
+      { element: elements[3]!, holds: false, x: 0, y: 68, width: 300, height: 30 },
+    ];
+    // side by side: right end to left end, straight across
+    expect(tangleOf(graph, at(0, 0, 400, 0)).loops).toBe(0);
+    // one under the other, a little to the right: out of A's right end, round into B's left end
+    expect(tangleOf(graph, at(0, 0, 40, 200)).loops).toBe(1);
   });
 });
