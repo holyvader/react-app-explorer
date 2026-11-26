@@ -58,7 +58,19 @@ const EDGE_LANE = 10;
 export function useCanvasEdges({ graph, placed, showDiff, collapse, related, lod }: { graph: DrawnGraph; placed: PlacedElement[]; showDiff: boolean; collapse: Collapse; related: Related; lod: Lod }): ConditionFlowEdge[] {
   const baseEdges = useMemo<ConditionFlowEdge[]>(() => {
     const drawn = new Set(placed.map((p) => p.element.id));
-    const shown = graph.relations.filter((r) => drawn.has(r.source) && drawn.has(r.target));
+    // Relations between two rows of one file aren't drawn: inside a file they're noise (the details
+    // panel and the tooltip still list them).
+    const at = new Map(placed.map((p) => [p.element.id, p]));
+    const fileOf = (id: string) => {
+      const p = at.get(id);
+      const parent = p?.element.parent ? at.get(p.element.parent) : undefined;
+      return p && !p.holds && parent?.element.kind === "module" ? parent.element.id : undefined;
+    };
+    const insideOneFile = (a: string, b: string) => {
+      const f = fileOf(a);
+      return f !== undefined && f === fileOf(b);
+    };
+    const shown = graph.relations.filter((r) => drawn.has(r.source) && drawn.has(r.target) && !insideOneFile(r.source, r.target));
     // several relations between the same two nodes (either way) run side by side, in lanes
     const pairs = new Map<string, string[]>();
     for (const r of shown) {

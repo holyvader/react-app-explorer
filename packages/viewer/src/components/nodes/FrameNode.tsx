@@ -1,7 +1,8 @@
-import { IconFolder } from "@rae/design-system/icons";
+import { IconFile, IconFolder, IconLock } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position, useReactFlow, useStoreApi } from "@xyflow/react";
 import { memo, type MouseEvent, type PointerEvent } from "react";
 import { CHANGE_LETTER, CHANGE_WORD } from "../../lib/diff.ts";
+import { indexFolderOf } from "../../lib/displayName.ts";
 import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { COMPACT_BELOW, useLod } from "../lod.ts";
@@ -113,6 +114,27 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
         </span>
       )}
       <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
+      {element.kind === "module" && node ? (
+        // a file: its name, its folder dimmed below; its declarations are the rows under it
+        <div className={`rae-frame__header rae-file__header ${FRAME_HANDLE}`}>
+          <span className="rae-icon">
+            <IconFile size={16} />
+          </span>
+          <div className="rae-file__titles">
+            <div className="rae-file__name" title={node.filePath}>
+              {element.name}
+            </div>
+            <div className="rae-file__path">{node.filePath.includes("/") ? node.filePath.slice(0, node.filePath.lastIndexOf("/") + 1) : "./"}</div>
+          </div>
+          {detailed && indexFolderOf(node) && <span className="rae-chip rae-chip--props">index</span>}
+          {detailed && node.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
+          {detailed && node.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
+          <span className="rae-file__lock" title="Its declarations keep their order: drag the file to move them">
+            <IconLock size={13} />
+          </span>
+          {detailed && <NodeActions data={data} frame />}
+        </div>
+      ) : (
       <div className={`rae-frame__header ${FRAME_HANDLE}`}>
         <span className="rae-icon">
           <Icon size={13} />
@@ -134,6 +156,7 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
         {detailed && node?.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
         {detailed && <NodeActions data={data} frame />}
       </div>
+      )}
       <div className="rae-frame__room nopan" {...room} />
       {detailed && <ContainsButton data={data} />}
       <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />

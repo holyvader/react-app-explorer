@@ -29,6 +29,11 @@ export type ElementNodeData = {
   collapsed?: number;
   /** Frame refuses the card being dragged over it. */
   refused?: boolean;
+  /**
+   * A declaration drawn as a row of its file's list (graph/layout.ts fileListOf): not dragged on its
+   * own; `groupStart`: the first of its kind group (a hairline above it).
+   */
+  row?: { groupStart: boolean };
 };
 
 export type CardFlowNode = Node<ElementNodeData, "card">;

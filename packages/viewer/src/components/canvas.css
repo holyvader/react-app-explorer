@@ -320,6 +320,63 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .react-flow__node.selected > .rae-frame .rae-frame__header .rae-actions { visibility: visible; }
 .rae-frame__room { flex: 1; }
 
+/* ---- a file: its header, then its declarations as rows (graph/layout.ts: FILE_HEADER 62,
+   ROW_HEIGHT 30, GROUP_GAP 8; components/nodes/CardNode.tsx RowCard) ---------------------- */
+.rae-frame[data-kind="module"] { border-radius: 10px; }
+.rae-file__header { position: relative; height: 62px; align-items: flex-start; gap: 9px; padding: 11px 12px 0 14px; border-radius: 9px 9px 0 0; }
+.rae-file__header .rae-icon { margin-top: 3px; color: var(--chakra-colors-kind-module-solid); }
+.rae-file__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rae-file__name { font-size: 16px; line-height: 22px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rae-file__path { font-family: var(--chakra-fonts-mono); font-size: 11.5px; line-height: 16px; color: var(--fg-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rae-file__header :is(.rae-chip, .rae-badge) { margin-top: 2px; flex-shrink: 0; }
+.rae-file__lock { margin-top: 4px; display: inline-flex; color: var(--fg-subtle); flex-shrink: 0; }
+/* the file's actions over the header's right end, on hover */
+.rae-file__header .rae-actions { position: absolute; right: 8px; top: 8px; }
+
+.rae-row {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  color: var(--fg);
+}
+.rae-row__icon { display: inline-flex; flex-shrink: 0; color: var(--k); }
+.rae-row .rae-name { flex: 1; font-size: 13px; line-height: 18px; font-weight: 600; }
+.rae-row__meta { flex-shrink: 0; font-size: 11.5px; color: var(--fg-subtle); }
+.rae-row .rae-chip { flex-shrink: 0; }
+/* a hairline over the first row of each kind group, in the 8px gap above it */
+.rae-row[data-group-start]::before { content: ""; position: absolute; left: 14px; right: 12px; top: -4.5px; border-top: 1px solid var(--chakra-colors-border); }
+/* hover and selected fills stop 1.5px short of each side: a row spans its file, over its border
+   (1px, 1.5px when selected or changed), which must show through */
+.rae-row { --row-fill: transparent; background: linear-gradient(var(--row-fill), var(--row-fill)) 1.5px 0 / calc(100% - 3px) 100% no-repeat; }
+.react-flow__node-card:hover .rae-row { --row-fill: var(--chakra-colors-bg-subtle); }
+/* A row draws no border or fill of its own (the file's colour and border show through): its state
+   is a bar against the file's left border, 4px wide, square, short of its top and bottom —
+   selected, related, or its change in a diff. */
+.rae-row__mark { position: absolute; left: 0; top: 6px; bottom: 6px; width: 4px; background: transparent; }
+.react-flow__node.rae-related .rae-row__mark { background: var(--sel-related); }
+.react-flow__node.selected .rae-row { --row-fill: var(--chakra-colors-selection-row-bg); }
+.react-flow__node.selected .rae-row__mark { background: var(--sel); }
+.rae-row__actions { position: absolute; right: 6px; top: 50%; translate: 0 -50%; display: flex; padding: 2px; border-radius: 6px; background: var(--chakra-colors-bg-emphasized); visibility: hidden; }
+.react-flow__node-card:hover .rae-row__actions,
+.react-flow__node-card:focus-within .rae-row__actions,
+.react-flow__node-card.selected .rae-row__actions { visibility: visible; }
+.rae-canvas[data-lod="compact"] .rae-row .rae-name { font-size: 16px; line-height: 20px; }
+/* diff: the bar in its change colour, the letter in a chip; removed: struck through */
+.rae-row[data-change] { --d: var(--chakra-colors-diff-changed-solid); --d-bg: var(--chakra-colors-diff-changed-subtle); --d-fg: var(--chakra-colors-diff-changed-fg); }
+.react-flow__node:not(.selected):not(.rae-related) .rae-row[data-change] .rae-row__mark { background: var(--d); }
+/* no tint: the bar and the letter carry the change */
+.rae-row[data-change="added"] { --d: var(--chakra-colors-diff-added-solid); --d-bg: var(--chakra-colors-diff-added-subtle); --d-fg: var(--chakra-colors-diff-added-fg); }
+.rae-row[data-change="removed"] { --d: var(--chakra-colors-diff-removed-solid); --d-bg: var(--chakra-colors-diff-removed-subtle); --d-fg: var(--chakra-colors-diff-removed-fg); }
+.rae-row[data-change="removed"] .rae-name { text-decoration: line-through; color: var(--fg-subtle); }
+/* a file's rows fade their own content, never a veil over the file's background (it'd stripe it) */
+.rae-canvas[data-selection] .react-flow__node:not(.selected):not(.rae-related) > .rae-row > :is(.rae-name, .rae-row__icon, .rae-row__meta, .rae-chip, .rae-row__change, .rae-row__mark) { opacity: 0.32; }
+.rae-row__change { flex-shrink: 0; width: 18px; font-size: 11px; line-height: 18px; font-weight: 600; text-align: center; border-radius: 4px; background: var(--d-bg); color: var(--d-fg); }
+
 /* ---- edges: each relation its colour, dash as the second cue ---------------------------- */
 .react-flow__edge.rae-edge path.react-flow__edge-path {
   stroke: var(--e);

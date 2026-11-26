@@ -230,7 +230,8 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
 
   entries.push({ type: "separator" });
   if (holds) {
-    entries.push({ type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) });
+    // a file's rows have their fixed order: nothing to tidy
+    if (node.kind !== "module") entries.push({ type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) });
     if (node.kind === "module") {
       entries.push({ type: "item", value: "hide-only", label: "Remove only this file, keep what it holds", icon: <IconUnwrap size={I} />, onSelect: () => hideNode(id, { keepContents: true }) });
     }

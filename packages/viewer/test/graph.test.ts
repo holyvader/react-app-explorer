@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Snapshot } from "@rae/schema";
 import { scan } from "../../scanner/src/scan.ts";
-import { drawnGraph } from "../src/graph/drawn.ts";
-import { CARD_HEIGHT, PADDING, type PlacedElement } from "../src/graph/layout.ts";
+import { type DrawnElement, type DrawnGraph, drawnGraph } from "../src/graph/drawn.ts";
+import { CARD_HEIGHT, FILE_PADDING, fileListOf, GROUP_GAP, type PlacedElement, ROW_HEIGHT } from "../src/graph/layout.ts";
 import { layoutAll } from "../src/graph/squareLayout.ts";
 import { DEFAULT_EXCLUDED, packageOf } from "../src/graph/packages.ts";
-import { absoluteRect, autoPlaceSoleChildren, movedTo, placeLocally } from "../src/graph/placement.ts";
+import { absoluteRect, movedTo, placeLocally } from "../src/graph/placement.ts";
 
 // A fresh snapshot of the Next.js fixture (no cache, no types: fast and independent of files on disk).
 let cached: Promise<Snapshot> | undefined;
@@ -95,13 +95,12 @@ describe("placement", async () => {
   const g1 = drawnGraph(s, visible, opts());
   const p1 = await layoutAll(g1);
 
-  test("frames are sized around what they hold", () => {
+  test("a file's declarations are rows under its header, the file fitted to them", () => {
     const file = p1.find((p) => p.element.id === "app/page.tsx")!;
     const decl = p1.find((p) => p.element.id === "app/page.tsx#HomePage")!;
     expect(file.holds).toBe(true);
-    expect(decl.x).toBeGreaterThanOrEqual(PADDING.left);
-    expect(decl.y).toBeGreaterThanOrEqual(PADDING.top);
-    expect(file.height).toBeGreaterThanOrEqual(decl.y + CARD_HEIGHT + PADDING.bottom - 1);
+    expect(decl).toMatchObject({ x: FILE_PADDING.left, y: FILE_PADDING.top, width: file.width, height: ROW_HEIGHT });
+    expect(file.height).toBe(FILE_PADDING.top + ROW_HEIGHT + FILE_PADDING.bottom);
   });
 
   test("adding a sibling grows the frame and keeps the rest in place", () => {
@@ -138,17 +137,13 @@ describe("placement", async () => {
     expect(overlap(abs, page)).toBe(false);
   });
 
-  test("moving a child refits its parent (grows, and shrinks back)", () => {
+  test("a file's row stays in its list: moving it changes nothing", () => {
     const decl = "components/TodoList.tsx#TodoList";
     const before = absoluteRect(p1, "components/TodoList.tsx")!;
     const d = absoluteRect(p1, decl)!;
-    const grown = movedTo(p1, g1, decl, { x: d.x + 300, y: d.y + 200 })!;
-    const after = absoluteRect(grown, "components/TodoList.tsx")!;
-    expect(after.width).toBeGreaterThan(before.width);
-    expect(after.height).toBeGreaterThan(before.height);
-    expect(after.x).toBe(before.x); // top-left corner stays
-    const back = movedTo(grown, g1, decl, d)!;
-    expect(absoluteRect(back, "components/TodoList.tsx")!.width).toBe(before.width);
+    const moved = movedTo(p1, g1, decl, { x: d.x + 300, y: d.y + 200 })!;
+    expect(absoluteRect(moved, decl)).toEqual(d);
+    expect(absoluteRect(moved, "components/TodoList.tsx")).toEqual(before);
   });
 
   test("removing a declaration leaves the frame a card again", () => {
@@ -162,23 +157,31 @@ describe("placement", async () => {
 
 export type { PlacedElement };
 
-describe("auto-placement", () => {
-  test("sole element moves to the room's corner and the frame shrinks around it", () => {
-    const el = (id: string, kind: "module" | "function" | "folder", parent: string | null) => ({ id, kind, name: id, parent });
+describe("file lists", () => {
+  const el = (id: string, kind: DrawnElement["kind"], parent: string | null): DrawnElement => ({ id, kind, name: id.split("#").pop()!, parent });
+  test("types, components, hooks, server actions, functions; A to Z in each, a gap between groups", () => {
+    const file = el("lib/a.ts", "module", null);
+    const kids = [el("lib/a.ts#zeta", "function", "lib/a.ts"), el("lib/a.ts#Card", "component", "lib/a.ts"), el("lib/a.ts#useX", "hook", "lib/a.ts"), el("lib/a.ts#Props", "type", "lib/a.ts"), el("lib/a.ts#alpha", "function", "lib/a.ts"), el("lib/a.ts#save", "serverAction", "lib/a.ts"), el("lib/a.ts#Avatar", "component", "lib/a.ts")];
+    const list = fileListOf(file, kids);
+    expect(list.rows.map((r) => r.element.name)).toEqual(["Props", "Avatar", "Card", "useX", "save", "alpha", "zeta"]);
+    expect(list.rows.map((r) => r.y)).toEqual([0, 38, 68, 106, 144, 182, 212]);
+    expect(list.innerHeight).toBe(242);
+  });
+  test("rows standing anywhere are put back in the list, the file fitted to them", () => {
+    const graph: DrawnGraph = { elements: [el("dir:lib", "folder", null), el("lib/data.ts", "module", "dir:lib"), el("lib/data.ts#getUser", "function", "lib/data.ts"), el("lib/data.ts#User", "type", "lib/data.ts")], relations: [] };
     const placed: PlacedElement[] = [
-      { element: el("dir:lib", "folder", null), holds: true, x: 0, y: 0, width: 900, height: 600 },
-      { element: el("lib/data.ts", "module", "dir:lib"), holds: true, x: 16, y: 60, width: 800, height: 500 },
-      { element: el("lib/data.ts#getUser", "function", "lib/data.ts"), holds: false, x: 400, y: 300, width: 230, height: CARD_HEIGHT },
-      // a folder with one file: left alone
-      { element: el("dir:other", "folder", null), holds: true, x: 1000, y: 0, width: 600, height: 400 },
-      { element: el("other/x.ts", "module", "dir:other"), holds: false, x: 200, y: 200, width: 230, height: CARD_HEIGHT },
+      { element: graph.elements[0]!, holds: true, x: 0, y: 0, width: 900, height: 600 },
+      { element: graph.elements[1]!, holds: true, x: 16, y: 60, width: 800, height: 500 },
+      { element: graph.elements[2]!, holds: false, x: 400, y: 300, width: 230, height: CARD_HEIGHT },
+      { element: graph.elements[3]!, holds: false, x: 20, y: 80, width: 230, height: CARD_HEIGHT },
     ];
-    const out = autoPlaceSoleChildren(placed);
+    const out = placeLocally(placed, graph, null)!;
     const by = new Map(out.map((p) => [p.element.id, p]));
-    expect(by.get("lib/data.ts#getUser")).toMatchObject({ x: PADDING.left, y: PADDING.top });
-    expect(by.get("lib/data.ts")!.height).toBe(CARD_HEIGHT + PADDING.top + PADDING.bottom);
-    expect(by.get("lib/data.ts")).toMatchObject({ x: 16, y: 60 }); // top-left corner kept
-    expect(by.get("other/x.ts")).toMatchObject({ x: 200, y: 200 }); // folders aren't touched
+    const file = by.get("lib/data.ts")!;
+    expect(file).toMatchObject({ x: 16, y: 60 }); // top-left corner kept
+    expect(by.get("lib/data.ts#User")).toMatchObject({ x: 0, y: FILE_PADDING.top, width: file.width, height: ROW_HEIGHT });
+    expect(by.get("lib/data.ts#getUser")).toMatchObject({ x: 0, y: FILE_PADDING.top + ROW_HEIGHT + GROUP_GAP });
+    expect(file.height).toBe(FILE_PADDING.top + 2 * ROW_HEIGHT + GROUP_GAP + FILE_PADDING.bottom);
   });
 });
 

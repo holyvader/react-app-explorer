@@ -3,7 +3,7 @@ import { type CSSProperties, useMemo } from "react";
 import type { Collapse } from "../../graph/collapse.ts";
 import { type DrawnGraph, FOLDER_PREFIX, routeChain, routeOf } from "../../graph/drawn.ts";
 import { folderExpansion, folderPath, parentFolders } from "../../graph/folder.ts";
-import type { PlacedElement } from "../../graph/layout.ts";
+import { type PlacedElement, rowRank } from "../../graph/layout.ts";
 import { privatePropsType } from "../../graph/privateProps.ts";
 import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
 import { changeOf } from "../../lib/diff.ts";
@@ -83,11 +83,18 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
     if (!snapshot || !index) return [];
     const drawn = new Set(placed.map((p) => p.element.id));
     const distinct = (ids: string[]) => new Set(ids).size;
-    // A file module's only element is placed automatically (autoPlaceSoleChildren) and can't be
-    // dragged; inside folders everything moves freely.
-    const held = new Map<string, number>();
-    for (const p of placed) if (p.element.parent) held.set(p.element.parent, (held.get(p.element.parent) ?? 0) + 1);
+    // A file's declarations are the rows of its list (graph/layout.ts fileListOf): they can't be
+    // dragged (the file moves as one); a hairline above each kind group's first. Inside folders
+    // everything moves freely.
     const kindOf = new Map(placed.map((p) => [p.element.id, p.element.kind]));
+    const isRow = (p: PlacedElement) => !p.holds && !!p.element.parent && kindOf.get(p.element.parent) === "module";
+    const groupStarts = new Set<string>();
+    const rowsOf = new Map<string, PlacedElement[]>();
+    for (const p of placed) if (isRow(p)) rowsOf.set(p.element.parent!, [...(rowsOf.get(p.element.parent!) ?? []), p]);
+    for (const rows of rowsOf.values()) {
+      rows.sort((a, b) => a.y - b.y);
+      rows.forEach((r, i) => i > 0 && rowRank(r.element) !== rowRank(rows[i - 1]!.element) && groupStarts.add(r.element.id));
+    }
     // Nesting depth: deeper elements float higher (bigger shadows), so the diagram reads in layers.
     const parentOf = new Map(placed.map((p) => [p.element.id, p.element.parent]));
     const depthOf = (id: string) => {
@@ -111,7 +118,7 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
         height: p.height,
         parentId: p.element.parent ?? undefined,
         dragHandle: p.holds ? `.${FRAME_HANDLE}` : undefined,
-        draggable: !(p.element.parent && kindOf.get(p.element.parent) === "module" && held.get(p.element.parent) === 1),
+        draggable: !isRow(p),
         style: { "--depth": depthOf(id) } as CSSProperties,
         selected: false,
         // React Flow's own selection stays off (it flips its internal node state on click, out of
@@ -152,6 +159,7 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
                 }
               : { parents: false, allParents: false, children: false, allChildren: false },
           change: showDiff ? changeOf(snapshot, id) : undefined,
+          row: isRow(p) ? { groupStart: groupStarts.has(id) } : undefined,
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },

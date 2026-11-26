@@ -97,6 +97,21 @@ function sideOf(node: InternalNode, point: { x: number; y: number }): Position {
   return Position.Top;
 }
 
+/** A declaration drawn as a row of its file's list (components/canvas/nodes.ts). */
+const isRow = (n: InternalNode) => n.type === "card" && !!(n.data as { row?: unknown }).row;
+
+/**
+ * Where an edge meets a row: the middle of its left or right end, whichever faces the other node;
+ * between two rows of one file, both on the left, so the bezier loops out through the gutter.
+ */
+function rowEnd(node: InternalNode, other: InternalNode, sameFile: boolean, shiftY: number): Point & { side: Position } {
+  const { w, h } = sizeOf(node);
+  const p = node.internals.positionAbsolute;
+  const left = sameFile || centreOf(other).x < p.x + w / 2;
+  const y = p.y + h / 2 + Math.max(-h * 0.3, Math.min(h * 0.3, shiftY));
+  return { x: left ? p.x : p.x + w, y, side: left ? Position.Left : Position.Right };
+}
+
 /**
  * `lane`: for several relations between the same two nodes, how far (px) this one runs beside the
  * line between their centres, so they don't draw on top of each other. Positive is to the left of
@@ -110,8 +125,9 @@ export function floatingEdgeParams(source: InternalNode, target: InternalNode, l
     const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     shift = { x: (-(b.y - a.y) / len) * lane, y: ((b.x - a.x) / len) * lane };
   }
-  const s = intersection(source, target, shift);
-  const t = intersection(target, source, shift);
+  const sameFile = isRow(source) && isRow(target) && source.parentId === target.parentId;
+  const s = isRow(source) ? rowEnd(source, target, sameFile, shift.y) : intersection(source, target, shift);
+  const t = isRow(target) ? rowEnd(target, source, sameFile, shift.y) : intersection(target, source, shift);
   return { sx: s.x, sy: s.y, tx: t.x, ty: t.y, sourcePos: s.side ?? sideOf(source, s), targetPos: t.side ?? sideOf(target, t) };
 }
 

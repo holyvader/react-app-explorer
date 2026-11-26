@@ -1,3 +1,4 @@
+import type { GraphNode } from "@rae/schema";
 import { IconFolder } from "@rae/design-system/icons";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import { Fragment, memo, type ReactNode } from "react";
@@ -54,9 +55,47 @@ function PropsTypeLink({ id, name, keyword, owner }: { id: string; name: string;
   );
 }
 
+/**
+ * A declaration in its file's list (graph/layout.ts fileListOf): one compact row — its kind's icon,
+ * its name (`<Name />` for components), a word of what it is, its props count, the diff letter —
+ * actions on hover at its right end. It doesn't move: the file does.
+ */
+function RowCard({ data, node }: { data: CardFlowNode["data"]; node: GraphNode }) {
+  const full = useLod() === "full";
+  const Icon = KIND_META[node.kind].icon;
+  const isComponent = node.kind === "component";
+  const props = propsCount(node);
+  const meta = node.kind === "type" ? (node.typeKind ?? "type") : node.isAsync ? "async" : undefined;
+  return (
+    <div className="rae-row" data-kind={node.kind} data-change={data.change} data-group-start={data.row?.groupStart || undefined} data-missing={node.missing || undefined}>
+      <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN_HANDLE} />
+      {/* the row's state, as a bar at its left end: selected, related, its change in a diff */}
+      <span className="rae-row__mark" aria-hidden />
+      <span className="rae-row__icon" aria-hidden>
+        <Icon size={14} />
+      </span>
+      <span className="rae-name">{isComponent ? <JsxName name={data.element.name} /> : data.element.name}</span>
+      {full && meta && <span className="rae-row__meta">{meta}</span>}
+      {full && props && <span className="rae-chip rae-chip--props">{propsChipLabel(props)}</span>}
+      {data.change && (
+        <span className="rae-row__change" data-change={data.change} title={`${CHANGE_WORD[data.change]} in this diff`}>
+          {CHANGE_LETTER[data.change]}
+        </span>
+      )}
+      {full && (
+        <span className="rae-row__actions">
+          <NodeActions data={data} />
+        </span>
+      )}
+      <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN_HANDLE} />
+    </div>
+  );
+}
+
 function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
   const { node, element } = data;
   const lod = useLod();
+  if (data.row && node) return <RowCard data={data} node={node} />;
   // components are a tag, < >: their outline is an SVG (TagOutline), their name JSX
   const isComponent = node?.kind === "component";
   // types are a blueprint (canvas.css): dashed, a fine grid, corner marks

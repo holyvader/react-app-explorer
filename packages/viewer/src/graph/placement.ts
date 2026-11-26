@@ -1,5 +1,5 @@
 import type { DrawnElement, DrawnGraph } from "./drawn.ts";
-import { CARD_HEIGHT, cardWidthOf, frameWidthOf, PADDING, type PlacedElement, SPACING } from "./layout.ts";
+import { CARD_HEIGHT, cardWidthOf, FILE_PADDING, fileListOf, isFileFrame, leastWidthOf, paddingOf, type PlacedElement, ROW_HEIGHT, SPACING } from "./layout.ts";
 
 /*
  * Incremental placement:
@@ -74,7 +74,9 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     const r = absoluteOf(e.id);
     const was = before.get(e.id);
     if (!r || !was) continue;
-    const next = kidsOf(e.id).length === 0 && was.holds ? { ...r, width: cardWidthOf(e), height: CARD_HEIGHT } : r;
+    // a file's row out of its file (the file removed, its declarations kept): a card again
+    const wasRow = !was.holds && isFileFrame(was.element.parent === null ? undefined : before.get(was.element.parent)?.element) && !isFileFrame(e.parent === null ? undefined : byId.get(e.parent));
+    const next = (kidsOf(e.id).length === 0 && was.holds) || wasRow ? { ...r, width: cardWidthOf(e), height: CARD_HEIGHT } : r;
     rects.set(e.id, next);
     if (!same(next, r)) resized.push({ id: e.id, old: r });
   }
@@ -140,16 +142,17 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     const e = byId.get(id);
     if (!old || !e) return true;
     let next = old;
+    const pad = paddingOf(e);
     for (const { id: kid } of placedKids(id)) {
       const r = rects.get(kid)!;
       next = union(next, {
-        x: r.x - PADDING.left,
-        y: r.y - PADDING.top,
-        width: r.width + PADDING.left + PADDING.right,
-        height: r.height + PADDING.top + PADDING.bottom,
+        x: r.x - pad.left,
+        y: r.y - pad.top,
+        width: r.width + pad.left + pad.right,
+        height: r.height + pad.top + pad.bottom,
       });
     }
-    if (next.width < frameWidthOf(e.name)) next = { ...next, width: frameWidthOf(e.name) };
+    if (next.width < leastWidthOf(e)) next = { ...next, width: leastWidthOf(e) };
     if (same(next, old)) return true;
     rects.set(id, next);
     return pushAround(id, old) && fit(e.parent);
@@ -164,13 +167,14 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     const held = placedKids(id).map((k) => rects.get(k.id)!);
     if (!held.length) return refit(e.parent);
     const box = held.slice(1).reduce(union, held[0]!);
-    const x = Math.min(old.x, box.x - PADDING.left);
-    const y = Math.min(old.y, box.y - PADDING.top);
+    const pad = paddingOf(e);
+    const x = Math.min(old.x, box.x - pad.left);
+    const y = Math.min(old.y, box.y - pad.top);
     const next = {
       x,
       y,
-      width: Math.max(frameWidthOf(e.name), box.x + box.width + PADDING.right - x),
-      height: Math.max(CARD_HEIGHT, box.y + box.height + PADDING.bottom - y),
+      width: Math.max(leastWidthOf(e), box.x + box.width + pad.right - x),
+      height: Math.max(CARD_HEIGHT, box.y + box.height + pad.bottom - y),
     };
     if (same(next, old)) return true;
     rects.set(id, next);
@@ -183,7 +187,7 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     const held = placedKids(id);
     if (!frame || !held.length) return;
     const top = Math.min(...held.map((k) => rects.get(k.id)!.y));
-    const gap = top - (frame.y + PADDING.top);
+    const gap = top - (frame.y + paddingOf(byId.get(id)).top);
     if (gap > 0) for (const k of held) move(k.id, 0, -gap);
   };
 
@@ -194,9 +198,29 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     if (element.parent !== null && rects.has(element.parent) && now.get(element.id) !== element.parent) leftBehind.add(element.parent);
   }
 
+  /**
+   * A file's rows in their list (layout.ts fileListOf): in order, spanning the file, the file sized
+   * to them (its top-left kept), what it now covers pushed aside. Whatever placed them.
+   */
+  const relist = (id: string): boolean => {
+    const e = byId.get(id);
+    const frame = rects.get(id);
+    if (!e || !frame || !isFileFrame(e)) return true;
+    const kids = placedKids(id);
+    if (!kids.length) return true;
+    const list = fileListOf(e, kids);
+    for (const r of list.rows) rects.set(r.element.id, { x: frame.x + FILE_PADDING.left, y: frame.y + FILE_PADDING.top + r.y, width: list.width, height: ROW_HEIGHT });
+    const next = { x: frame.x, y: frame.y, width: list.width, height: FILE_PADDING.top + list.innerHeight + FILE_PADDING.bottom };
+    if (same(next, frame)) return true;
+    rects.set(id, next);
+    return pushAround(id, frame) && fit(e.parent);
+  };
+  const relistFiles = () => graph.elements.every((e) => !isFileFrame(e) || relist(e.id));
+
   const settle = () =>
     resized.every(({ id, old }) => fit(kidsOf(id).length > 0 ? id : null) && pushAround(id, old) && fit(byId.get(id)?.parent ?? null)) &&
-    [...leftBehind].every((id) => (lift(id), refit(id)));
+    [...leftBehind].every((id) => (lift(id), refit(id))) &&
+    relistFiles();
 
   /** Every element relative to its container, containers first. */
   const placed = (): PlacedElement[] => {
@@ -213,7 +237,9 @@ function workspaceOf(previous: readonly PlacedElement[], graph: DrawnGraph) {
     return out;
   };
 
-  return { rects, byId, kidsOf, placedKids, descendantsOf, ancestorsOf, move, fit, refit, pushAround, shove, settle, placed };
+  /** The placing, files' rows listed first (whatever was placed or moved since). */
+  const finish = () => (relistFiles() ? placed() : null);
+  return { rects, byId, kidsOf, placedKids, descendantsOf, ancestorsOf, move, fit, refit, pushAround, shove, settle, placed, finish };
 }
 
 type Workspace = ReturnType<typeof workspaceOf>;
@@ -237,7 +263,7 @@ export const gridColumns = (n: number) => Math.max(1, Math.ceil(Math.sqrt(n)));
  */
 export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGraph, anchor: string | CanvasPoint | null, opts: PlaceOptions = {}): PlacedElement[] | null {
   const ws = workspaceOf(previous, graph);
-  const { rects, placedKids, descendantsOf, ancestorsOf, fit, settle, placed } = ws;
+  const { rects, byId, placedKids, descendantsOf, ancestorsOf, fit, settle, finish } = ws;
   if (!settle()) return null;
   const point = anchor !== null && typeof anchor === "object" ? anchor : null;
   const card = typeof anchor === "string" && rects.has(anchor) ? anchor : null;
@@ -285,11 +311,12 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
     if (held.length) {
       // A container around what is already drawn of it.
       const box = held.slice(1).reduce(union, held[0]!);
+      const pad = paddingOf(e);
       const r = {
-        x: box.x - PADDING.left,
-        y: box.y - PADDING.top,
-        width: Math.max(frameWidthOf(e.name), box.width + PADDING.left + PADDING.right),
-        height: box.height + PADDING.top + PADDING.bottom,
+        x: box.x - pad.left,
+        y: box.y - pad.top,
+        width: Math.max(leastWidthOf(e), box.width + pad.left + pad.right),
+        height: box.height + pad.top + pad.bottom,
       };
       const own = new Set([...descendantsOf(e.id), ...ancestorsOf(e.id)]);
       for (const [id, other] of rects) if (!own.has(id) && overlaps(r, other)) return false;
@@ -303,11 +330,12 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
       const siblings = placedKids(e.parent)
         .filter((k) => k.id !== e.id)
         .map((k) => rects.get(k.id)!);
+      const pad = paddingOf(byId.get(e.parent));
       const room = {
-        x: container.x + PADDING.left,
-        y: container.y + PADDING.top,
-        width: container.width - PADDING.left - PADDING.right,
-        height: container.height - PADDING.top - PADDING.bottom,
+        x: container.x + pad.left,
+        y: container.y + pad.top,
+        width: container.width - pad.left - pad.right,
+        height: container.height - pad.top - pad.bottom,
       };
       rects.set(e.id, spotFor(width, CARD_HEIGHT, siblings, siblings, siblings.length ? null : { x: room.x, y: room.y }, room));
       return fit(e.parent);
@@ -337,7 +365,8 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
       const container = rects.get(parent);
       if (!container) return false;
       const siblings = placedKids(parent).map((k) => rects.get(k.id)!);
-      const room = { x: container.x + PADDING.left, y: container.y + PADDING.top, width: container.width - PADDING.left - PADDING.right, height: container.height - PADDING.top - PADDING.bottom };
+      const pad = paddingOf(byId.get(parent));
+      const room = { x: container.x + pad.left, y: container.y + pad.top, width: container.width - pad.left - pad.right, height: container.height - pad.top - pad.bottom };
       spot = spotFor(width, height, siblings, siblings, siblings.length ? null : { x: room.x, y: room.y }, room);
     } else {
       const roots = placedKids(null).map((k) => rects.get(k.id)!);
@@ -373,18 +402,19 @@ export function placeLocally(previous: readonly PlacedElement[], graph: DrawnGra
     waiting.splice(i, 1);
     if (!place(e)) return null;
   }
-  return placed();
+  return finish();
 }
 
 /** What a container holds set out anew (as `inside` lays it), the container fitted to it; the rest stays put. */
 export function arrangeWithin(previous: readonly PlacedElement[], graph: DrawnGraph, id: string, inside: readonly PlacedElement[]): PlacedElement[] | null {
-  const { rects, byId, kidsOf, pushAround, fit, settle, placed } = workspaceOf(previous, graph);
+  const { rects, byId, kidsOf, pushAround, fit, settle, finish } = workspaceOf(previous, graph);
   if (!settle()) return null;
   const frame = rects.get(id);
   const e = byId.get(id);
   if (!frame || !e) return null;
   const at = new Map(inside.map((p) => [p.element.id, p]));
-  let right = frame.x + frameWidthOf(e.name);
+  const pad = paddingOf(e);
+  let right = frame.x + leastWidthOf(e);
   let bottom = frame.y + CARD_HEIGHT;
   const set = (parent: string, from: CanvasPoint): boolean => {
     for (const { id: kid } of kidsOf(parent)) {
@@ -392,15 +422,15 @@ export function arrangeWithin(previous: readonly PlacedElement[], graph: DrawnGr
       if (!laid) return false;
       const r = { x: from.x + laid.x, y: from.y + laid.y, width: laid.width, height: laid.height };
       rects.set(kid, r);
-      right = Math.max(right, r.x + r.width + PADDING.right);
-      bottom = Math.max(bottom, r.y + r.height + PADDING.bottom);
+      right = Math.max(right, r.x + r.width + pad.right);
+      bottom = Math.max(bottom, r.y + r.height + pad.bottom);
       if (!set(kid, r)) return false;
     }
     return true;
   };
-  if (!set(id, { x: frame.x + PADDING.left, y: frame.y + PADDING.top })) return null;
+  if (!set(id, { x: frame.x + pad.left, y: frame.y + pad.top })) return null;
   rects.set(id, { ...frame, width: right - frame.x, height: bottom - frame.y });
-  return pushAround(id, frame) && fit(e.parent) ? placed() : null;
+  return pushAround(id, frame) && fit(e.parent) ? finish() : null;
 }
 
 export interface CanvasFrame extends Rect {
@@ -435,7 +465,7 @@ export function landsIn(frames: readonly CanvasFrame[], rect: Rect): CanvasFrame
  */
 export function movedTo(previous: readonly PlacedElement[], graph: DrawnGraph, id: string, to: CanvasPoint): PlacedElement[] | null {
   const ws = workspaceOf(previous, graph);
-  const { rects, byId, move, refit, shove, settle, placed } = ws;
+  const { rects, byId, move, refit, shove, settle, finish } = ws;
   if (!settle()) return null;
   const from = rects.get(id);
   if (!from) return null;
@@ -457,7 +487,7 @@ export function movedTo(previous: readonly PlacedElement[], graph: DrawnGraph, i
   }
   move(id, at.x - from.x, at.y - from.y);
   if (!shove(id, id)) return null;
-  return refit(byId.get(id)?.parent ?? null) ? placed() : null;
+  return refit(byId.get(id)?.parent ?? null) ? finish() : null;
 }
 
 /** Absolute canvas rect of a placed element. */
@@ -475,22 +505,9 @@ export function absoluteRect(placed: readonly PlacedElement[], id: string): Rect
 }
 
 /**
- * A file module holding a single element places it automatically: at the top-left of its room,
- * the frame fitted around it (keeping its top-left corner). The frame only ever shrinks here,
- * so nothing around it needs pushing. Folders are left alone (their contents move freely).
+ * Kept for its callers: a file's elements are placed by its list now (layout.ts fileListOf, the
+ * workspace's `relist`), whatever their number, so there is nothing left to do here.
  */
 export function autoPlaceSoleChildren(placed: PlacedElement[]): PlacedElement[] {
-  const kids = new Map<string, PlacedElement[]>();
-  for (const p of placed) if (p.element.parent) kids.set(p.element.parent, [...(kids.get(p.element.parent) ?? []), p]);
-  const fixed = new Map<string, PlacedElement>();
-  for (const p of placed) {
-    const inside = kids.get(p.element.id);
-    if (p.element.kind !== "module" || inside?.length !== 1) continue;
-    const only = inside[0]!;
-    const width = Math.max(frameWidthOf(p.element.name), only.width + PADDING.left + PADDING.right);
-    const height = only.height + PADDING.top + PADDING.bottom;
-    if (only.x !== PADDING.left || only.y !== PADDING.top) fixed.set(only.element.id, { ...only, x: PADDING.left, y: PADDING.top });
-    if (p.width !== width || p.height !== height) fixed.set(p.element.id, { ...p, width, height });
-  }
-  return fixed.size ? placed.map((p) => fixed.get(p.element.id) ?? p) : placed;
+  return placed;
 }

@@ -90,7 +90,8 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       {element.kind === "folder" && can.allChildren && (
         <IconBtn label="Show everything inside (files and their declarations)" icon={<IconChevronsDown size={I} />} onClick={() => expandFolder(id, true)} />
       )}
-      {frame && <IconBtn label="Tidy up inside" icon={<IconLayout size={I} />} onClick={() => void arrange(id)} />}
+      {/* a file's rows have their fixed order: nothing to tidy */}
+      {frame && element.kind !== "module" && <IconBtn label="Tidy up inside" icon={<IconLayout size={I} />} onClick={() => void arrange(id)} />}
       {frame && node?.kind === "module" && (
         <IconBtn label="Remove only this file, keep what it holds" icon={<IconUnwrap size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
       )}

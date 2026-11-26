@@ -132,7 +132,7 @@ describe("tree layout", () => {
     expect(new Set(placed.map((p) => p.y)).size).toBe(3);
   });
 
-  test("a file's declarations stay a square; folders stay apart", () => {
+  test("a file's declarations are its list; folders stay apart", () => {
     const elements: DrawnElement[] = [file("src/ui/page.ts"), card("src/ui/page.ts#a", "src/ui/page.ts"), card("src/ui/page.ts#b", "src/ui/page.ts"), card("src/ui/page.ts#c", "src/ui/page.ts"), card("src/ui/page.ts#d", "src/ui/page.ts"), file("src/ui/form.ts"), file("src/ui/list.ts"), file("src/db/users.ts"), file("src/db/posts.ts"), file("src/db/pool.ts")];
     const graph: DrawnGraph = {
       elements,
@@ -144,11 +144,11 @@ describe("tree layout", () => {
     };
     const tree = squareLayout(graph, null, "thorough", "tree");
     const square = squareLayout(graph, null, "thorough", "square");
-    // inside the file: the same 2 × 2 as the square layout gives it
-    const inFile = (placed: PlacedElement[]) => placed.filter((p) => p.element.parent === "src/ui/page.ts").map((p) => `${p.x},${p.y}`).sort();
-    expect(new Set(inFile(tree).map((xy) => xy.split(",")[1])).size).toBe(2);
-    expect(inFile(tree).length).toBe(4);
-    expect(inFile(square).length).toBe(4);
+    // inside the file: its list, A to Z, the same in both layouts
+    const inFile = (placed: PlacedElement[]) => placed.filter((p) => p.element.parent === "src/ui/page.ts").sort((a, b) => a.y - b.y);
+    expect(inFile(tree).map((p) => p.element.id)).toEqual(["src/ui/page.ts#a", "src/ui/page.ts#b", "src/ui/page.ts#c", "src/ui/page.ts#d"]);
+    expect(new Set(inFile(tree).map((p) => p.x)).size).toBe(1);
+    expect(inFile(square).map((p) => `${p.x},${p.y}`)).toEqual(inFile(tree).map((p) => `${p.x},${p.y}`));
     // the two folders' boxes don't overlap
     const at = absolute(tree);
     const boxOf = (ids: string[]) => {

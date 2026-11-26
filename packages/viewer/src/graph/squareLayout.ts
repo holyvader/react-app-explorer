@@ -1,5 +1,5 @@
 import { type DrawnElement, type DrawnGraph, type DrawnKind, FOLDER_PREFIX } from "./drawn.ts";
-import { CARD_HEIGHT, cardWidthOf, frameWidthOf, PADDING, type PlacedElement } from "./layout.ts";
+import { CARD_HEIGHT, cardWidthOf, FILE_PADDING, fileListOf, isFileFrame, leastWidthOf, paddingOf, type PlacedElement, ROW_HEIGHT } from "./layout.ts";
 
 /*
  * Full placement by relations (after noesis' layout-by-relations): each container's elements are set
@@ -466,7 +466,10 @@ interface Block {
   placed: PlacedElement[];
 }
 
-const frameRound = (e: DrawnElement): Round => ({ across: PADDING.left + PADDING.right, down: PADDING.top + PADDING.bottom, least: frameWidthOf(e.name) });
+const frameRound = (e: DrawnElement): Round => {
+  const p = paddingOf(e);
+  return { across: p.left + p.right, down: p.top + p.bottom, least: leastWidthOf(e) };
+};
 
 /**
  * What sets out the graph inside `root` (the canvas when null): each container's elements in a
@@ -510,6 +513,20 @@ function placerOf(root: DrawnElement | null, kidsOf: (parent: string | null) => 
     const kept = cache.get(parent);
     if (kept) return kept;
     const kids = kidsOf(parent);
+    // a file's declarations: its list (layout.ts fileListOf), not a square
+    const file = parent === null ? undefined : parent === rootId ? (root ?? undefined) : elementOf(parent);
+    if (file && isFileFrame(file) && kids.length) {
+      const list = fileListOf(file, kids);
+      const top = parent === rootId ? 0 : FILE_PADDING.top;
+      const left = parent === rootId ? 0 : FILE_PADDING.left;
+      const out = {
+        width: list.width,
+        height: list.innerHeight,
+        placed: list.rows.map((r) => ({ element: r.element, holds: false, x: left, y: top + r.y, width: list.width, height: ROW_HEIGHT })),
+      };
+      cache.set(parent, out);
+      return out;
+    }
     const sized = kids.map(sizeOf);
     const mode = trees.mode.get(parent);
     let rows: Rows;
@@ -526,7 +543,7 @@ function placerOf(root: DrawnElement | null, kidsOf: (parent: string | null) => 
       } else rows = packedWithin(sized, width, gap);
     }
     // a frame's elements stand inside its padding; a block's and the root's from its corner
-    const corner = parent === rootId || isGroup(parent) ? { left: 0, top: 0 } : PADDING;
+    const corner = parent === rootId || isGroup(parent) ? { left: 0, top: 0 } : paddingOf(elementOf(parent!));
     const placed: PlacedElement[] = [];
     kids.forEach((element, i) => {
       const { width: w, height, holds, inside } = sized[i]!;
@@ -963,7 +980,9 @@ export function squareLayout(graph: DrawnGraph, within: string | null = null, ef
   // Outer containers first: their order decides the most. A tree's own order is its levels', and a
   // level below the first follows the one above: neither is searched, the first level and what
   // hangs under each element are.
-  const searched = (parent: string | null) => !trees.mode.has(parent) || (parent !== null && trees.firsts.has(parent));
+  // a file's rows have their fixed order (layout.ts fileListOf): never searched
+  const isFile = (id: string | null) => id !== null && isFileFrame(byId.get(id) ?? original.get(id));
+  const searched = (parent: string | null) => !isFile(parent) && (!trees.mode.has(parent) || (parent !== null && trees.firsts.has(parent)));
   const containers = [...order].filter(([parent, kids]) => kids.length > 1 && searched(parent)).sort((a, b) => depthOf(a[0]) - depthOf(b[0]));
 
   // A start from a force-directed embedding, for each container where it tangles less.
