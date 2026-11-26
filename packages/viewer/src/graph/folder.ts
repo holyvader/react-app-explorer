@@ -56,6 +56,21 @@ export function folderExpansion(s: Snapshot, path: string, deep: boolean): strin
   return deep ? [...new Set([...c.files, ...c.declarations].map((n) => n.id))] : c.files.map((n) => n.id);
 }
 
+/**
+ * The folders above a drawn element, as folder ids: a folder's parent (`dir:a/b` → `dir:a`), a
+ * file's own folder (`a/b/x.ts` → `dir:a/b`); with `all`, every one up to the project root. A file
+ * at the root, or outside the scanned folder (`../`), has none.
+ */
+export function foldersAbove(s: Snapshot, id: string, all: boolean): string[] {
+  if (id.startsWith(FOLDER_PREFIX)) return parentFolders(id, all);
+  const file = s.nodes[id];
+  if (file?.kind !== "module" || file.filePath.startsWith("..")) return [];
+  const slash = file.filePath.lastIndexOf("/");
+  if (slash <= 0) return [];
+  const own = `${FOLDER_PREFIX}${file.filePath.slice(0, slash)}`;
+  return all ? [own, ...parentFolders(own, true)] : [own];
+}
+
 /** A folder's parent folder id (`dir:a/b` → `dir:a`), or all of its ancestors up to the project root. */
 export function parentFolders(id: string, all: boolean): string[] {
   const out: string[] = [];

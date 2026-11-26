@@ -55,6 +55,9 @@ export interface DrawOptions {
   routes?: boolean;
 }
 
+/** The folder a path sits in (`a/b/c` → `a/b`, `a` → ""). */
+const up = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
+
 export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts: DrawOptions, index?: GraphIndex): DrawnGraph {
   const nodes = snapshot.nodes;
   const shown = new Set<string>();
@@ -112,8 +115,27 @@ export function drawnGraph(snapshot: Snapshot, visible: readonly string[], opts:
     }
   }
   else {
-    // Without folder frames, an added folder is a card of its own.
-    for (const dir of explicitFolders) elements.push({ id: FOLDER_PREFIX + dir, kind: "folder", name: dir, parent: null });
+    // Without automatic folder frames, only the folders added explicitly are drawn: each one a frame
+    // around the drawn files (and folders) under it, in the nearest added folder above it, named
+    // relative to that one. One with nothing drawn inside stays a card.
+    const nearestAdded = (path: string, self = false): string | null => {
+      for (let cur = self ? path : up(path); cur; cur = up(cur)) if (explicitFolders.has(cur)) return cur;
+      return null;
+    };
+    for (const dir of [...explicitFolders].sort()) {
+      const parent = nearestAdded(dir);
+      elements.push({ id: FOLDER_PREFIX + dir, kind: "folder", name: parent ? dir.slice(parent.length + 1) : dir, parent: parent ? FOLDER_PREFIX + parent : null });
+    }
+    if (explicitFolders.size) {
+      for (const id of shown) {
+        const n = nodes[id]!;
+        // inside a file (or a route) already, or not in the scanned folder
+        if (n.kind === "external" || n.kind === "route" || parentOf.get(id) || n.filePath.startsWith("..")) continue;
+        const slash = n.filePath.lastIndexOf("/");
+        const dir = slash > 0 ? nearestAdded(n.filePath.slice(0, slash), true) : null;
+        if (dir) parentOf.set(id, FOLDER_PREFIX + dir);
+      }
+    }
   }
   for (const id of shown) {
     const n = nodes[id]!;

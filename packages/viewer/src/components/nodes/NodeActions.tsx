@@ -5,6 +5,8 @@ import {
   IconChevronsUp,
   IconCode,
   IconCodeDiff,
+  IconFolderTree,
+  IconFolderUp,
   IconInvokes,
   IconLayout,
   IconRemove,
@@ -78,11 +80,14 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       {node && can.routeChain && (
         <IconBtn label="Show the route chain (layouts down to the page)" icon={<IconRouteChain size={I} />} onClick={() => showRouteChain(id)} />
       )}
+      {node?.kind === "module" && can.folder && (
+        <IconBtn label={`Show its folder (${node.filePath.slice(0, node.filePath.lastIndexOf("/"))})`} icon={<IconFolderUp size={I} />} onClick={() => showParentFolders(id, false)} />
+      )}
       {element.kind === "folder" && can.parents && (
-        <IconBtn label="Show the parent folder" icon={<IconArrowUp size={I} />} onClick={() => showParentFolders(id, false)} />
+        <IconBtn label="Show the parent folder" icon={<IconFolderUp size={I} />} onClick={() => showParentFolders(id, false)} />
       )}
       {element.kind === "folder" && can.allParents && (
-        <IconBtn label="Show all parent folders up to the root" icon={<IconChevronsUp size={I} />} onClick={() => showParentFolders(id, true)} />
+        <IconBtn label="Show all parent folders up to the root" icon={<IconFolderTree size={I} />} onClick={() => showParentFolders(id, true)} />
       )}
       {element.kind === "folder" && can.children && (
         <IconBtn label="Show the files inside" icon={<IconArrowDown size={I} />} onClick={() => expandFolder(id, false)} />
@@ -92,8 +97,8 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       )}
       {/* a file's rows have their fixed order: nothing to tidy */}
       {frame && element.kind !== "module" && <IconBtn label="Tidy up inside" icon={<IconLayout size={I} />} onClick={() => void arrange(id)} />}
-      {frame && node?.kind === "module" && (
-        <IconBtn label="Remove only this file, keep what it holds" icon={<IconUnwrap size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
+      {frame && (node?.kind === "module" || element.kind === "folder") && (
+        <IconBtn label={`Remove only this ${node ? "file" : "folder"}, keep what it holds`} icon={<IconUnwrap size={I} />} onClick={() => hideNode(id, { keepContents: true })} />
       )}
       <IconBtn label={frame ? "Remove with everything inside" : "Remove from the diagram"} icon={<IconRemove size={I} />} onClick={() => hideNode(id)} />
     </span>

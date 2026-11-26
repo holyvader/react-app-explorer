@@ -76,6 +76,20 @@ describe("drawnGraph", async () => {
     expect(g.elements.some((e) => e.kind === "folder")).toBe(false);
   });
 
+  test("without folders, an added folder frames the drawn files under it, nested in the added folders above", () => {
+    const g = drawnGraph(s, ["app/dashboard/page.tsx", "dir:app/dashboard"], opts({ folders: false }));
+    const byId = new Map(g.elements.map((e) => [e.id, e]));
+    expect(byId.get("app/dashboard/page.tsx")!.parent).toBe("dir:app/dashboard");
+    expect(byId.get("dir:app/dashboard")).toMatchObject({ name: "app/dashboard", parent: null });
+    // its parent added too: the folder nests in it, named relative to it
+    const up = drawnGraph(s, ["app/dashboard/page.tsx", "dir:app/dashboard", "dir:app"], opts({ folders: false }));
+    const upById = new Map(up.elements.map((e) => [e.id, e]));
+    expect(upById.get("dir:app/dashboard")).toMatchObject({ name: "dashboard", parent: "dir:app" });
+    expect(upById.get("app/dashboard/page.tsx")!.parent).toBe("dir:app/dashboard");
+    // only added folders are drawn: no automatic ones in between or above
+    expect(up.elements.filter((e) => e.kind === "folder").map((e) => e.id).sort()).toEqual(["dir:app", "dir:app/dashboard"]);
+  });
+
   test("library filter: react hidden by default, others shown unless hideAll", () => {
     expect(drawnGraph(s, ["ext:react"], opts()).elements).toHaveLength(0);
     expect(drawnGraph(s, ["ext:clsx"], opts()).elements).toHaveLength(1);

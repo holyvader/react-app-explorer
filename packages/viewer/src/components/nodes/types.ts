@@ -18,7 +18,7 @@ export type ElementNodeData = {
   /** Components: the props type only they use (`ButtonProps`), named in the caption instead of drawn as a card. */
   propsType?: { id: string; name: string; keyword: string };
   /** Which expansions would add something (components: children = what they render); `routeChain`: routes and route files whose chain isn't all drawn. */
-  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean };
+  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean; folder?: boolean; allFolders?: boolean };
   /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
   scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */

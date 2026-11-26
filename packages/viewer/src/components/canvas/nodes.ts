@@ -2,7 +2,7 @@ import type { Snapshot } from "@rae/schema";
 import { type CSSProperties, useMemo } from "react";
 import type { Collapse } from "../../graph/collapse.ts";
 import { type DrawnGraph, FOLDER_PREFIX, routeChain, routeOf } from "../../graph/drawn.ts";
-import { folderExpansion, folderPath, parentFolders } from "../../graph/folder.ts";
+import { folderExpansion, folderPath, foldersAbove, parentFolders } from "../../graph/folder.ts";
 import { type PlacedElement, rowRank } from "../../graph/layout.ts";
 import { privatePropsType } from "../../graph/privateProps.ts";
 import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
@@ -147,6 +147,9 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
                   const route = routeOf(snapshot, id);
                   return !!route && routeChain(snapshot, route).some((x) => !drawn.has(x));
                 })(),
+                // files: their own folder, and every folder above it
+                folder: node.kind === "module" && foldersAbove(snapshot, id, false).some((x) => !drawn.has(x)),
+                allFolders: node.kind === "module" && foldersAbove(snapshot, id, true).filter((x) => !drawn.has(x)).length > 1,
               }
             : id.startsWith(FOLDER_PREFIX)
               ? // folders: "children" = the files inside, "all children" = files and their declarations

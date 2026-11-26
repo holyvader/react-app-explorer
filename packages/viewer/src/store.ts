@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder, nodesUnderRoute, routeChain, routeOf } from "./graph/drawn.ts";
 import type { PlacedElement } from "./graph/layout.ts";
 import { type LayoutEffort, type LayoutMode, layoutWithin } from "./graph/squareLayout.ts";
-import { folderExpansion, folderPath, parentFolders } from "./graph/folder.ts";
+import { folderExpansion, folderPath, foldersAbove } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
@@ -408,7 +408,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       record();
       const gone = new Set<string>();
       for (const id of ids) {
-        if (isFolder(id)) {
+        if (isFolder(id) && opts?.keepContents) gone.add(id); // only the folder: what it held moves up a level
+        else if (isFolder(id)) {
           // the folder (if added explicitly), its subfolders, and everything drawn inside
           const dir = id.slice(FOLDER_PREFIX.length);
           gone.add(id);
@@ -430,7 +431,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       // never takes its folder with it. Only removing the folder itself does.
       // (A removed folder's own subfolders are not "around" anything: they go with it — keeping them
       // would bring the folder itself back as their frame.)
-      const removedDirs = ids.filter(isFolder).map(folderPath);
+      const removedDirs = opts?.keepContents ? [] : ids.filter(isFolder).map(folderPath);
       const insideRemoved = (folderId: string) => {
         const path = folderPath(folderId);
         return removedDirs.some((d) => path === d || path.startsWith(d + "/"));
@@ -512,8 +513,10 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     },
 
     showParentFolders: (id, all) => {
-      const drawnNow = new Set(get().graph.elements.map((e) => e.id));
-      const ids = parentFolders(id, all).filter((x) => !drawnNow.has(x));
+      const s = get();
+      if (!s.snapshot) return;
+      const drawnNow = new Set(s.graph.elements.map((e) => e.id));
+      const ids = foldersAbove(s.snapshot, id, all).filter((x) => !drawnNow.has(x));
       if (ids.length) get().addNodes(ids, { anchor: id });
     },
 

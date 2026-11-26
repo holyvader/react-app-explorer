@@ -8,6 +8,8 @@ import {
   IconCopy,
   IconFocus,
   IconFolder,
+  IconFolderTree,
+  IconFolderUp,
   IconInvokes,
   IconRenders,
   IconRenderTree,
@@ -20,7 +22,7 @@ import {
   IconUnwrap,
 } from "@rae/design-system/icons";
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
-import { folderContents, folderExpansion, folderPath, parentFolders } from "../graph/folder.ts";
+import { folderContents, folderExpansion, folderPath, foldersAbove, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { downKinds, hasUndrawn, INVOKES, type EdgeKinds } from "../graph/relations.ts";
 import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
@@ -111,7 +113,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
         type: "item",
         value: "parent",
         label: "Show the parent folder",
-        icon: <IconArrowUp size={I} />,
+        icon: <IconFolderUp size={I} />,
         disabled: !parentFolders(id, false).some((x) => !drawnNow.has(x)),
         onSelect: () => st.showParentFolders(id, false),
       },
@@ -119,7 +121,7 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
         type: "item",
         value: "parents",
         label: "Show all parent folders up to the root",
-        icon: <IconChevronsUp size={I} />,
+        icon: <IconFolderTree size={I} />,
         disabled: parentFolders(id, true).filter((x) => !drawnNow.has(x)).length < 2,
         onSelect: () => st.showParentFolders(id, true),
       },
@@ -128,7 +130,10 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       ...subfolderMenu(id, path, drawnNow),
       { type: "separator" },
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
-      { type: "item", value: "hide", label: "Remove with everything inside", icon: <IconRemove size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
+      ...(holds
+        ? [{ type: "item", value: "hide-only", label: "Remove only this folder, keep what it holds", icon: <IconUnwrap size={I} />, onSelect: () => hideNode(id, { keepContents: true }) } satisfies MenuEntry]
+        : []),
+      { type: "item", value: "hide", label: holds ? "Remove with everything inside" : "Remove from the diagram", icon: <IconRemove size={I} />, hint: "⌫", onSelect: () => hideNode(id) },
     ];
   }
   if (!node) return [];
@@ -194,6 +199,15 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
     disabled: !can("children", true, down),
     onSelect: () => expand(id, "children", true, down),
   });
+  if (node.kind === "module") {
+    const drawnIds = new Set(st.graph.elements.map((e) => e.id));
+    const above = foldersAbove(s, id, true).filter((x) => !drawnIds.has(x));
+    const own = foldersAbove(s, id, false)[0];
+    if (own) {
+      entries.push({ type: "item", value: "folder", label: "Show its folder", icon: <IconFolderUp size={I} />, hint: folderPath(own), disabled: drawnIds.has(own), onSelect: () => st.showParentFolders(id, false) });
+      entries.push({ type: "item", value: "folders-all", label: "Show all its folders up to the root", icon: <IconFolderTree size={I} />, disabled: above.length < 2, onSelect: () => st.showParentFolders(id, true) });
+    }
+  }
   if (isComponent && (index.out.get(id) ?? []).some((e) => INVOKES.includes(e.kind)))
     entries.push({ type: "item", value: "invokes", label: "Invokes", icon: <IconInvokes size={I} />, disabled: !can("children", false, INVOKES), onSelect: () => expand(id, "children", false, INVOKES) });
 

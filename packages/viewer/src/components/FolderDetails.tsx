@@ -13,7 +13,7 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconLayout, IconPlus, IconRemove } from "@rae/design-system/icons";
+import { IconArrowDown, IconChevronsDown, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconFolderTree, IconFolderUp, IconLayout, IconPlus, IconRemove } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
@@ -104,8 +104,8 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
             <IconChevronsDown size={15} /> Show everything inside
           </Button>
           <ActionIconButton label="Show the files inside" icon={<IconArrowDown />} size="sm" variant="outline" disabled={!canFiles} onClick={() => expandFolder(id, false)} />
-          <ActionIconButton label="Show the parent folder" icon={<IconArrowUp />} size="sm" variant="outline" disabled={!canParent} onClick={() => showParentFolders(id, false)} />
-          <ActionIconButton label="Show all parent folders up to the root" icon={<IconChevronsUp />} size="sm" variant="outline" disabled={!canAllParents} onClick={() => showParentFolders(id, true)} />
+          <ActionIconButton label="Show the parent folder" icon={<IconFolderUp />} size="sm" variant="outline" disabled={!canParent} onClick={() => showParentFolders(id, false)} />
+          <ActionIconButton label="Show all parent folders up to the root" icon={<IconFolderTree />} size="sm" variant="outline" disabled={!canAllParents} onClick={() => showParentFolders(id, true)} />
           <Box flex="1" />
           <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
             <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="xs" onClick={() => addNodes([], { focus: id })} />

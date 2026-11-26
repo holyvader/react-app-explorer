@@ -37,6 +37,7 @@ export {
   Crosshair as IconFocus,
   Folder as IconFolder,
   FolderOpen as IconFolderOpen,
+  FolderUp as IconFolderUp,
   RefreshCw as IconRescan,
   FileCode as IconFile,
   CornerLeftUp as IconParentDir,
