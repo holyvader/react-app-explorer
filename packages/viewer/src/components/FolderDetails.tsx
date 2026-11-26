@@ -13,7 +13,7 @@ import {
   Text,
   Wrap,
 } from "@rae/design-system";
-import { IconArrowDown, IconChevronsDown, IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconFolderTree, IconFolderUp, IconLayout, IconPlus, IconRemove } from "@rae/design-system/icons";
+import { IconClose, IconCopy, IconDetailsClose, IconFocus, IconFolder, IconFolderUp, IconLayout, IconPlus, IconRemove } from "@rae/design-system/icons";
 import { useMemo } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { folderContents, folderPath, parentFolders } from "../graph/folder.ts";
@@ -33,7 +33,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
   const setSidebarWidth = useExplorer((s) => s.setSidebarWidth);
   const snapshot = useExplorer((s) => s.snapshot);
   const graph = useExplorer((s) => s.graph);
-  const { select, expandFolder, addNodes, hideNode, arrange, showParentFolders } = useExplorer.getState();
+  const { select, addNodes, hideNode, arrange, showParentFolders } = useExplorer.getState();
   const path = folderPath(id);
   const c = useMemo(() => (snapshot ? folderContents(snapshot, path) : undefined), [snapshot, path]);
   const drawn = useMemo(() => new Set(graph.elements.map((e) => e.id)), [graph]);
@@ -42,11 +42,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
   const name = path.slice(path.lastIndexOf("/") + 1);
   const total = c.files.length + c.declarations.filter((d) => !d.file).length;
   const declsIn = (fileId: string) => c.declarations.filter((d) => d.moduleId === fileId).length;
-  const canFiles = c.files.some((f) => !drawn.has(f.id));
-  const canAll = canFiles || c.declarations.some((d) => !drawn.has(d.id));
   const canParent = parentFolders(id, false).some((x) => !drawn.has(x));
-  const canAllParents = parentFolders(id, true).filter((x) => !drawn.has(x)).length > 1;
-  const missingSubs = c.subfolders.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`));
 
   return (
     <Panel
@@ -100,12 +96,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
               <IconPlus size={15} /> Add to diagram
             </Button>
           )}
-          <Button size="sm" variant={onDiagram ? "solid" : "outline"} rounded="l2" disabled={!canAll} onClick={() => expandFolder(id, true)}>
-            <IconChevronsDown size={15} /> Show everything inside
-          </Button>
-          <ActionIconButton label="Show the files inside" icon={<IconArrowDown />} size="sm" variant="outline" disabled={!canFiles} onClick={() => expandFolder(id, false)} />
           <ActionIconButton label="Show the parent folder" icon={<IconFolderUp />} size="sm" variant="outline" disabled={!canParent} onClick={() => showParentFolders(id, false)} />
-          <ActionIconButton label="Show all parent folders up to the root" icon={<IconFolderTree />} size="sm" variant="outline" disabled={!canAllParents} onClick={() => showParentFolders(id, true)} />
           <Box flex="1" />
           <HStack gap="0" borderWidth="1px" borderColor="border.muted" rounded="l2" p="0.5">
             <ActionIconButton label="Center on canvas" icon={<IconFocus />} size="xs" onClick={() => addNodes([], { focus: id })} />
@@ -130,26 +121,7 @@ export function FolderDetails({ id, onDiagram = true }: { id: string; onDiagram?
       </Section>
 
       {c.subfolders.length > 0 && (
-        <Section
-          title="Folders"
-          count={c.subfolders.length}
-          aside={
-            missingSubs.length > 0 && (
-              <Button
-                as="span"
-                size="2xs"
-                variant="outline"
-                rounded="full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addNodes(missingSubs.map((f) => `${FOLDER_PREFIX}${f.path}`), { anchor: id, fit: true });
-                }}
-              >
-                Add all
-              </Button>
-            )
-          }
-        >
+        <Section title="Folders" count={c.subfolders.length}>
           <Wrap gap="1.5">
             {c.subfolders.map((f) => (
               <TagChip

@@ -33,6 +33,35 @@ export interface StatusBarProps {
 }
 
 /**
+ * The zoom in %, a button back to 100%. Its own component, subscribed to the rounded %: zooming
+ * re-renders this alone, not the whole bar, and only when the number changes.
+ */
+function ZoomPercent() {
+  const flow = useReactFlow();
+  const zoom = useStore((s) => Math.round(s.transform[2] * 100));
+  return (
+    <Flex
+      as="button"
+      align="center"
+      justify="center"
+      minW="46px"
+      h="26px"
+      rounded="l2"
+      fontFamily="mono"
+      fontSize={textPx(11.5)}
+      color="fg.muted"
+      cursor="pointer"
+      _hover={{ color: "fg", bg: "bg.muted" }}
+      title="Zoom to 100%"
+      aria-label={`Zoom ${zoom}%: zoom to 100%`}
+      onClick={() => void flow.zoomTo(1, { duration: GLIDE })}
+    >
+      {zoom}%
+    </Flex>
+  );
+}
+
+/**
  * The canvas's status bar, docked flush under it as the toolbar is above: the relation filters (a
  * dropdown) on the left; Back / Forward, zoom (− 62% +, fit), the minimap switch and the keyboard
  * shortcuts on the right. Only the minimap floats over the diagram.
@@ -40,7 +69,6 @@ export interface StatusBarProps {
 export function CanvasStatusBar({ shortcuts, minimap, onMinimap, fitPadding }: StatusBarProps) {
   const { canBack, canForward } = useSelectionHistory();
   const flow = useReactFlow();
-  const zoom = Math.round(useStore((s) => s.transform[2]) * 100);
   const [keysOpen, setKeysOpen] = useState(false);
   return (
     <Flex role="toolbar" aria-label="Canvas" align="center" gap="1" h="36px" px="2" flexShrink={0} bg="panel.bg" borderTopWidth="1px" borderColor="border">
@@ -52,24 +80,7 @@ export function CanvasStatusBar({ shortcuts, minimap, onMinimap, fitPadding }: S
       <BarIcon label="Forward: the next selected element (⌘ ])" icon={<IconForward />} onClick={goForward} disabled={!canForward} />
       <Divider />
       <BarIcon label="Zoom out" icon={<IconMinus />} onClick={() => void flow.zoomOut({ duration: GLIDE })} />
-      <Flex
-        as="button"
-        align="center"
-        justify="center"
-        minW="46px"
-        h="26px"
-        rounded="l2"
-        fontFamily="mono"
-        fontSize={textPx(11.5)}
-        color="fg.muted"
-        cursor="pointer"
-        _hover={{ color: "fg", bg: "bg.muted" }}
-        title="Zoom to 100%"
-        aria-label={`Zoom ${zoom}%: zoom to 100%`}
-        onClick={() => void flow.zoomTo(1, { duration: GLIDE })}
-      >
-        {zoom}%
-      </Flex>
+      <ZoomPercent />
       <BarIcon label="Zoom in" icon={<IconPlus />} onClick={() => void flow.zoomIn({ duration: GLIDE })} />
       <BarIcon label="Fit everything" icon={<IconFit />} onClick={() => void flow.fitView({ padding: fitPadding, maxZoom: 1, duration: GLIDE })} />
       <BarIcon label={minimap ? "Hide the minimap" : "Show the minimap"} icon={<IconMinimap />} onClick={() => onMinimap(!minimap)} pressed={minimap} />

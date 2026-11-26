@@ -1,6 +1,6 @@
 import type { GraphNode } from "@rae/schema";
 import { ActionIconButton, BoundaryChip, Box, Button, Code, CodeChip, CodeToken, Eyebrow, Flex, HStack, KindChip, KindTile, Panel, PanelBar, PanelHeader, Stack, TagChip, Text, textPx, Wrap } from "@rae/design-system";
-import { IconArrowDown, IconArrowUp, IconChevronsDown, IconChevronsUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconInvokes, IconOpen, IconPlus, IconRenders, IconRenderTree, IconRouteChain } from "@rae/design-system/icons";
+import { IconArrowDown, IconArrowUp, IconClose, IconCopy, IconDetailsClose, IconFocus, IconInvokes, IconOpen, IconPlus, IconRenderedBy, IconRenders, IconRouteChain } from "@rae/design-system/icons";
 import { type ReactNode, useMemo } from "react";
 import { childEdges, downKinds, INVOKES, parentEdges } from "../graph/relations.ts";
 import { CHANGE_WORD } from "../lib/diff.ts";
@@ -230,12 +230,10 @@ export function DetailsPanel() {
           )}
           <Box flex="1" />
           <HStack gap="0" bg="bg.emphasized" rounded="l2" p="2px">
-            <ActionIconButton label={node.kind === "component" ? "Rendered by" : "Show parents"} icon={<IconArrowUp />} size="2xs" onClick={() => expand(node.id, "parents", false)} />
-            <ActionIconButton label={node.kind === "component" ? "Rendered by, up to the root" : "Parents up to root"} icon={<IconChevronsUp />} size="2xs" onClick={() => expand(node.id, "parents", true)} />
+            <ActionIconButton label={node.kind === "component" ? "Rendered by" : "Show parents"} icon={node.kind === "component" ? <IconRenderedBy /> : <IconArrowUp />} size="2xs" onClick={() => expand(node.id, "parents", false)} />
             {node.kind === "component" ? (
               <>
                 <ActionIconButton label="Renders" icon={<IconRenders />} size="2xs" onClick={() => expand(node.id, "children", false, downKinds(node.kind))} />
-                <ActionIconButton label="Show render tree" icon={<IconRenderTree />} size="2xs" onClick={() => expand(node.id, "children", true, downKinds(node.kind))} />
                 {relations.children.some((e) => INVOKES.includes(e.kind)) && (
                   <ActionIconButton label="Invokes" icon={<IconInvokes />} size="2xs" onClick={() => expand(node.id, "children", false, INVOKES)} />
                 )}
@@ -243,7 +241,6 @@ export function DetailsPanel() {
             ) : (
               <>
                 <ActionIconButton label="Show children" icon={<IconArrowDown />} size="2xs" onClick={() => expand(node.id, "children", false)} />
-                <ActionIconButton label="Children down to leaves" icon={<IconChevronsDown />} size="2xs" onClick={() => expand(node.id, "children", true)} />
               </>
             )}
           </HStack>
@@ -339,7 +336,7 @@ export function DetailsPanel() {
           <Stack gap="1.5">
             {provides.map((name) => (
               <ContextRow key={`p:${name}`} label="Provides" name={name}>
-                <ReadBy ids={contexts.get(name)?.readers ?? []} anchor={node.id} />
+                <ReadBy ids={contexts.get(name)?.readers ?? []} />
               </ContextRow>
             ))}
             {reads.map(({ name, via }) => (
@@ -509,20 +506,13 @@ function ContextRow({ label, name, children, below }: { label: string; name: str
   );
 }
 
-/** "read by N": how many declarations read a context it provides; a click draws them. */
-function ReadBy({ ids, anchor }: { ids: string[]; anchor: string }) {
+/** "read by N": how many declarations read a context it provides (hover: which). */
+function ReadBy({ ids }: { ids: string[] }) {
   const snapshot = useExplorer((s) => s.snapshot);
   if (!ids.length) return null;
   const names = ids.map((id) => (snapshot?.nodes[id] ? displayName(snapshot.nodes[id]) : id));
   return (
-    <Text
-      as="button"
-      fontSize="xs"
-      color="fg.subtle"
-      _hover={{ color: "fg" }}
-      title={`Add to the diagram: ${names.join(", ")}`}
-      onClick={() => useExplorer.getState().addNodes(ids, { anchor, fit: true })}
-    >
+    <Text as="span" fontSize="xs" color="fg.subtle" title={names.join(", ")}>
       · read by {ids.length}
     </Text>
   );

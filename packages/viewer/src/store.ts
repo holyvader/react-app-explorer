@@ -6,7 +6,7 @@ import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder,
 import type { PlacedElement } from "./graph/layout.ts";
 import { layoutOffThread } from "./graph/layoutOffThread.ts";
 import type { LayoutEffort, LayoutMode } from "./graph/squareLayout.ts";
-import { folderExpansion, folderPath, foldersAbove } from "./graph/folder.ts";
+import { folderPath, foldersAbove } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
@@ -94,6 +94,10 @@ interface ExplorerState {
   routes: boolean;
   /** Asset files (CSS, images, JSON) on the canvas and in lists; off by default. */
   showAssets: boolean;
+  /** Relations drawn as flowing dashes, each its own pattern and speed (Settings; off by default). */
+  animateEdges: boolean;
+  /** The settings sheet, docked beside the canvas (toolbar, ⌘,). */
+  settingsOpen: boolean;
   /** Diff snapshots: show what changed (colours, badges, removed elements as ghosts). */
   diffOverlay: boolean;
   /** Diff snapshots, with the overlay on: the selected element's changed lines in a card under it. */
@@ -172,8 +176,6 @@ interface ExplorerState {
   select: (id: string | undefined, adding?: boolean) => void;
   /** `only`: follow just these edge kinds (a component's renders, its invokes). */
   expand: (id: string, dir: "parents" | "children", deep: boolean, only?: EdgeKinds) => void;
-  /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
-  expandFolder: (id: string, deep: boolean) => void;
   /** Routes (and route files): add every route and file that renders its URL, root first. */
   showRouteChain: (id: string) => void;
   /** Folders: add the parent folder, or every folder above it up to the project root. */
@@ -183,6 +185,8 @@ interface ExplorerState {
   toggleGroup: (g: EdgeGroup) => void;
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
   setShowAssets: (on: boolean) => void;
+  setAnimateEdges: (on: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
   setDiffOverlay: (on: boolean) => void;
   /** The toolbar's diff view: off, the overlay, or the overlay plus the selected element's code changes. */
   setDiffMode: (mode: DiffMode) => void;
@@ -225,7 +229,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
+const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", animateEdges: "rae.animateEdges", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 
 export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
@@ -309,6 +313,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     excluded: readSetting(KEYS.excluded, DEFAULT_EXCLUDED),
     hideAllLibraries: readSetting(KEYS.hideAll, false),
     showAssets: readSetting(KEYS.assets, false),
+    animateEdges: readSetting(KEYS.animateEdges, false),
+    settingsOpen: false,
     diffOverlay: readSetting(KEYS.diffOverlay, true),
     diffCode: readSetting(KEYS.diffCode, false),
     // Folders and routes are nodes of their own (added from the tree / picker), not automatic
@@ -526,12 +532,6 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       if (ids.length) get().addNodes(ids, { anchor: id });
     },
 
-    expandFolder: (id, deep) => {
-      const s = get();
-      if (!s.snapshot) return;
-      const path = folderPath(id);
-      s.requestAdd(folderExpansion(s.snapshot, path, deep), `${deep ? "Everything" : "Files"} inside ${path}`, id);
-    },
 
     confirmPending: () => {
       const p = get().pending;
@@ -582,6 +582,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setShowAssets: (on) => {
       writeSetting(KEYS.assets, on);
       redraw({ showAssets: on }, null);
+    },
+
+    setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+
+    setAnimateEdges: (animateEdges) => {
+      writeSetting(KEYS.animateEdges, animateEdges);
+      set({ animateEdges });
     },
 
     setDiffOverlay: (on) => {
@@ -701,7 +708,8 @@ useExplorer.subscribe((s, prev) => {
 // ---- storing the current diagram (per project) -------------------------------------------
 
 /** Per project; a diff (base → head) keeps a diagram of its own. */
-const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}${s.diff.head.worktree ? "+wt" : ""}` : ""}`;
+/** Which saved diagram a snapshot shows: its project, or its comparison. */
+export const diagramKey = (s: Snapshot) => `rae.diagram:${s.rootDir}${s.diff ? `@${s.diff.compared.slice(0, 12)}..${s.diff.head.sha.slice(0, 12)}${s.diff.head.worktree ? "+wt" : ""}` : ""}`;
 
 function loadDiagram(key: string): DiagramState | undefined {
   const saved = readSetting<DiagramState | null>(key, null);

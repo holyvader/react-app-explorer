@@ -59,11 +59,14 @@ if ((await page.getByText("Render tree").count()) === 0) fail("details panel did
 // Adding a node draws just that node: no file module is added around it.
 if ((await page.locator(".react-flow__node").count()) !== 1) fail("adding a component must draw only that component");
 
-await page.getByRole("button", { name: "Children down to leaves" }).first().click();
-await page.getByRole("button", { name: "Parents up to root" }).first().click();
+// One level at a time: there's no "down to the leaves" / "up to the root" (it could draw hundreds).
+await page.getByRole("button", { name: "Renders", exact: true }).first().click();
+await page.getByRole("button", { name: "Rendered by", exact: true }).first().click();
 await page.waitForTimeout(600);
 const onCanvas = await store<number>("s.visible.length");
-if (!(onCanvas > 5)) fail(`expected expansion to add nodes, got ${onCanvas}`);
+if (!(onCanvas > 1)) fail(`expected expansion to add nodes, got ${onCanvas}`);
+for (const deep of ["Children down to leaves", "Parents up to root", "Show render tree"])
+  if ((await page.getByRole("button", { name: deep }).count()) !== 0) fail(`"${deep}" should be gone`);
 if (outDir) await page.screenshot({ path: `${outDir}/smoke.png` });
 
 if ((await page.locator('.react-flow__node[data-id="ext:react"]').count()) !== 0) fail("react should be hidden by default");
@@ -120,10 +123,12 @@ await page.waitForTimeout(200);
 if ((await page.locator(".rae-canvas[data-selection]").count()) !== 1) fail("selection should mark the canvas");
 if ((await page.locator(".react-flow__node.rae-related").count()) === 0) fail("selecting should highlight related nodes");
 
-// Right-click: actions and relations (e.g. "Rendered by"), each listing related elements.
+// Right-click: actions and relations (e.g. "Components rendering it"), each listing related
+// elements one by one — no "Show all" (only the diff view adds many at once).
 await card.click({ button: "right" });
-await page.getByRole("menuitem", { name: /^Rendered by/ }).hover();
-await page.getByRole("menuitem", { name: /^Show all|^All shown/ }).first().waitFor();
+await page.getByRole("menuitem", { name: /^Components rendering it/ }).hover();
+await page.waitForTimeout(300);
+if ((await page.getByRole("menuitem", { name: /^Show all|^Add all/ }).count()) !== 0) fail("relation menus must not offer Show all");
 await page.keyboard.press("Escape");
 await page.keyboard.press("Escape");
 
@@ -184,15 +189,17 @@ await page.waitForTimeout(500);
 if ((await drawnIds()) !== stored) fail("diagram not restored after reload");
 
 // Libraries filter: showing react brings it back into relation lists.
-await page.getByRole("button", { name: "View options" }).click();
+await page.getByRole("button", { name: "Settings (⌘,)" }).click();
 await page.getByRole("button", { name: "Choose…" }).click();
 const dialog = page.getByRole("dialog");
 await dialog.getByText("react", { exact: true }).click();
 if (!(await dialog.getByRole("checkbox", { name: "react", exact: true }).isChecked())) fail("react checkbox did not toggle on");
 await page.keyboard.press("Escape");
-await page.getByRole("button", { name: "View options" }).click();
-if ((await page.getByText("1 hidden", { exact: true }).count()) !== 1) fail("view options should report 1 hidden library");
-await page.keyboard.press("Escape");
+// the settings sheet stays docked: it shows the new count
+if ((await page.getByText("1 hidden", { exact: true }).count()) !== 1) fail("settings should report 1 hidden library");
+// ⌘, closes it
+await page.keyboard.press("Meta+Comma");
+if ((await page.getByRole("complementary", { name: "Settings" }).count()) !== 0) fail("⌘, should close the settings");
 
 // Scan from the UI: pick the react-app fixture via the folder browser + path input.
 const reactApp = new URL("../../fixtures/react-app", import.meta.url).pathname;

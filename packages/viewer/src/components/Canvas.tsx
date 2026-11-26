@@ -4,27 +4,29 @@ import {
   Background,
   BackgroundVariant,
   type Edge,
-  MiniMap,
   type NodeChange,
+  Panel,
   ReactFlow,
   getViewportForBounds,
   useReactFlow,
   useStore,
   useStoreApi,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FOLDER_PREFIX } from "../graph/drawn.ts";
 import { collapseFrames } from "../graph/collapse.ts";
 import { layoutOffThread } from "../graph/layoutOffThread.ts";
 import type { PlacedElement } from "../graph/layout.ts";
 import { absoluteRect } from "../graph/placement.ts";
 import { KIND_META } from "../lib/kinds.tsx";
-import { useExplorer, useRelationFilter } from "../store.ts";
+import { diagramKey, useExplorer, useRelationFilter } from "../store.ts";
 import "./canvas.css";
 import { CanvasStatusBar } from "./canvas/CanvasChrome.tsx";
 import { ScriptsConsole } from "./scripts/ScriptsConsole.tsx";
 import { useScripts } from "../lib/scripts.ts";
 import { useCanvasEdges } from "./canvas/edges.ts";
+import { EdgeLabelLayer } from "./canvas/edgeLabelLayer.ts";
+import { Minimap } from "./canvas/Minimap.tsx";
 import { useCanvasNodes, useRelated } from "./canvas/nodes.ts";
 import { useCanvasKeys } from "./canvas/useCanvasKeys.ts";
 import { useMarquee } from "./canvas/useMarquee.ts";
@@ -73,6 +75,8 @@ const SHORTCUTS: Shortcut[] = [
 /** Fitting keeps clear of the canvas chrome: the relation filters on top, the controls and minimap below. */
 const FIT_PADDING = { top: "48px", bottom: "48px", left: "48px", right: "48px" } as const;
 const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 350 } as const;
+/** Flowing relations: only while at most this many edges are drawn (more costs frames). */
+const ANIMATE_ALL = 120;
 /** How far inside the canvas edge revealed elements must be to count as in view (screen px). */
 const REVEAL_MARGIN = 48;
 /** Revealing zooms out to at most this share of the current zoom to keep the current view; beyond it, it goes to them. */
@@ -157,10 +161,37 @@ export function Canvas() {
   // the level of detail: a bucket of the zoom (with some hysteresis), so this re-renders only when it changes
   const lodRef = useRef<Lod | null>(null);
   const lod = useStore((s) => (lodRef.current = lodRef.current ? nextLod(s.transform[2], lodRef.current) : lodOf(s.transform[2])));
+  // React Flow's edge label layer, found once: labels portal into it (canvas/edgeLabels.tsx)
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [labelLayer, setLabelLayer] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => setLabelLayer(shellRef.current?.querySelector<HTMLElement>(".react-flow__edgelabel-renderer") ?? null), []);
   const menu = useExplorer((s) => s.menu);
   const setMenu = useExplorer.getState().openMenu;
   const tooltip = useNodeTooltip();
   const { tip } = tooltip;
+  // Flowing relations (Settings), paused while the view moves. Every frame repaints the area of
+  // every moving edge, with every edge drawn there: ~90 edges on screen cost nothing (~185: 60 → 48 fps); with 850, all
+  // of them flowing took WebKit from 60 fps to 7, and even the selection's 12 to 28. So they flow
+  // only while at most ANIMATE_ALL edges are drawn (`data-animate`, recounted when the view stops or
+  // the edges change). Both attributes are set on the element directly: panning and zooming don't
+  // re-render the canvas.
+  const animateEdges = useExplorer((s) => s.animateEdges);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const updateAnimate = useCallback(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    if (useExplorer.getState().animateEdges && el.querySelectorAll(".react-flow__edge").length <= ANIMATE_ALL) el.setAttribute("data-animate", "");
+    else el.removeAttribute("data-animate");
+  }, []);
+  const hideTip = tooltip.hide;
+  const onMoveStart = useCallback(() => {
+    hideTip();
+    canvasRef.current?.setAttribute("data-moving", "");
+  }, [hideTip]);
+  const onMoveEnd = useCallback(() => {
+    canvasRef.current?.removeAttribute("data-moving");
+    updateAnimate();
+  }, [updateAnimate]);
   const { adding, boxing } = useCanvasKeys();
   const marquee = useMarquee();
 
@@ -195,6 +226,11 @@ export function Canvas() {
   const collapse = useMemo(() => collapseFrames(placed, collapseLevelOf(lod, placed.length)), [placed, lod]);
   const selectedNodes = useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related });
   const edges = useCanvasEdges({ graph, placed, showDiff, collapse, related, lod });
+  // which flowing relations: recounted once the edges are drawn
+  useEffect(() => {
+    const raf = requestAnimationFrame(updateAnimate);
+    return () => cancelAnimationFrame(raf);
+  }, [edges, animateEdges, updateAnimate]);
 
   // React Flow applies drags and measurements locally; re-sync when the placement or selection
   // changes ("adjust state during render"). A node whose source didn't change keeps its local
@@ -227,6 +263,20 @@ export function Canvas() {
   }, []);
 
 
+  // A project (or a comparison) just opened: the view fits its diagram once it's placed — a restored
+  // diagram comes back without a layout, which would have fitted it. Keyed by the diagram, not the
+  // snapshot: a background refresh swaps in a fresh copy of the same project and the view stays.
+  const fitOnOpen = useRef<string | null>(null);
+  useEffect(() => {
+    const key = snapshot ? diagramKey(snapshot) : null;
+    if (!key || fitOnOpen.current === key) return;
+    fitOnOpen.current = key;
+    // nothing restored: what gets added later fits itself (or the layout does)
+    if (!placed.length) return;
+    const placing = placed;
+    whenReady(() => flow.getNodes().length >= placing.length && fitPlacement(placing));
+  }, [snapshot, placed, flow, fitPlacement]);
+
   // Fit expanded nodes into view once they are placed.
   useEffect(() => {
     if (!fitIds?.length || focusId) return;
@@ -257,9 +307,10 @@ export function Canvas() {
   const menuEntries = useMemo(() => (menu ? (menu.mode === "contains" ? containsEntries(menu.id) : nodeMenuEntries(menu.id)) : []), [menu]);
 
   return (
-    <div className="rae-canvas-shell">
+    <div className="rae-canvas-shell" ref={shellRef}>
       <div
         className="rae-canvas"
+        ref={canvasRef}
         tabIndex={-1}
         data-selection={selection.length ? "" : undefined}
         data-lod={lod}
@@ -276,6 +327,7 @@ export function Canvas() {
         }}
       >
         <LodContext.Provider value={lod}>
+          <EdgeLabelLayer.Provider value={labelLayer}>
           <ReactFlow<ElementFlowNode, Edge>
             // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
             colorMode={colorMode}
@@ -308,7 +360,8 @@ export function Canvas() {
             onNodeMouseEnter={tooltip.onNodeMouseEnter}
             onNodeMouseLeave={tooltip.onNodeMouseLeave}
             // A moving view would leave the tooltip behind its node.
-            onMoveStart={tooltip.hide}
+            onMoveStart={onMoveStart}
+            onMoveEnd={onMoveEnd}
             onNodeContextMenu={(e, n) => {
               e.preventDefault();
               if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
@@ -326,25 +379,19 @@ export function Canvas() {
             onPaneClick={() => select(undefined)}
             minZoom={0.02}
             maxZoom={2}
-            fitView
-            fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
+            // no `fitView` here: the view is fitted by the layout (fitPlacement) and expansions (reveal).
+            // React Flow's own first fit runs once its nodes count as measured — at once, since they
+            // declare their handles — and fitted whatever was there first.
             onlyRenderVisibleElements
           >
             <Background variant={BackgroundVariant.Dots} gap={16} size={1.4} color={tokenVar("canvas.dot")} />
             {minimap && (
-              <MiniMap
-                pannable
-                zoomable
-                position="bottom-right"
-                nodeColor={(n) => {
-                  const d = (n as ElementFlowNode).data;
-                  if (d.element.kind === "folder") return "transparent";
-                  return tokenVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
-                }}
-                nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? tokenVar("kind.module.muted") : "transparent")}
-              />
+              <Panel position="bottom-right">
+                <Minimap placed={placed} />
+              </Panel>
             )}
           </ReactFlow>
+          </EdgeLabelLayer.Provider>
         </LodContext.Provider>
         {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
         {!drag.dragging && !menu && !codeDiffOf && !codeOf && (

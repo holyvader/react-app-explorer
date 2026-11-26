@@ -18,7 +18,8 @@ applyStoredTextSize();
 const [{ App }, { useExplorer }] = await Promise.all([import("./App.tsx"), import("./store.ts"), import("./lib/selectionHistory.ts")]);
 
 // Dev-only handle for debugging and headless tests.
-if (import.meta.env.DEV) (window as unknown as { __rae: typeof useExplorer }).__rae = useExplorer;
+// VITE_RAE_HANDLE=1 at build time: the same handle in a production build, for profiling it (e2e/zoomProfile.ts).
+if (import.meta.env.DEV || import.meta.env.VITE_RAE_HANDLE) (window as unknown as { __rae: typeof useExplorer }).__rae = useExplorer;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -1,10 +1,11 @@
 import type { Edge as GraphEdge } from "@rae/schema";
-import { BaseEdge, EdgeLabelRenderer, type Edge, type EdgeProps, getBezierPath, useInternalNode } from "@xyflow/react";
+import { BaseEdge, type Edge, type EdgeProps, getBezierPath, useInternalNode } from "@xyflow/react";
 import { type CSSProperties, memo } from "react";
 import { floatingEdgeParams } from "../graph/floating.ts";
 import { formatCondition, summarize } from "../lib/conditions.ts";
 import { relationWord } from "../lib/relationWords.ts";
 import { useLod } from "./lod.ts";
+import { EdgeLabel } from "./canvas/edgeLabels.tsx";
 
 /** `lane` (px) and `step` (its position among them): relations between the same two nodes, side by side. */
 export type ConditionEdgeData = {
@@ -67,7 +68,7 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
     <>
       <BaseEdge path={path} markerEnd={labelled ? markerEnd : undefined} style={strokeStyle(length, data.bundle?.length)} />
       {labelled && (
-        <EdgeLabelRenderer>
+        <EdgeLabel>
           <div
             className="rae-edge-label nodrag nopan"
             data-kind={edge.kind}
@@ -83,7 +84,7 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
             </b>
             {conditions && <span className="rae-edge-label__when"> when {conditions}</span>}
           </div>
-        </EdgeLabelRenderer>
+        </EdgeLabel>
       )}
     </>
   );

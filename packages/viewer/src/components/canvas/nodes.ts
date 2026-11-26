@@ -1,11 +1,12 @@
 import type { Snapshot } from "@rae/schema";
+import { Position } from "@xyflow/react";
 import { type CSSProperties, useMemo } from "react";
 import type { Collapse } from "../../graph/collapse.ts";
 import { type DrawnGraph, FOLDER_PREFIX, routeChain, routeOf } from "../../graph/drawn.ts";
-import { folderExpansion, folderPath, foldersAbove, parentFolders } from "../../graph/folder.ts";
+import { foldersAbove, parentFolders } from "../../graph/folder.ts";
 import { type PlacedElement, rowRank } from "../../graph/layout.ts";
 import { privatePropsType } from "../../graph/privateProps.ts";
-import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
+import { childEdges, downKinds, type GraphIndex, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
 import { changeOf } from "../../lib/diff.ts";
 import { type ElementFlowNode, FRAME_HANDLE } from "../nodes/types.ts";
 
@@ -116,6 +117,14 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
         position: { x: p.x, y: p.y },
         width: p.width,
         height: p.height,
+        // Its handles, known up front (top and bottom middle, as the node components draw them).
+        // Without them React Flow renders every node it hasn't measured yet, on screen or not:
+        // opening the collapsed files of a big diagram mounted all ~3,400 at once (77,000 elements
+        // styled in one frame, e2e/zoomProfile.ts).
+        handles: [
+          { type: "target", position: Position.Top, x: p.width / 2, y: 0 },
+          { type: "source", position: Position.Bottom, x: p.width / 2, y: p.height },
+        ],
         parentId: p.element.parent ?? undefined,
         dragHandle: p.holds ? `.${FRAME_HANDLE}` : undefined,
         draggable: !isRow(p),
@@ -139,9 +148,7 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
           can: node
             ? {
                 parents: parents.some((e) => !drawn.has(e.from)),
-                allParents: hasUndrawn(snapshot, index, id, "parents", true, filter, drawn),
                 children: children.some((e) => !drawn.has(e.to)),
-                allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn, down),
                 invokes: !!invokes?.some((e) => !drawn.has(e.to)),
                 routeChain: (() => {
                   const route = routeOf(snapshot, id);
@@ -149,18 +156,11 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
                 })(),
                 // files: their own folder, and every folder above it
                 folder: node.kind === "module" && foldersAbove(snapshot, id, false).some((x) => !drawn.has(x)),
-                allFolders: node.kind === "module" && foldersAbove(snapshot, id, true).filter((x) => !drawn.has(x)).length > 1,
               }
             : id.startsWith(FOLDER_PREFIX)
-              ? // folders: "children" = the files inside, "all children" = files and their declarations
-                {
-                  // parents = the folders above it, up to the project root
-                  parents: parentFolders(id, false).some((x) => !drawn.has(x)),
-                  allParents: parentFolders(id, true).filter((x) => !drawn.has(x)).length > 1,
-                  children: folderExpansion(snapshot, folderPath(id), false).some((x) => !drawn.has(x)),
-                  allChildren: folderExpansion(snapshot, folderPath(id), true).some((x) => !drawn.has(x)),
-                }
-              : { parents: false, allParents: false, children: false, allChildren: false },
+              ? // folders: only their parent folder (what's inside is added one by one: details, search)
+                { parents: parentFolders(id, false).some((x) => !drawn.has(x)), children: false }
+              : { parents: false, children: false },
           change: showDiff ? changeOf(snapshot, id) : undefined,
           row: isRow(p) ? { groupStart: groupStarts.has(id) } : undefined,
           undrawnContents:

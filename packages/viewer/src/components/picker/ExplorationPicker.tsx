@@ -20,7 +20,7 @@ export function ExplorationPicker() {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
   const filter = useRelationFilter({ allGroups: true });
-  const { setSearchOpen, addNodes, hideNode, clear, requestAdd } = useExplorer.getState();
+  const { setSearchOpen, addNodes, hideNode, clear } = useExplorer.getState();
   const input = useRef<HTMLInputElement>(null);
   const flow = useReactFlow();
 
@@ -57,19 +57,15 @@ export function ExplorationPicker() {
 
   const onActivate = (n: TreeNode) => {
     if (n.kind === "folder") {
-      // Once: the folder. Again: with the files inside. Once more: off (with what's inside).
-      const state = tickOf(n);
-      if (state === "off") addNodes([n.key], { anchor: anchor() });
-      else if (state === "file") useExplorer.getState().expandFolder(n.key, false);
+      // Once: the folder. Again: off (with what's inside). What's inside is added one by one.
+      if (tickOf(n) === "off") addNodes([n.key], { anchor: anchor() });
       else hideNode(n.key);
       return;
     }
     const id = n.id!;
     if (n.kind === "file") {
-      // Once: the file. Again: with all inside it. Once more: off.
-      const state = tickOf(n);
+      // Once: the file. Again: off. What's inside is added one by one.
       if (!shown.has(id)) addNodes([id], { anchor: anchor() });
-      else if (state !== "all") addNodes(n.children.map((c) => c.id!), { anchor: id, fit: true });
       else hideNode(id);
       return;
     }
@@ -115,13 +111,10 @@ export function ExplorationPicker() {
         }}
       />
       <div className="rae-picker-foot">
-        <span style={{ flex: 1 }}>Click once to draw, again for all inside a file or folder, once more to take them off.</span>
+        <span style={{ flex: 1 }}>Click to draw, again to take it off.</span>
         <output>
           <b>{visible.length}</b> of {total} drawn
         </output>
-        <Button size="xs" variant="outline" disabled={visible.length >= total} onClick={() => requestAdd(Object.keys(snapshot?.nodes ?? {}).filter((id) => !id.startsWith("asset:")), "All elements")}>
-          Add all
-        </Button>
         <Button size="xs" variant="outline" disabled={!visible.length} onClick={() => clear()}>
           Clear
         </Button>

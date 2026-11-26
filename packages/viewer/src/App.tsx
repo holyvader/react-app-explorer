@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "./components/Canvas.tsx";
 import { ConfirmExpansion } from "./components/ConfirmExpansion.tsx";
 import { DetailsPanel } from "./components/DetailsPanel.tsx";
+import { SettingsSheet } from "./components/settings/SettingsSheet.tsx";
 import { FileTree } from "./components/FileTree.tsx";
 import { LibrariesModal } from "./components/LibrariesModal.tsx";
 import { ScanModal } from "./components/ScanModal.tsx";
@@ -129,6 +130,13 @@ export function App() {
   // ⌘K opens search anywhere (diagram shortcuts live in the Canvas).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // ⌘, opens and closes the settings, as in editors
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        const st = useExplorer.getState();
+        st.setSettingsOpen(!st.settingsOpen);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && useExplorer.getState().snapshot) {
         e.preventDefault();
         setSearchOpen(true);
@@ -141,7 +149,7 @@ export function App() {
   return (
     <ReactFlowProvider>
       <Flex direction="column" h="100vh" bg="shell.bg">
-        <Toolbar list={list} onScan={() => setScanOpen(true)} onScanPath={(path) => void read(path, {})} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
+        <Toolbar list={list} onScan={() => setScanOpen(true)} onScanPath={(path) => void read(path, {})} onManageSnapshots={() => setSnapshotsOpen(true)} />
         {snapshot?.diff && <DiffBar diff={snapshot.diff} />}
         {error && (
           <Box px="4" py="2" bg="red.subtle" color="red.fg" fontSize="sm">
@@ -194,6 +202,7 @@ export function App() {
               </>
             )}
           </Box>
+          <SettingsSheet onLibraries={() => setLibrariesOpen(true)} />
           <DetailsPanel />
         </Flex>
       </Flex>

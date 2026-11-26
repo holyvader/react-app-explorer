@@ -397,6 +397,41 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .rae-edge--invokes        { --e: var(--chakra-colors-relation-invokes); }
 .rae-edge--invokesAction  { --e: var(--chakra-colors-relation-invokes-action); }
 .rae-edge--declares       { --e: var(--chakra-colors-relation-declares); --dash-on: 2; --dash-off: 3; }
+/* Flowing relations (Settings → Animate relations; `data-animate` on the canvas): each kind its
+   own pattern (set by the canvas only while at most 120 edges are drawn) — `--f1 --f2 [--f3 --f4]`, dash gap [dash gap] in px, stretched by `--ds` on long edges
+   like the static dashes — moving source → target at its own speed `--fv` (px/s). Full detail only
+   (below it edges are plain lines), still while the view moves (`data-moving`: panning repaints less),
+   and never with reduced motion. Removed (diff) and merged edges stay as they are. */
+.rae-edge--renders        { --f1: 10; --f2: 6;  --fv: 48; }
+.rae-edge--imports        { --f1: 6;  --f2: 6;  --fv: 28; }
+.rae-edge--imports-lazy   { --f1: 3;  --f2: 6;  --fv: 20; }
+.rae-edge--imports-type   { --f1: 2;  --f2: 6;  --fv: 14; }
+.rae-edge--usesHook       { --f1: 0.5; --f2: 5; --fv: 16; }
+.rae-edge--usesType       { --f1: 1;  --f2: 4;  --fv: 10; }
+.rae-edge--invokes        { --f1: 10; --f2: 4;  --f3: 1; --f4: 4; --fv: 30; }
+.rae-edge--invokesAction  { --f1: 12; --f2: 3;  --f3: 1; --f4: 3; --fv: 40; }
+.rae-edge--navigates      { --f1: 8;  --f2: 4;  --f3: 1; --f4: 4; --fv: 24; }
+.rae-edge--fetches        { --f1: 14; --f2: 6;  --fv: 18; }
+.rae-edge--revalidates    { --f1: 1;  --f2: 3;  --fv: 12; }
+.rae-edge--invalidates    { --f1: 1;  --f2: 3;  --f3: 1; --f4: 8; --fv: 12; }
+.rae-edge--runsBefore     { --f1: 6;  --f2: 3;  --fv: 36; }
+.rae-edge--routeFile      { --f1: 3;  --f2: 3;  --fv: 20; }
+.rae-edge--declares       { --f1: 2;  --f2: 3;  --fv: 8; }
+.rae-canvas[data-animate][data-lod="full"] .react-flow__edge.rae-edge:not(.rae-edge--removed, .rae-edge--bundle) path.react-flow__edge-path {
+  --fp: calc((var(--f1) + var(--f2) + var(--f3, var(--f1)) + var(--f4, var(--f2))) * var(--ds, 1));
+  stroke-dasharray:
+    calc(var(--f1) * var(--ds, 1) * 1px) calc(var(--f2) * var(--ds, 1) * 1px)
+    calc(var(--f3, var(--f1)) * var(--ds, 1) * 1px) calc(var(--f4, var(--f2)) * var(--ds, 1) * 1px);
+  animation: rae-flow calc(var(--fp) / var(--fv) * 1s) linear infinite;
+}
+.rae-canvas[data-animate][data-lod="full"] .react-flow__edge.rae-edge--fetches path.react-flow__edge-path { --ew: 2.25px; }
+.rae-canvas[data-animate][data-moving] .react-flow__edge path.react-flow__edge-path { animation-play-state: paused; }
+@keyframes rae-flow {
+  to { stroke-dashoffset: calc(var(--fp) * -1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rae-canvas[data-animate] .react-flow__edge path.react-flow__edge-path { animation: none !important; }
+}
 /* The selection's edges keep their relation colour, drawn a touch heavier. */
 .react-flow__edge.rae-edge--related path.react-flow__edge-path { --ew: 2px; }
 
@@ -442,14 +477,23 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .rae-canvas-shell { position: relative; display: flex; flex-direction: column; width: 100%; height: 100%; }
 .rae-canvas-shell > .rae-canvas { flex: 1; min-height: 0; height: auto; }
 .rae-canvas .react-flow__panel { margin: 12px; }
-.rae-canvas .react-flow__minimap {
+/* the minimap (canvas/Minimap.tsx): the diagram on a <canvas>, the view a box whose shadow dims the rest */
+.rae-minimap {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
   background: var(--panel);
-  --xy-minimap-mask-background-color-props: color-mix(in srgb, var(--canvas) 55%, transparent);
-  --xy-minimap-mask-stroke-color-props: color-mix(in srgb, var(--sel) 60%, transparent);
-  --xy-minimap-mask-stroke-width-props: 1;
+  cursor: pointer;
+  touch-action: none;
+}
+.rae-minimap canvas { display: block; }
+.rae-minimap__view {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--sel) 60%, transparent);
+  border-radius: 2px;
+  box-shadow: 0 0 0 999px color-mix(in srgb, var(--canvas) 55%, transparent);
+  pointer-events: none;
 }
 
 /* ---- cursors: what a press would do ---------------------------------------------------- */

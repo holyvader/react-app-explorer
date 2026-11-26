@@ -78,4 +78,4 @@ export {
   Moon as IconDark,
 } from "lucide-react";
 export type { LucideIcon as Icon } from "lucide-react";
-export { IconRenders, IconRenderTree } from "./customIcons.ts";
+export { IconRenderedBy, IconRenders, IconRenderTree } from "./customIcons.ts";

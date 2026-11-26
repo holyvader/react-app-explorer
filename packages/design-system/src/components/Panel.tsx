@@ -22,6 +22,8 @@ export interface PanelCollapse {
   collapsed: boolean;
   /** What the strip shows: e.g. a button to open the panel again. */
   strip: ReactNode;
+  /** The collapsed width (default PANEL_STRIP); 0 folds the panel away entirely, its edge too (a sheet opened from elsewhere). */
+  width?: number;
 }
 
 /** A collapsed panel's width. */
@@ -47,6 +49,7 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
   }
   const { width, onWidthChange, min = 320, max = 900, defaultWidth, side = "right" } = resize;
   const collapsed = !!collapse?.collapsed;
+  const collapsedWidth = collapse?.width ?? PANEL_STRIP;
   // dragging towards the window's middle widens the panel
   const dir = side === "right" ? -1 : 1;
   const clamp = (w: number) => Math.round(Math.min(Math.max(w, min), Math.min(max, window.innerWidth - 360)));
@@ -55,7 +58,7 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
       position="relative"
       h="full"
       flexShrink={0}
-      style={{ width: collapsed ? PANEL_STRIP : width, transition: dragging ? "none" : `width 200ms ${EASE}` }}
+      style={{ width: collapsed ? collapsedWidth : width, transition: dragging ? "none" : `width 200ms ${EASE}` }}
       data-collapsed={collapsed || undefined}
     >
       {!collapsed && (
@@ -104,7 +107,7 @@ export function Panel({ children, resize, collapse, ...rest }: BoxProps & { resi
           }}
         />
       )}
-      <Box bg="panel.bg" borderColor="border" {...SIDE_BORDER(side)} h="full" overflow="hidden" position="relative">
+      <Box bg="panel.bg" borderColor="border" {...(collapsed && collapsedWidth === 0 ? {} : SIDE_BORDER(side))} h="full" overflow="hidden" position="relative">
         {/* the content keeps its full width while the panel folds, so nothing reflows mid-animation */}
         <Box
           h="full"
