@@ -12,6 +12,7 @@ import { scanFolder } from "./lib/scanJob.ts";
 import { Notice } from "./components/Notice.tsx";
 import { ScanProgress } from "./components/ScanProgress.tsx";
 import { SnapshotsModal } from "./components/SnapshotsModal.tsx";
+import { DiffBar } from "./components/DiffBar.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { fetchSnapshot, fetchSnapshotList, readSnapshotFile, type SnapshotList } from "./lib/api.ts";
 import { fetchEditors } from "./lib/editor.ts";
@@ -116,6 +117,7 @@ export function App() {
     <ReactFlowProvider>
       <Flex direction="column" h="100vh" bg="shell.bg">
         <Toolbar list={list} current={snapshotName} onPickSnapshot={load} onLoadFile={onLoadFile} onScan={() => setScanOpen(true)} onScanPath={(path) => void scanFolder(path, (file) => void refreshList(file))} onManageSnapshots={() => setSnapshotsOpen(true)} onLibraries={() => setLibrariesOpen(true)} />
+        {snapshot?.diff && <DiffBar diff={snapshot.diff} />}
         {error && (
           <Box px="4" py="2" bg="red.subtle" color="red.fg" fontSize="sm">
             {error}

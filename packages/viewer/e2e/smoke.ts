@@ -72,7 +72,7 @@ if ((await page.locator(".react-flow__handle.connectable").count()) !== 0) fail(
 
 // Nesting: adding TodoItem's file (sidebar "Module" link) draws it as a frame around TodoItem.
 // Folders are nodes of their own now: never drawn automatically around files.
-await page.locator(".react-flow__controls-fitview").click();
+await page.getByRole("button", { name: "Fit everything" }).click();
 await page.waitForTimeout(400);
 await page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]').click();
 // the sidebar header shows the file a component is declared in, as a chip
@@ -82,7 +82,7 @@ if ((await page.locator('.react-flow__node[data-id^="dir:"]').count()) !== 0) fa
 
 const frame = page.locator('.react-flow__node[data-id="components/TodoItem.tsx"]');
 const card = page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]');
-await page.locator(".react-flow__controls-fitview").click();
+await page.getByRole("button", { name: "Fit everything" }).click();
 await page.waitForTimeout(500);
 
 // A file's only element is placed automatically and can't be dragged: dragging it pans instead.
@@ -97,7 +97,7 @@ await page.waitForTimeout(500);
   const f1 = (await frame.boundingBox())!;
   const c1 = (await card.boundingBox())!;
   if (Math.abs(c1.x - f1.x - (c0.x - f0.x)) > 1 || Math.abs(c1.y - f1.y - (c0.y - f0.y)) > 1) fail("the only element in a file should not move inside it");
-  await page.locator(".react-flow__controls-fitview").click();
+  await page.getByRole("button", { name: "Fit everything" }).click();
   await page.waitForTimeout(500);
 }
 
@@ -105,7 +105,7 @@ await page.waitForTimeout(500);
 {
   // (select something first, so there's a selection to clear)
   await card.click();
-  await page.locator(".react-flow__controls-fitview").click();
+  await page.getByRole("button", { name: "Fit everything" }).click();
   await page.waitForTimeout(400);
   const room = (await page.locator('.react-flow__node[data-id="components/TodoItem.tsx"] .rae-frame__room').boundingBox())!;
   await page.mouse.click(room.x + 6, room.y + room.height - 5);

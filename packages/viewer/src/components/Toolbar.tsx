@@ -2,25 +2,20 @@ import { ActionIconButton, Box, BrandMark, Button, ContextMenu, DIAGRAM_PALETTES
 import { projectName } from "../lib/paths.ts";
 import { FolderSwitcher, when } from "./FolderSwitcher.tsx";
 import {
-  IconBranch,
   IconChevronDown,
   IconClear,
   IconHistory,
   IconLayout,
   IconLibrary,
-  IconOpen,
   IconRedo,
-  IconRouteChain,
   IconScan,
   IconUndo,
   IconViewOptions,
 } from "@rae/design-system/icons";
 import { useRef, useState } from "react";
-import { sideLabel } from "../lib/diff.ts";
-import type { SnapshotDiff } from "@rae/schema";
-import { EDITORS, type EditorKind, openRequestPage } from "../lib/editor.ts";
+import { EDITORS, type EditorKind } from "../lib/editor.ts";
 import type { SnapshotList } from "../lib/api.ts";
-import { type DiffMode, diffModeOf, useExplorer } from "../store.ts";
+import { useExplorer } from "../store.ts";
 import type { LayoutMode } from "../graph/squareLayout.ts";
 
 const LAYOUT_MODES: { value: LayoutMode; label: string }[] = [
@@ -40,7 +35,7 @@ export interface ToolbarProps {
   onLibraries: () => void;
 }
 
-/** The app bar: mark, the folder switcher and its snapshot (a diff's chip and overlay switch), history, view options and Scan. */
+/** The app bar: mark, the folder switcher and its snapshot, history, view options and Scan. A diff adds the `DiffBar` under it. */
 export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onScanPath, onManageSnapshots, onLibraries }: ToolbarProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
@@ -79,8 +74,8 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onS
       </Flex>
       <Divider />
 
-      {/* the folder in the middle (switch, rescan, open another), then which of its snapshots is open */}
-      <Flex flex="1" minW="0" align="center" justify="center" gap="1.5">
+      {/* the folder (switch, rescan, open another), then which of its snapshots is open; a diff's controls are on the Git bar under this one */}
+      <Flex flex="1" minW="0" align="center" gap="1.5">
         <FolderSwitcher list={list} onPickSnapshot={onPickSnapshot} onScanPath={onScanPath} onBrowse={onScan} onLoadFile={() => fileRef.current?.click()} />
         {currentEntry && own.length > 0 && (
           <Tooltip content={`${own.length} snapshot${own.length === 1 ? "" : "s"} of this folder`}>
@@ -109,13 +104,6 @@ export function Toolbar({ list, current, onPickSnapshot, onLoadFile, onScan, onS
               <IconChevronDown size={13} />
             </Flex>
           </Tooltip>
-        )}
-        {snapshot?.diff && <DiffChip diff={snapshot.diff} />}
-        {snapshot?.diff && <DiffModeSelect />}
-        {snapshot?.diff && (
-          <Button size="xs" h="28px" px="10px" variant="outline" rounded="l2" fontSize={textPx(12)} gap="6px" onClick={() => useExplorer.getState().setImpactOpen(true)}>
-            <IconRouteChain size={13} /> What it affects
-          </Button>
         )}
       </Flex>
       <ContextMenu at={menuAt} onClose={() => setMenuAt(null)} entries={entries} />
@@ -254,62 +242,6 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
         )}
       </Box>
       {children}
-    </Flex>
-  );
-}
-
-const DIFF_MODES = [
-  { value: "off", label: "Off" },
-  { value: "overlay", label: "Overlay" },
-  { value: "code", label: "Overlay + code" },
-];
-
-/**
- * The diff view, on the bar while a diff is open: off, the overlay (what changed in colour, removed
- * elements as ghosts), or the overlay plus the selected element's changed lines in a card under it.
- */
-function DiffModeSelect() {
-  const mode = useExplorer(diffModeOf);
-  return (
-    <Tooltip content="Diff view — Overlay: what changed in colour, removed elements as ghosts. Overlay + code: also the changed lines in the tooltip of a changed element.">
-      <Flex align="center" gap="1.5" flexShrink={0} fontSize={textPx(12)} color="fg.muted">
-        <Text as="span">Diff</Text>
-        <Select value={mode} onValueChange={(v) => useExplorer.getState().setDiffMode(v as DiffMode)} options={DIFF_MODES} width="140px" size="xs" label="Diff view" />
-      </Flex>
-    </Tooltip>
-  );
-}
-
-/** What a diff compares: `main ← #12 Fix footer` (a PR / MR, with a link to its page), `main ← feature 1a2b3c4`. */
-function DiffChip({ diff }: { diff: SnapshotDiff }) {
-  const req = diff.head.request;
-  const head = req ? `${req.provider === "github" ? "#" : "!"}${req.number}${req.title ? ` ${req.title}` : ""}` : sideLabel(diff.head.ref, diff.head.sha, diff.head.worktree);
-  const tip = [
-    req?.title ? `${req.provider === "github" ? "Pull" : "Merge"} request ${req.provider === "github" ? "#" : "!"}${req.number}: ${req.title}${req.author ? ` (${req.author})` : ""}` : undefined,
-    `Comparing ${diff.head.ref} (${diff.head.sha.slice(0, 7)}${diff.head.subject ? `: ${diff.head.subject}` : ""})`,
-    `with ${diff.against === "merge-base" ? `its merge-base with ${diff.base.ref}` : diff.base.ref} (${diff.compared.slice(0, 7)})`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  return (
-    <Flex align="center" gap="0.5" flexShrink={1} minW="0">
-      <Tooltip content={tip}>
-        <Flex align="center" gap="1.5" h="24px" px="2" rounded="l2" minW="0" fontFamily="mono" fontSize={textPx(11)} color="diff.changed.fg" bg="diff.changed.subtle">
-          <IconBranch size={12} />
-          <Text as="span" truncate maxW="360px">
-            {sideLabel(diff.base.ref, diff.compared).split(" ")[0]} ← {head}
-          </Text>
-        </Flex>
-      </Tooltip>
-      {req?.url && (
-        <ActionIconButton
-          label={`Open ${req.provider === "github" ? "the pull request on GitHub" : "the merge request on GitLab"}`}
-          icon={<IconOpen />}
-          size="2xs"
-          color="diff.changed.fg"
-          onClick={() => void openRequestPage(req.url!).catch((e: Error) => useExplorer.getState().notify(e.message))}
-        />
-      )}
     </Flex>
   );
 }

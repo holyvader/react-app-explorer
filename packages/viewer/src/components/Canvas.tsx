@@ -1,13 +1,11 @@
-import { ContextMenu, ShortcutLegend, type Shortcut, tokenVar, useColorMode } from "@rae/design-system";
+import { ContextMenu, type Shortcut, tokenVar, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
   Background,
   BackgroundVariant,
-  Controls,
   type Edge,
   MiniMap,
   type NodeChange,
-  Panel as FlowPanel,
   ReactFlow,
   useReactFlow,
   useStore,
@@ -20,7 +18,7 @@ import { absoluteRect } from "../graph/placement.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../store.ts";
 import "./canvas.css";
-import { HistoryButtons, RelationFilters } from "./canvas/CanvasChrome.tsx";
+import { CanvasStatusBar } from "./canvas/CanvasChrome.tsx";
 import { useCanvasEdges } from "./canvas/edges.ts";
 import { useCanvasNodes, useRelated } from "./canvas/nodes.ts";
 import { useCanvasKeys } from "./canvas/useCanvasKeys.ts";
@@ -67,7 +65,7 @@ const SHORTCUTS: Shortcut[] = [
 ];
 
 /** Fitting keeps clear of the canvas chrome: the relation filters on top, the controls and minimap below. */
-const FIT_PADDING = { top: "68px", bottom: "64px", left: "48px", right: "48px" } as const;
+const FIT_PADDING = { top: "48px", bottom: "48px", left: "48px", right: "48px" } as const;
 const FIT = { padding: FIT_PADDING, maxZoom: 1, duration: 350 } as const;
 
 /**
@@ -185,128 +183,146 @@ export function Canvas() {
   }, [focusId, placed, flow, consumeFocus]);
 
   const colorMode = useColorMode();
+  const [minimap, setMinimap] = useMinimap();
   const menuNode = menu ? snapshot?.nodes[menu.id] : undefined;
   const menuEntries = useMemo(() => (menu ? (menu.mode === "contains" ? containsEntries(menu.id) : nodeMenuEntries(menu.id)) : []), [menu]);
 
   return (
-    <div
-      className="rae-canvas"
-      tabIndex={-1}
-      data-selection={selection.length ? "" : undefined}
-      data-lod={lod}
-      data-dragging={drag.dragging ? "" : undefined}
-      data-adding={adding ? "" : undefined}
-      data-boxing={boxing ? "" : undefined}
-      data-refused-drop={drag.refusedDrop ? "" : undefined}
-      // Shift + drag on empty space: a selection box, before React Flow (or a frame's room) pans
-      onPointerDownCapture={marquee.onPointerDownCapture}
-      // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
-      onPointerDown={(e) => {
-        const active = document.activeElement as HTMLElement | null;
-        if (active && active !== e.currentTarget && active.matches("input, textarea, select")) e.currentTarget.focus({ preventScroll: true });
-      }}
-    >
-      <LodContext.Provider value={lod}>
-        <ReactFlow<ElementFlowNode, Edge>
-          // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
-          colorMode={colorMode}
-          // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
-          proOptions={{ hideAttribution: true }}
-          nodes={nodes}
-          edges={edges as Edge[]}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange}
-          // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
-          nodesConnectable={false}
-          // Selection is the store's alone: React Flow's own selection (which also flips its internal
-          // node state on click) is off; `selected` is passed in and clicks still reach onNodeClick.
-          elementsSelectable={false}
-          deleteKeyCode={null}
-          selectionKeyCode={null}
-          // Space adds to the diagram; panning is a plain drag.
-          panActivationKeyCode={null}
-          multiSelectionKeyCode={null}
-          edgesFocusable={false}
-          onNodeClick={(e, n) => {
-            // Cards select anywhere; frames (files holding elements, folders) only from their header —
-            // where they're dragged. Their room acts as empty canvas (FrameNode: click clears, drag pans).
-            const target = e.target as HTMLElement;
-            if (target.closest(".rae-icon-btn, .rae-contains")) return;
-            if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
-            select(n.id, e.metaKey || e.ctrlKey || e.shiftKey);
-          }}
-          onNodeMouseEnter={tooltip.onNodeMouseEnter}
-          onNodeMouseLeave={tooltip.onNodeMouseLeave}
-          // A moving view would leave the tooltip behind its node.
-          onMoveStart={tooltip.hide}
-          onNodeContextMenu={(e, n) => {
-            e.preventDefault();
-            if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
-            setMenu({ x: e.clientX, y: e.clientY, id: n.id, mode: "node" });
-          }}
-          onPaneContextMenu={(e) => {
-            e.preventDefault();
-            const s = useExplorer.getState();
-            // Quick add: a small picker right there; what's picked lands at that point.
-            if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
-          }}
-          onNodeDragStart={drag.onNodeDragStart}
-          onNodeDrag={drag.onNodeDrag}
-          onNodeDragStop={drag.onNodeDragStop}
-          onPaneClick={() => select(undefined)}
-          minZoom={0.02}
-          maxZoom={2}
-          fitView
-          fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
-          onlyRenderVisibleElements
-        >
-          <Background variant={BackgroundVariant.Dots} gap={16} size={1.4} color={tokenVar("canvas.dot")} />
-          <FlowPanel position="top-left" className="rae-filters">
-            <RelationFilters />
-          </FlowPanel>
-          <Controls position="bottom-left" showInteractive={false} />
-          <FlowPanel position="bottom-left" className="rae-history">
-            <HistoryButtons />
-          </FlowPanel>
-          <MiniMap
-            pannable
-            zoomable
-            position="bottom-right"
-            nodeColor={(n) => {
-              const d = (n as ElementFlowNode).data;
-              if (d.element.kind === "folder") return "transparent";
-              return tokenVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
+    <div className="rae-canvas-shell">
+      <div
+        className="rae-canvas"
+        tabIndex={-1}
+        data-selection={selection.length ? "" : undefined}
+        data-lod={lod}
+        data-dragging={drag.dragging ? "" : undefined}
+        data-adding={adding ? "" : undefined}
+        data-boxing={boxing ? "" : undefined}
+        data-refused-drop={drag.refusedDrop ? "" : undefined}
+        // Shift + drag on empty space: a selection box, before React Flow (or a frame's room) pans
+        onPointerDownCapture={marquee.onPointerDownCapture}
+        // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
+        onPointerDown={(e) => {
+          const active = document.activeElement as HTMLElement | null;
+          if (active && active !== e.currentTarget && active.matches("input, textarea, select")) e.currentTarget.focus({ preventScroll: true });
+        }}
+      >
+        <LodContext.Provider value={lod}>
+          <ReactFlow<ElementFlowNode, Edge>
+            // React Flow marks its root .light / .dark: it must match ours, or Chakra's tokens inside flip
+            colorMode={colorMode}
+            // React Flow is MIT: the corner attribution is optional (it sat on top of the minimap)
+            proOptions={{ hideAttribution: true }}
+            nodes={nodes}
+            edges={edges as Edge[]}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onNodesChange={onNodesChange}
+            // Read-only diagram: no drawing connections, no React Flow deletion (Delete is ours).
+            nodesConnectable={false}
+            // Selection is the store's alone: React Flow's own selection (which also flips its internal
+            // node state on click) is off; `selected` is passed in and clicks still reach onNodeClick.
+            elementsSelectable={false}
+            deleteKeyCode={null}
+            selectionKeyCode={null}
+            // Space adds to the diagram; panning is a plain drag.
+            panActivationKeyCode={null}
+            multiSelectionKeyCode={null}
+            edgesFocusable={false}
+            onNodeClick={(e, n) => {
+              // Cards select anywhere; frames (files holding elements, folders) only from their header —
+              // where they're dragged. Their room acts as empty canvas (FrameNode: click clears, drag pans).
+              const target = e.target as HTMLElement;
+              if (target.closest(".rae-icon-btn, .rae-contains")) return;
+              if (n.type === "frame" && !target.closest(`.${FRAME_HANDLE}`)) return;
+              select(n.id, e.metaKey || e.ctrlKey || e.shiftKey);
             }}
-            nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? tokenVar("kind.module.muted") : "transparent")}
-          />
-        </ReactFlow>
-      </LodContext.Provider>
-      {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
-      {!drag.dragging && !menu && !codeDiffOf && !codeOf && (
-        <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} {...tooltip.tooltipProps} />
-      )}
-      {codeOf && snapshot && <NodeCodeModal node={codeOf} snapshot={snapshot} onClose={() => useExplorer.getState().showCode(undefined)} />}
-      {codeDiffOf && snapshot && <NodeDiffModal node={codeDiffOf} snapshot={snapshot} open onOpenChange={(open) => !open && useExplorer.getState().showCodeDiff(undefined)} />}
-      {marquee.box && <div className="rae-marquee" style={marquee.box} />}
-      <ExplorationPicker />
-      <QuickAdd />
-      <div className="rae-legend">
-        <ShortcutLegend shortcuts={SHORTCUTS} />
+            onNodeMouseEnter={tooltip.onNodeMouseEnter}
+            onNodeMouseLeave={tooltip.onNodeMouseLeave}
+            // A moving view would leave the tooltip behind its node.
+            onMoveStart={tooltip.hide}
+            onNodeContextMenu={(e, n) => {
+              e.preventDefault();
+              if (n.data.node && !useExplorer.getState().selection.includes(n.id)) select(n.id);
+              setMenu({ x: e.clientX, y: e.clientY, id: n.id, mode: "node" });
+            }}
+            onPaneContextMenu={(e) => {
+              e.preventDefault();
+              const s = useExplorer.getState();
+              // Quick add: a small picker right there; what's picked lands at that point.
+              if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
+            }}
+            onNodeDragStart={drag.onNodeDragStart}
+            onNodeDrag={drag.onNodeDrag}
+            onNodeDragStop={drag.onNodeDragStop}
+            onPaneClick={() => select(undefined)}
+            minZoom={0.02}
+            maxZoom={2}
+            fitView
+            fitViewOptions={{ padding: FIT_PADDING, maxZoom: 1 }}
+            onlyRenderVisibleElements
+          >
+            <Background variant={BackgroundVariant.Dots} gap={16} size={1.4} color={tokenVar("canvas.dot")} />
+            {minimap && (
+              <MiniMap
+                pannable
+                zoomable
+                position="bottom-right"
+                nodeColor={(n) => {
+                  const d = (n as ElementFlowNode).data;
+                  if (d.element.kind === "folder") return "transparent";
+                  return tokenVar(`kind.${d.element.kind}.${n.type === "frame" ? "subtle" : "solid"}`);
+                }}
+                nodeStrokeColor={(n) => ((n as ElementFlowNode).type === "frame" ? tokenVar("kind.module.muted") : "transparent")}
+              />
+            )}
+          </ReactFlow>
+        </LodContext.Provider>
+        {/* a removed element takes its tooltip with it (the pointer never "left" it) */}
+        {!drag.dragging && !menu && !codeDiffOf && !codeOf && (
+          <NodeTooltip tip={tip && placed.some((p) => p.element.id === tip.id) ? tip : null} snapshot={snapshot} index={index} {...tooltip.tooltipProps} />
+        )}
+        {codeOf && snapshot && <NodeCodeModal node={codeOf} snapshot={snapshot} onClose={() => useExplorer.getState().showCode(undefined)} />}
+        {codeDiffOf && snapshot && <NodeDiffModal node={codeDiffOf} snapshot={snapshot} open onOpenChange={(open) => !open && useExplorer.getState().showCodeDiff(undefined)} />}
+        {marquee.box && <div className="rae-marquee" style={marquee.box} />}
+        <ExplorationPicker />
+        <QuickAdd />
+        <ContextMenu
+          at={menu && { x: menu.x, y: menu.y }}
+          onClose={() => setMenu(null)}
+          entries={menuEntries}
+          title={
+            menu && (
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{menuNode?.name ?? menu.id.replace(FOLDER_PREFIX, "")}</div>
+                <div style={{ fontSize: 11, opacity: 0.7 }}>{menuNode ? `${KIND_META[menuNode.kind].label} · ${menuNode.filePath}` : "Folder"}</div>
+              </div>
+            )
+          }
+        />
       </div>
-      <ContextMenu
-        at={menu && { x: menu.x, y: menu.y }}
-        onClose={() => setMenu(null)}
-        entries={menuEntries}
-        title={
-          menu && (
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{menuNode?.name ?? menu.id.replace(FOLDER_PREFIX, "")}</div>
-              <div style={{ fontSize: 11, opacity: 0.7 }}>{menuNode ? `${KIND_META[menuNode.kind].label} · ${menuNode.filePath}` : "Folder"}</div>
-            </div>
-          )
-        }
-      />
+      <CanvasStatusBar shortcuts={SHORTCUTS} minimap={minimap} onMinimap={setMinimap} fitPadding={FIT_PADDING} />
     </div>
   );
+}
+
+const MINIMAP_KEY = "rae.minimap";
+
+/** Whether the minimap shows (the status bar's switch), remembered across sessions; on by default. */
+function useMinimap() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(MINIMAP_KEY) !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const set = useCallback((next: boolean) => {
+    setOn(next);
+    try {
+      localStorage.setItem(MINIMAP_KEY, next ? "on" : "off");
+    } catch {
+      /* private mode: just for this session */
+    }
+  }, []);
+  return [on, set] as const;
 }

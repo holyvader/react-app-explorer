@@ -444,35 +444,11 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .rae-edge-label[data-related] b { font-weight: 500; }
 .rae-canvas[data-selection] .rae-edge-label:not([data-related])::after { inset: 0; background: color-mix(in srgb, var(--canvas) 82%, transparent); }
 
-/* ---- canvas chrome: relation filters, zoom, history, legend, minimap ------------------- */
+/* ---- canvas chrome: the status bar under the canvas (CanvasStatusBar), the minimap -------- */
+/* the canvas fills what the status bar leaves */
+.rae-canvas-shell { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.rae-canvas-shell > .rae-canvas { flex: 1; min-height: 0; height: auto; }
 .rae-canvas .react-flow__panel { margin: 12px; }
-.rae-filters { max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; }
-.rae-filters::-webkit-scrollbar { display: none; }
-.rae-canvas .react-flow__controls {
-  box-shadow: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--chakra-colors-bg-subtle);
-  padding: 2px;
-  gap: 1px;
-}
-/* Back / Forward: a row beside the zoom column */
-.rae-canvas .react-flow__panel.rae-history { left: 40px; }
-.rae-canvas .rae-history__group { position: static; flex-direction: row; margin: 0; }
-.rae-canvas .react-flow__controls-button {
-  border: 0;
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-  color: var(--chakra-colors-kind-module-fg);
-}
-.rae-canvas .react-flow__controls-button:hover:not(:disabled) { background: var(--chakra-colors-bg-muted); color: var(--fg); }
-.rae-canvas .react-flow__controls-button:disabled { color: var(--chakra-colors-fg-disabled); opacity: 1; }
-.rae-canvas .react-flow__controls-button svg { fill: currentColor; max-width: 12px; max-height: 12px; }
-.rae-canvas .react-flow__controls-button svg[class*="lucide"] { fill: none; max-width: 14px; max-height: 14px; }
 .rae-canvas .react-flow__minimap {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -481,12 +457,6 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
   --xy-minimap-mask-background-color-props: color-mix(in srgb, var(--canvas) 55%, transparent);
   --xy-minimap-mask-stroke-color-props: color-mix(in srgb, var(--sel) 60%, transparent);
   --xy-minimap-mask-stroke-width-props: 1;
-}
-.rae-legend {
-  position: absolute;
-  left: 121px;
-  bottom: 12px;
-  z-index: 5;
 }
 
 /* ---- cursors: what a press would do ---------------------------------------------------- */
@@ -507,7 +477,6 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .rae-canvas[data-dragging] * { cursor: grabbing !important; }
 .rae-canvas[data-dragging][data-refused-drop],
 .rae-canvas[data-dragging][data-refused-drop] * { cursor: not-allowed !important; } /* it won't go in there */
-.rae-canvas .react-flow__controls-button { cursor: pointer; }
 
 /* ---- node tooltip (one for the whole canvas): same language as the details panel -------- */
 .rae-tip {
