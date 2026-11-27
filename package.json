@@ -15,8 +15,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -p packages/schema --noEmit && tsc -p packages/scanner --noEmit && tsc -p packages/design-system --noEmit && tsc -p packages/viewer --noEmit && tsc -p packages/server --noEmit",
     "desktop:dev": "bun --filter @rae/desktop dev",
-    "desktop:build": "bun --filter @rae/desktop build",
-    "desktop:electron": "bun --filter @rae/desktop-electron build"
+    "desktop:build": "bun --filter @rae/desktop build"
   },
   "devDependencies": {
     "@types/bun": "latest",

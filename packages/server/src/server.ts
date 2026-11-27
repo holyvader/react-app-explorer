@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Local server for the packaged app (the Tauri sidecar): serves the built viewer and the same API as
+ * Local server for the packaged app (the desktop app's sidecar, packages/desktop): serves the built viewer and the same API as
  * the Vite dev plugin — snapshots, folder browsing, scanning (in-process). Only answers requests from
  * the app itself: loopback Host, same-origin Origin.
  *

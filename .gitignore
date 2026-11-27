@@ -28,6 +28,5 @@ dist-ssr
 
 # desktop app build outputs
 packages/server/src/embedded.generated.ts
-packages/desktop/src-tauri/binaries/
-packages/desktop/src-tauri/target/
-packages/desktop/src-tauri/gen/
+packages/desktop/binaries/
+packages/desktop/out/

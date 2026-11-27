@@ -2,15 +2,18 @@
   "name": "@rae/desktop",
   "private": true,
   "license": "MIT",
-  "type": "module",
-  "description": "Desktop app (Tauri): a native window around the viewer, with the server + scanner as a sidecar.",
+  "version": "0.1.33",
+  "productName": "React App Explorer",
+  "description": "Desktop app (Electron): a window around the viewer, with the server + scanner as a sidecar.",
+  "main": "main.cjs",
   "scripts": {
     "sidecar": "bun --cwd ../server build.ts",
-    "dev": "bun run sidecar && PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
-    "build": "bun run sidecar && PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
-    "tauri": "tauri"
+    "dev": "bun run sidecar && electron .",
+    "start": "electron .",
+    "build": "bun run sidecar && bun package.ts"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@electron/packager": "^18.3.6",
+    "electron": "^38.2.0"
   }
 }

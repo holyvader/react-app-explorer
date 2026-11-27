@@ -1,30 +1,39 @@
 ---
 name: desktop
-description: Build, run or change the desktop app (Tauri v2, packages/desktop) and its sidecar — the Bun-compiled local server (packages/server) that embeds the viewer, runs the scanner in-process and ships TypeScript 7's native binary. Use for packaging for macOS/Linux/Windows, sidecar/server API changes, or when the packaged app behaves differently from `bun run dev`.
+description: Build, run or change the desktop app (Electron, packages/desktop) and its sidecar — the Bun-compiled local server (packages/server) that embeds the viewer, runs the scanner in-process and ships TypeScript 7's native binary. Use for packaging for macOS, sidecar/server API changes, or when the packaged app behaves differently from `bun run dev`.
 ---
 
-# Desktop app (Tauri + Bun sidecar)
+# Desktop app (Electron + Bun sidecar)
 
 ## Shape
 - `packages/server` (`@rae/server`) — `src/server.ts` is the packaged app's backend: `Bun.serve` on
   127.0.0.1 (port from `--port`, 0 = random), serves the built viewer and the **same API as the Vite
-  plugin** (`/api/snapshots`, `/api/fs`, `POST /api/scan`), with the same loopback-Host / same-Origin
-  guard. Scans run in-process via `@rae/scanner`'s `scan` + `writeSnapshot`. Prints
+  plugin** (`/api/snapshots`, `/api/fs`, `POST /api/scan`, `/api/git/*`…), with the same loopback-Host /
+  same-Origin guard. Scans run in-process via `@rae/scanner`'s `scan` + `writeSnapshot`. Prints
   `RAE_SERVER_URL=http://127.0.0.1:<port>` once listening.
   **Any API change must land in both** `packages/viewer/vite-plugin-snapshots.ts` and `server.ts`.
 - `packages/server/build.ts` — builds the viewer, generates `src/embedded.generated.ts`
   (git-ignored; one `with { type: "file" }` import per dist file), compiles server + scanner worker
   into one executable and copies TypeScript 7's native `tsc` next to it:
-  `packages/desktop/src-tauri/binaries/rae-server-<rust triple>` and `binaries/tsgo/` (`tsc` + all
-  `lib.*.d.ts`), bundled as the app resource folder `tsgo/`.
-- `packages/desktop/src-tauri` — Rust shell (`src/lib.rs`): spawns the `rae-server` sidecar
-  (`tauri-plugin-shell`) with `--snapshots <app data dir>/snapshots` and
-  `RAE_TSGO_PATH=<resource dir>/tsgo/tsc`, waits for the URL line, navigates the `main` window there
-  (it starts on `loading/index.html`), kills the sidecar on exit. The page gets **no Tauri
-  permissions** (`capabilities/default.json` is empty) — it only speaks HTTP to the sidecar.
+  `packages/desktop/binaries/rae-server-<target triple>` and `binaries/tsgo/` (`tsc` + all `lib.*.d.ts`).
+- `packages/desktop` (`@rae/desktop`) — Electron. `main.cjs`: opens the window on `loading/index.html`,
+  spawns the sidecar with `--port 0 --snapshots <appData>/dev.rae.explorer/snapshots --log
+  ~/Library/Logs/dev.rae.explorer/server.log` and `RAE_TSGO_PATH=<resources>/tsgo/tsc`, navigates to
+  the URL it prints, shows why it died on the loading page (`window.raeServerFailed`). On quit it writes
+  `quit` to the sidecar's stdin and kills it 400 ms later (a closed stdin also makes it stop its
+  scripts). The page gets **nothing from Electron**: no preload, `contextIsolation` + `sandbox`, the
+  window stays on the sidecar (127.0.0.1) and the loading page, only http(s) links open in the browser.
+  The menu is its own (app, Edit, Window; Develop → Web Inspector ⌥⌘I only from source): Electron's
+  default menu has Toggle Developer Tools and zoom shortcuts that would take ⌘+ / ⌘- from the diagram.
+- `packages/desktop/package.ts` — `@electron/packager`: `React App Explorer.app` (bundle id
+  `dev.rae.explorer`, the version from `package.json`, `LSMinimumSystemVersion` 13.0 — Bun's minimum),
+  the sidecar, `tsgo/` and `loading/` as resources, ad-hoc signed (nested executables first), and a
+  `.dmg` (app + /Applications link) in `out/`.
+- The data folders are the ones the app has always had (from its Tauri days, until 0.1.33): projects,
+  snapshots and `viewer-storage.json` carry over.
 
 ## Gotchas (each cost a debugging round)
-- The web view is **WebKit with no browser UI and a new origin each launch**: the viewer must behave the same as in Chrome on `bun run dev`. See the `frontend` skill, "Same behaviour in the web app and the desktop app", for the rules and the WebKit + sidecar test recipe.
+- The window has **no browser UI and a new origin each launch**: the viewer must behave the same as in Chrome on `bun run dev`. See the `frontend` skill, "Same behaviour in the web app and the desktop app", for the rules and the sidecar test recipe.
 - oxc's napi loaders pick their `.node` file at runtime, so `bun build --compile` doesn't embed them.
   `build.ts`'s plugin rewrites `require('@oxc-*/binding-<platform>')` **and** the
   `require('…/package.json').version` checks (otherwise the binding is rejected with
@@ -43,13 +52,8 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
   `build.ts` strips the `createRequire` line and the WebContainer fallback, then **guards** the
   result: both addons must appear as `/$bunfs/root/*.node`, and no build-machine path may remain.
   Test "another machine" by hiding the local `.node` files while running the sidecar.
-- macOS signing: `bundle.macOS.signingIdentity: "-"` ad-hoc signs the **whole bundle** (sealed
-  resources and nested sidecar). Without it the main binary was only linker-signed, and Gatekeeper
-  assessed the sidecar separately, so downloaded copies hung or were killed. The hardened runtime
-  needs `Entitlements.plist`: allow-jit plus unsigned-executable-memory (JavaScriptCore), and
-  disable-library-validation (the embedded oxc addons). Without them the sidecar dies loading them.
-  `minimumSystemVersion` is 13.0 (Bun's minimum).
-- If the sidecar dies, `lib.rs` shows the reason (exit code/signal and the last stderr lines) on the
+- macOS signing: ad hoc (`codesign --sign -`), the sidecar and `tsgo/tsc` first, then the bundle (Apple Silicon won't run unsigned code). No hardened runtime: it would need entitlements for the sidecar (allow-jit, unsigned-executable-memory for JavaScriptCore, disable-library-validation for the embedded oxc addons) — add them with it, for notarization.
+- If the sidecar dies, `main.cjs` shows the reason (exit code/signal and the last stderr lines) on the
   bundled loading page (`window.raeServerFailed`), with the quarantine fix command.
 - Downloaded builds are still quarantined and not notarized: users need right-click → Open, or
   `xattr -dr com.apple.quarantine "/Applications/React App Explorer.app"`. A real fix needs a
@@ -80,18 +84,21 @@ description: Build, run or change the desktop app (Tauri v2, packages/desktop) a
 
 ## Run / build
 - App icon and branding: see the `design-system` skill ("Brand & shell"). `loading/index.html` shows the mark (inline SVG) while the sidecar starts.
-- `bun run desktop:build` → `packages/desktop/src-tauri/target/release/bundle/` (`.app` + `.dmg` on
-  macOS, `.deb`/`.AppImage`/`.rpm` on Linux, `.msi`/NSIS on Windows). `bun run desktop:dev` for a dev
-  window. Quick macOS-only bundle: `bunx tauri build --bundles app` in packages/desktop.
-- Rust comes from rustup in `~/.cargo` (installed without touching the shell profile); the desktop
-  scripts prepend `~/.cargo/bin` to PATH.
+- `bun run desktop:build` → `packages/desktop/out/React App Explorer-darwin-<arch>/React App Explorer.app` and
+  `out/React App Explorer_<version>_<arch>.dmg`. `bun run desktop:dev` builds the sidecar and opens a dev window
+  (`electron .`, reading `binaries/`); `bun --filter @rae/desktop start` skips the sidecar build.
+- Releases: bump `version` in `packages/desktop/package.json`, build, publish the `.dmg` as a GitHub
+  pre-release tagged `desktop-v<version>`.
+- Check a packaged build: run `…/React App Explorer.app/Contents/MacOS/React App Explorer` from a shell
+  (it logs `[rae] opening <url>`), curl that URL's `/api/snapshots`, then `kill -TERM` it — the sidecar
+  must be gone afterwards.
 - Test the sidecar alone: `RAE_TSGO_PATH=…/binaries/tsgo/tsc …/rae-server-<triple> --port 5288 --snapshots <dir>`
   (never 5173 — that's the user's dev server).
-- **Other platforms:** build on that OS (CI matrix) — Tauri bundles natively per platform, and the
-  sidecar needs that platform's `@oxc-parser/binding-*`, `@oxc-resolver/binding-*` and
+- **Other platforms:** `package.ts` makes the macOS app only (Linux / Windows: `@electron/packager`
+  with that platform, build on that OS); the sidecar needs that platform's `@oxc-parser/binding-*`, `@oxc-resolver/binding-*` and
   `@typescript/typescript-*` installed. `build.ts --target bun-linux-x64|bun-windows-x64|…` picks them.
 - Unsigned builds: macOS Gatekeeper / Windows SmartScreen warn. Signing + notarization are not set up.
 - `/api/storage` (GET / PUT `{entries}`): the viewer's `rae.*` localStorage, kept in `<appData>/viewer-storage.json` next to the snapshots folder. The sidecar listens on `--port 0`, a new origin each launch, so the web view's localStorage would otherwise start empty.
-- **package.json scripts** (`/api/scripts?path=`, `POST /api/scripts/run {path, script}`, `POST /api/scripts/stop {id}`, `GET /api/scripts/log?id=&from=` NDJSON): shared logic in `@rae/scanner/scripts` (scanner/src/scripts.ts), routes in both `server.ts` and the Vite plugin. Only scripts the package.json names, run by name with the folder's package manager (lockfile → bun / pnpm / yarn / npm), never a command from the page; the child gets the **login shell's PATH** (`$SHELL -ilc`, once; an app from the Finder has a bare PATH) and its own process group, so Stop ends what it started. Runs live in the server process (a page reload follows them again). On quit, `lib.rs` writes `quit` to the sidecar's stdin and waits 400 ms before killing it: a kill alone would leave the scripts' process groups running.
+- **package.json scripts** (`/api/scripts?path=`, `POST /api/scripts/run {path, script}`, `POST /api/scripts/stop {id}`, `GET /api/scripts/log?id=&from=` NDJSON): shared logic in `@rae/scanner/scripts` (scanner/src/scripts.ts), routes in both `server.ts` and the Vite plugin. Only scripts the package.json names, run by name with the folder's package manager (lockfile → bun / pnpm / yarn / npm), never a command from the page; the child gets the **login shell's PATH** (`$SHELL -ilc`, once; an app from the Finder has a bare PATH) and its own process group, so Stop ends what it started. Runs live in the server process (a page reload follows them again). On quit, `main.cjs` writes `quit` to the sidecar's stdin and waits 400 ms before killing it: a kill alone would leave the scripts' process groups running.
 - **git fetch / update** (`POST /api/git/fetch`, `POST /api/git/pull` with `{path}`; `gitFetch` / `gitPull` in scanner/src/gitApi.ts) and `POST /api/scan` with `latest: "<branch>"` (a branch's newest commit, `latestTree({ branch })`; the CLI's `--branch`): in both servers.
 - Scripts: a run ended by Stop (or quitting) is `stopped`, not `failed`; two run requests at once share one start (`starting`); on Windows a `.cmd` package manager starts through `cmd.exe /d /s /c` (script names with cmd.exe syntax refused); on quit the sidecar gives the scripts 150 ms, then kills their process groups. Branch names are checked with `isBranchName` (git's rules) and refused with a 400, never read as the working tree; `fetchBranch` fetches into a private ref, not FETCH_HEAD.

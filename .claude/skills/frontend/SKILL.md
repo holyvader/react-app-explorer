@@ -121,20 +121,21 @@ e2e/smoke.ts            headless smoke test (playwright-core)
   `signal` cancels; `onCount(stage, done, total, loading?)` feeds the progress.
 
 ## Same behaviour in the web app and the desktop app
-The viewer runs in two hosts: Chrome/any browser on the Vite dev server (`bun run dev`, 5173) and the desktop app, a **WebKit** web view (WKWebView on macOS) on the Bun sidecar (production build). Every feature must behave the same in both. Design for the desktop app's limits:
+The viewer runs in two hosts: Chrome/any browser on the Vite dev server (`bun run dev`, 5173) and the desktop app, an **Electron** window (bundled Chromium) on the Bun sidecar (production build). Every feature must behave the same in both, and in Safari (WebKit) too. Design for the desktop app's limits:
 - **No browser UI** in the app: no Back/Forward buttons, address bar, browser shortcuts or dev tools. Anything users would do with the browser needs an in-app control (e.g. the ← → history buttons; ⌘[ / ⌘] handled in JS for both apps).
 - **New origin every launch** (the sidecar uses `--port 0`): localStorage, sessionStorage, IndexedDB and cookies start empty. Keep state in `rae.*` localStorage keys only: `syncStorage()` mirrors exactly those to the server (`/api/storage`).
-- **WebKit, not Chromium**: no `alert`/`confirm`/`prompt` (use `Notice`/modals); other apps' URL schemes go through the server (`openInEditor` → `/api/open`); an opacity/transform *transition* on canvas nodes rasterises them blurry under the zoom (`:root[data-webkit]` turns those transitions off); mouse back/forward buttons don't navigate.
+- **A sandboxed page**: no `alert`/`confirm`/`prompt` (use `Notice`/modals); other apps' URL schemes go through the server (`openInEditor` → `/api/open`; the window itself stays on the sidecar and only opens http(s) links in the browser); mouse back/forward buttons don't navigate (the viewer handles them in the desktop app). No dev tools in release builds; from source (`bun run desktop:dev`) Develop → Web Inspector (⌥⌘I).
+- **WebKit (Safari) still matters**: an opacity/transform *transition* on canvas nodes rasterises them blurry under the zoom there (`:root[data-webkit]` turns those transitions off). The app was a WebKit web view (Tauri) until 0.1.33.
 - **The production build has no `window.__rae`**: desktop-only paths (`serverIsDesktop`) can only be tested through the UI.
 
 **Verify in both** before calling a UI change done:
 1. Chromium against the Vite test server on 5199 (see "Test headlessly").
-2. WebKit against the real sidecar and the production build, the closest thing to the app that can be scripted (macOS Accessibility is off, so the real app's window can't be driven):
+2. The real sidecar and the production build, the closest thing to the app that can be scripted (macOS Accessibility is off, so the real app's window can't be driven) — Chromium for the app, WebKit for Safari:
 ```bash
 S=<scratch dir>; (cd packages/viewer && node_modules/.bin/vite build --outDir $S/vdist --emptyOutDir)
 mkdir -p $S/store/snapshots && cp <snapshots>/* $S/store/snapshots/
 bun packages/server/src/server.ts --port 0 --snapshots $S/store/snapshots --static $S/vdist   # prints RAE_SERVER_URL
-# Playwright: import { webkit } from "playwright-core"; webkit.launch() → goto that URL
+# Playwright: chromium.launch() (or webkit) → goto that URL
 # (once: `playwright-core install webkit`). Add nodes through the UI: Add → click the item → Done.
 ```
 Restart the server (a new port) with a fresh browser context to check that state survives a relaunch. Then, after `bun run desktop:build`, open the real app (`open -n …/React App Explorer.app`) and probe its sidecar with curl for anything server-side.

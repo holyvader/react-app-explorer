@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Builds the desktop app's sidecars into packages/desktop/src-tauri/binaries/:
- *   rae-server-<rust triple>  one executable: the local server + scanner + the built viewer
+ * Builds the desktop app's sidecar into packages/desktop/binaries/ (packages/desktop/package.ts puts
+ * them into the app's resources):
+ *   rae-server-<target triple>  one executable: the local server + scanner + the built viewer
  *   tsgo/                     TypeScript 7's native binary + lib.*.d.ts (it can't run from inside a Bun executable)
  *
  *   bun run build [--target bun-darwin-arm64|bun-darwin-x64|bun-linux-x64|bun-linux-arm64|bun-windows-x64] [--skip-viewer]
@@ -16,7 +17,7 @@ import { parseArgs } from "node:util";
 
 const { values } = parseArgs({ options: { target: { type: "string" }, "skip-viewer": { type: "boolean" } } });
 
-/** Bun compile target → [node platform-arch used by native packages, Rust target triple, exe suffix]. */
+/** Bun compile target → [node platform-arch used by native packages, target triple (the file's name), exe suffix]. */
 const TARGETS: Record<string, [string, string, string]> = {
   "bun-darwin-arm64": ["darwin-arm64", "aarch64-apple-darwin", ""],
   "bun-darwin-x64": ["darwin-x64", "x86_64-apple-darwin", ""],
@@ -33,7 +34,7 @@ const here = import.meta.dir;
 const repo = join(here, "../..");
 const scanner = join(repo, "packages/scanner");
 const viewerDist = join(repo, "packages/viewer/dist");
-const outDir = join(repo, "packages/desktop/src-tauri/binaries");
+const outDir = join(repo, "packages/desktop/binaries");
 mkdirSync(outDir, { recursive: true });
 
 /** A package's directory as the scanner sees it (Bun's isolated installs keep siblings next to it). */

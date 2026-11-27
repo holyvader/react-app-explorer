@@ -1,19 +1,20 @@
-// React App Explorer on Electron — an experiment next to the Tauri app (packages/desktop), to compare
-// the diagram in bundled Chromium with the system's WebKit. It does what src-tauri/src/lib.rs does:
-// starts the sidecar (server + scanner + built viewer, one Bun executable), waits for it to print its
-// URL and points the window there. Same data folder as the Tauri app, so both show the same projects.
-const { app, BrowserWindow, shell } = require("electron");
+// React App Explorer's desktop shell (Electron): starts the sidecar (local server + scanner + the
+// built viewer, one Bun executable), waits for it to print its URL and points the window there. The
+// page talks to the sidecar over HTTP like it does to Vite in development — no Node or Electron API
+// is exposed to it (no preload, context isolation and the sandbox on).
+const { app, BrowserWindow, Menu, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const { mkdirSync } = require("node:fs");
 const path = require("node:path");
 
 const URL_PREFIX = "RAE_SERVER_URL=";
-// packaged: the sidecar and tsgo are resources; from source: the Tauri build's binaries (bun run sidecar)
-const res = app.isPackaged ? process.resourcesPath : path.join(__dirname, "../desktop/src-tauri/binaries");
+// packaged: the sidecar and tsgo are resources; from source: what `bun run sidecar` built into binaries/
+const res = app.isPackaged ? process.resourcesPath : path.join(__dirname, "binaries");
 const serverBin = path.join(res, app.isPackaged ? "rae-server" : `rae-server-${process.arch === "arm64" ? "aarch64" : "x86_64"}-apple-darwin`);
 const tsgo = path.join(res, "tsgo", process.platform === "win32" ? "tsc.exe" : "tsc");
-const loadingPage = app.isPackaged ? path.join(res, "loading", "index.html") : path.join(__dirname, "../desktop/loading/index.html");
-// the Tauri app's folders (identifier dev.rae.explorer): the same projects and settings in both
+const loadingPage = app.isPackaged ? path.join(res, "loading", "index.html") : path.join(__dirname, "loading/index.html");
+// the folders the app has always used (identifier dev.rae.explorer, from its Tauri days): projects,
+// snapshots and settings carry over; the log is what users send when something breaks
 const dataDir = path.join(app.getPath("appData"), "dev.rae.explorer");
 const logDir = path.join(app.getPath("home"), "Library", "Logs", "dev.rae.explorer");
 
@@ -49,7 +50,7 @@ function showFailure(win, reason, details) {
 function start(win) {
   mkdirSync(path.join(dataDir, "snapshots"), { recursive: true });
   mkdirSync(logDir, { recursive: true });
-  sidecar = spawn(serverBin, ["--port", "0", "--snapshots", path.join(dataDir, "snapshots"), "--log", path.join(logDir, "server-electron.log")], {
+  sidecar = spawn(serverBin, ["--port", "0", "--snapshots", path.join(dataDir, "snapshots"), "--log", path.join(logDir, "server.log")], {
     env: { ...process.env, RAE_TSGO_PATH: tsgo },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -90,7 +91,15 @@ function start(win) {
 }
 
 function createWindow() {
-  const win = new BrowserWindow({ width: 1600, height: 1000, minWidth: 1000, minHeight: 640, title: "React App Explorer (Electron)", backgroundColor: "#111214", show: false });
+  const win = new BrowserWindow({
+    width: 1600,
+    height: 1000,
+    minWidth: 1000,
+    minHeight: 640, title: "React App Explorer",
+    backgroundColor: "#111214",
+    show: false,
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, devTools: !app.isPackaged },
+  });
   win.once("ready-to-show", () => win.show());
   // links to other sites open in the browser, not in the app — web links only: the page shows
   // scanned projects' content, and any other scheme would hand a URL to another app
@@ -106,7 +115,36 @@ function createWindow() {
   start(win);
 }
 
-app.whenReady().then(createWindow);
+/**
+ * The menu bar: the app, Edit (copy and paste in the page's fields need its roles) and Window. Not
+ * Electron's default menu: it has View → Reload and Toggle Developer Tools, and its zoom shortcuts
+ * would take ⌘+ / ⌘- from the diagram. Builds from source add Develop (Web Inspector ⌥⌘I, Reload).
+ */
+function buildMenu() {
+  const template = [
+    { role: "appMenu" },
+    { role: "editMenu" },
+    ...(app.isPackaged
+      ? []
+      : [
+          {
+            label: "Develop",
+            submenu: [
+              { label: "Web Inspector", accelerator: "Alt+CommandOrControl+I", click: (_item, win) => win?.webContents.toggleDevTools() },
+              { role: "reload" },
+            ],
+          },
+        ]),
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+app.setName("React App Explorer");
+app.whenReady().then(() => {
+  buildMenu();
+  createWindow();
+});
 app.on("window-all-closed", () => app.quit());
 app.on("before-quit", (e) => {
   if (!sidecar || sidecar.exitCode !== null || app.isQuitting) return;
