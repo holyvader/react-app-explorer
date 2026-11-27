@@ -30,7 +30,10 @@ description: Build, run or change the desktop app (Electron, packages/desktop) a
   the sidecar, `tsgo/` and `loading/` as resources, ad-hoc signed (nested executables first), and a
   `.dmg` in `out/` made by **appdmg**: its window (660 × 400) is `dmg/background.png` + `@2x` (combined
   into a Retina TIFF), drawn like the app draws a diagram — the app in a file frame, Applications in a
-  folder frame, an "installs" relation; Finder's icons sit in the frames (165,192 / 495,192, 128 px),
+  folder frame, an "installs" relation, on a mid slate (#6F7783): Finder colours the icons' names
+  itself (black in Light Mode, white in Dark Mode) and a .dmg has one background for both, so the window
+  is halfway in lightness (≥4.5:1 either way), the frames are outlines, and our own text sits on dark
+  plates. Finder's icons sit in the frames (165,192 / 495,192, 128 px),
   the app icon is the volume's. Change the look in `dmg/background.html`, then `bun
   packages/desktop/dmg/render.ts` (headless Chromium, the design system's bundled fonts) and commit the PNGs.
   appdmg runs as **its CLI under Node**: its `macos-alias` addon doesn't link CoreFoundation and only
