@@ -28,14 +28,14 @@ description: Build, run or change the desktop app (Electron, packages/desktop) a
 - `packages/desktop/package.ts` — `@electron/packager`: `React App Explorer.app` (bundle id
   `dev.rae.explorer`, the version from `package.json`, `LSMinimumSystemVersion` 13.0 — Bun's minimum),
   the sidecar, `tsgo/` and `loading/` as resources, ad-hoc signed (nested executables first), and a
-  `.dmg` in `out/` made by **appdmg**: its window (660 × 400) is `dmg/background.png` + `@2x` (combined
-  into a Retina TIFF), drawn like the app draws a diagram — the app in a file frame, Applications in a
-  folder frame, an "installs" relation, on a mid slate (#6F7783): Finder colours the icons' names
-  itself (black in Light Mode, white in Dark Mode) and a .dmg has one background for both, so the window
-  is halfway in lightness (≥4.5:1 either way), the frames are outlines, and our own text sits on dark
-  plates. Finder's icons sit in the frames (165,192 / 495,192, 128 px),
-  the app icon is the volume's. Change the look in `dmg/background.html`, then `bun
-  packages/desktop/dmg/render.ts` (headless Chromium, the design system's bundled fonts) and commit the PNGs.
+  `.dmg` in `out/` made by **appdmg**: its window (660 × 400) has a **transparent** background
+  (`dmg/background.png` + `@2x`, combined into a Retina TIFF), so Finder's own window shows through and
+  follows Light / Dark Mode, like the names Finder writes under the icons (a .dmg has one picture for
+  both modes and can't set the names' colour). Drawn on it, in one grey (#7E7E7E, ~4.1:1 on Finder's white
+  and dark windows): the mark and name, a hairline, three chevrons from the app (165,192) to
+  Applications (495,192), how to install. Icons 128 px; the app icon is the volume's. Change the look in
+  `dmg/background.html`, then `bun packages/desktop/dmg/render.ts` (headless Chromium, the design
+  system's bundled fonts, transparent PNGs) and commit the PNGs.
   appdmg runs as **its CLI under Node**: its `macos-alias` addon doesn't link CoreFoundation and only
   loads inside Node (Bun: "symbol not found … _kCFURLVolumeNameKey"). `macos-alias` and `fs-xattr` are
   in the root `trustedDependencies` (native builds).

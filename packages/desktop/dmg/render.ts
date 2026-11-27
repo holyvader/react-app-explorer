@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 /**
  * Renders background.html to the .dmg window's background: background.png (660 × 400) and
- * background@2x.png (1320 × 800, Retina; appdmg combines the two). Run after changing the HTML and
- * commit the PNGs (the build doesn't render them):
+ * background@2x.png (1320 × 800, Retina; appdmg combines the two), transparent where nothing is
+ * drawn (Finder's window shows through). Run after changing the HTML and commit the PNGs (the
+ * build doesn't render them):
  *   bun packages/desktop/dmg/render.ts
  * Chromium: PW_CHROMIUM_PATH, otherwise Playwright's default lookup.
  */
@@ -35,7 +36,7 @@ try {
     const p = await browser.newPage({ viewport: { width: 660, height: 400 }, deviceScaleFactor: scale });
     await p.goto(pathToFileURL(page).href);
     await p.evaluate(() => document.fonts.ready);
-    await p.locator(".window").screenshot({ path: join(here, name) });
+    await p.locator(".window").screenshot({ path: join(here, name), omitBackground: true });
     await p.close();
     console.log(`✔ ${name}`);
   }
