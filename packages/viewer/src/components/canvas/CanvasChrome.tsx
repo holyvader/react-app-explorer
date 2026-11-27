@@ -1,5 +1,5 @@
 import { ActionIconButton, Box, Flex, Popover, SegmentedToggles, type Shortcut, ShortcutList, Text, textPx, tokenVar, type ToggleItem } from "@rae/design-system";
-import { IconBack, IconChevronDown, IconFilter, IconFit, IconForward, IconKeyboard, IconMinimap, IconMinus, IconPlus } from "@rae/design-system/icons";
+import { IconBack, IconChevronDown, IconFilter, IconFit, IconForward, IconKeyboard, IconMinimap, IconMinus, IconPlus, IconSelect } from "@rae/design-system/icons";
 import { type FitViewOptions, useReactFlow, useStore } from "@xyflow/react";
 import { useState } from "react";
 import { EDGE_GROUPS, type EdgeGroup } from "../../graph/relations.ts";
@@ -75,7 +75,13 @@ export function CanvasStatusBar({ shortcuts, minimap, onMinimap, fitPadding }: S
       <RelationFilters />
       <Divider />
       <ScriptsChips />
-      <Box flex="1" />
+      {/* how to add, always at hand (the empty diagram says it too); no button over the canvas */}
+      <Flex flex="1" minW="0" justify="center" align="center" gap="1.5" px="3" color="fg.subtle" fontSize={textPx(11.5)}>
+        <IconSelect size={13} style={{ flexShrink: 0 }} />
+        <Text as="span" truncate>
+          Right-click empty space to add · Space to search
+        </Text>
+      </Flex>
       <BarIcon label="Back: the previously selected element (⌘ [)" icon={<IconBack />} onClick={goBack} disabled={!canBack} />
       <BarIcon label="Forward: the next selected element (⌘ ])" icon={<IconForward />} onClick={goForward} disabled={!canForward} />
       <Divider />

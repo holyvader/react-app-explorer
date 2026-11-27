@@ -1,5 +1,5 @@
 import { Box, BrandMark, Button, EmptyState, Flex, Spinner, Text } from "@rae/design-system";
-import { IconFolderOpen, IconPlus } from "@rae/design-system/icons";
+import { IconFolderOpen, IconPlus, IconSelect } from "@rae/design-system/icons";
 import { ReactFlowProvider } from "@xyflow/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Canvas } from "./components/Canvas.tsx";
@@ -193,8 +193,12 @@ export function App() {
                           <IconPlus size={15} /> Start exploration
                         </Button>
                         <Text fontSize="xs" color="fg.muted">
-                          or press Space · right-click the canvas to add an element there
+                          or press Space
                         </Text>
+                        <Flex align="center" gap="1.5" mt="2" fontSize="sm" color="fg.muted">
+                          <IconSelect size={15} />
+                          Right-click anywhere on the diagram to add an element there
+                        </Flex>
                       </EmptyState>
                     </Box>
                   </Flex>

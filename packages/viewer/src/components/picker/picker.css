@@ -137,18 +137,8 @@
   color: var(--chakra-colors-fg-muted);
 }
 /* The round plus at the canvas's foot. */
-.rae-add-anchor { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 6; }
-.rae-add-plus {
-  all: unset; box-sizing: border-box;
-  width: 52px; height: 52px; border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--chakra-colors-fg); color: var(--chakra-colors-bg);
-  box-shadow: 0 8px 20px rgb(0 0 0 / 0.25), 0 1px 3px rgb(16 24 40 / 0.1);
-  cursor: pointer;
-  transition: transform 120ms ease;
-}
-.rae-add-plus:hover { transform: scale(1.06); }
-.rae-add-plus:focus-visible { outline: 3px solid var(--chakra-colors-selection-solid); outline-offset: 2px; }
+/* where the picker opens from (Space, ⌘K): the canvas's bottom centre, nothing drawn there */
+.rae-add-anchor { position: absolute; bottom: 24px; left: 50%; width: 1px; height: 1px; pointer-events: none; }
 
 /* the file tree panel: flush 24px rows, folders by their chevron only, the filter box on demand */
 .rae-filetree .rae-tree-search { padding: 8px 10px; }

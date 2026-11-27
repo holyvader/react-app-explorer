@@ -1,5 +1,4 @@
 import { Button, Popover } from "@rae/design-system";
-import { IconClose, IconPlus } from "@rae/design-system/icons";
 import { useReactFlow } from "@xyflow/react";
 import { useCallback, useMemo, useRef } from "react";
 import type { TreeNode } from "../../graph/tree.ts";
@@ -85,15 +84,9 @@ export function ExplorationPicker() {
       placement="top"
       initialFocusEl={input}
       height="min(560px, calc(100dvh - 200px))"
-      trigger={
-        <div className="rae-add-anchor">
-          {visible.length > 0 && (
-            <button type="button" className="rae-add-plus" aria-label={open ? "Close" : "Add to the diagram"} title={open ? "Close" : "Add to the diagram (Space)"}>
-              {open ? <IconClose size={24} /> : <IconPlus size={24} />}
-            </button>
-          )}
-        </div>
-      }
+      // opens above the canvas's bottom centre (Space, ⌘K, "Start exploration"); no button there: the
+      // status bar and the empty diagram say a right-click on empty space adds an element
+      trigger={<div className="rae-add-anchor" aria-hidden />}
     >
       <ElementTree
         mode="toggle"
