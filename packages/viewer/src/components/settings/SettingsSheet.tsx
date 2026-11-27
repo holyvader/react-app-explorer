@@ -122,10 +122,11 @@ export function SettingsSheet({ onLibraries }: { onLibraries: () => void }) {
   const showAssets = useExplorer((s) => s.showAssets);
   const animateEdges = useExplorer((s) => s.animateEdges);
   const confirmAbove = useExplorer((s) => s.confirmAbove);
+  const addWithFile = useExplorer((s) => s.addWithFile);
   const bigFile = useExplorer((s) => s.bigFile);
   const layoutMode = useExplorer((s) => s.layoutMode);
   const hasDiagram = useExplorer((s) => s.visible.length > 0);
-  const { setEditor, setShowAssets, setAnimateEdges, setConfirmAbove, setBigFile, setLayoutMode, clear, setSettingsOpen } = useExplorer.getState();
+  const { setEditor, setShowAssets, setAnimateEdges, setConfirmAbove, setAddWithFile, setBigFile, setLayoutMode, clear, setSettingsOpen } = useExplorer.getState();
 
   const open = useExplorer((s) => s.settingsOpen);
   const [width, setWidth] = useState(() => readSetting(WIDTH_KEY, SETTINGS_WIDTH));
@@ -188,6 +189,14 @@ export function SettingsSheet({ onLibraries }: { onLibraries: () => void }) {
       hint: "Each relation flows its own way · zoomed in, up to 120 on screen",
       keywords: "animation edges motion flow dashes",
       switch: { checked: animateEdges, onChange: setAnimateEdges },
+    },
+    {
+      id: "with-file",
+      section: "Diagram",
+      label: "Add with their file",
+      hint: "A component, hook or function comes with the file it's in, as its row",
+      keywords: "file frame module parent declaration row",
+      switch: { checked: addWithFile, onChange: setAddWithFile },
     },
     {
       id: "confirm",

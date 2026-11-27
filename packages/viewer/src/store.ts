@@ -10,7 +10,7 @@ import { folderExpansion, folderPath, foldersAbove } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
-import { changesToShow, withFilesOfChanges } from "./lib/diff.ts";
+import { changesToShow, withFiles, withFilesOfChanges } from "./lib/diff.ts";
 import { hasCode } from "./lib/nodeDiff.ts";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
@@ -98,6 +98,8 @@ interface ExplorerState {
   showAssets: boolean;
   /** Relations drawn as flowing dashes, each its own pattern and speed (Settings; off by default). */
   animateEdges: boolean;
+  /** Adding a declaration (component, hook, function…) adds the file it's in too, so it's drawn as that file's row. */
+  addWithFile: boolean;
   /** Adding more elements than this at once asks first (ConfirmExpansion). */
   confirmAbove: number;
   /** Files past these limits wear a red "big" badge: lines, or functions (components, hooks, functions) declared. */
@@ -195,6 +197,7 @@ interface ExplorerState {
   setShowAssets: (on: boolean) => void;
   setAnimateEdges: (on: boolean) => void;
   setConfirmAbove: (n: number) => void;
+  setAddWithFile: (on: boolean) => void;
   setBigFile: (patch: Partial<ExplorerState["bigFile"]>) => void;
   setSettingsOpen: (open: boolean) => void;
   setDiffOverlay: (on: boolean) => void;
@@ -239,7 +242,7 @@ interface ExplorerState {
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", animateEdges: "rae.animateEdges", confirmAbove: "rae.confirmAbove", bigFile: "rae.bigFile", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
+const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", animateEdges: "rae.animateEdges", confirmAbove: "rae.confirmAbove", addWithFile: "rae.addWithFile", bigFile: "rae.bigFile", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 
 export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
@@ -325,6 +328,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     showAssets: readSetting(KEYS.assets, false),
     animateEdges: readSetting(KEYS.animateEdges, false),
     confirmAbove: readSetting(KEYS.confirmAbove, LARGE_EXPANSION),
+    addWithFile: readSetting(KEYS.addWithFile, true),
     bigFile: { ...BIG_FILE, ...readSetting<Partial<typeof BIG_FILE>>(KEYS.bigFile, {}) },
     settingsOpen: false,
     diffOverlay: readSetting(KEYS.diffOverlay, true),
@@ -409,8 +413,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
 
     addNodes: (ids, opts) => {
       const s = get();
-      // in a diff, a changed declaration comes with its file
-      const known = (s.snapshot ? withFilesOfChanges(s.snapshot, ids) : ids).filter((id) => isKnown(s.snapshot, id));
+      // a declaration comes with its file (Settings → "Add with their file"); in a diff, a changed one always does
+      const known = (s.snapshot ? (s.addWithFile ? withFiles(s.snapshot, ids) : withFilesOfChanges(s.snapshot, ids)) : ids).filter((id) => isKnown(s.snapshot, id));
       const present = new Set(s.visible);
       const added = known.filter((id) => !present.has(id));
       const patch: Partial<ExplorerState> = {
@@ -608,6 +612,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setAnimateEdges: (animateEdges) => {
       writeSetting(KEYS.animateEdges, animateEdges);
       set({ animateEdges });
+    },
+
+    setAddWithFile: (addWithFile) => {
+      writeSetting(KEYS.addWithFile, addWithFile);
+      set({ addWithFile });
     },
 
     setConfirmAbove: (confirmAbove) => {

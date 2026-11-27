@@ -6,6 +6,7 @@ import {
   IconRenderedBy,
   IconCode,
   IconCodeDiff,
+  IconFile,
   IconFolderTree,
   IconFolderUp,
   IconInvokes,
@@ -46,7 +47,7 @@ const I = 12;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff, showCode } = useExplorer.getState();
+  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff, showCode, addNodes } = useExplorer.getState();
   const { element, node, change, parents, children, hiddenParents, hiddenChildren, invokes, hiddenInvokes, can } = data;
   const id = element.id;
   const isComponent = node?.kind === "component";
@@ -82,6 +83,9 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       )}
       {node && can.routeChain && (
         <IconBtn label="Show the route chain (layouts down to the page)" icon={<IconRouteChain size={I} />} onClick={() => showRouteChain(id)} />
+      )}
+      {node && can.file && node.moduleId && (
+        <IconBtn label={`Show its file (${node.filePath})`} icon={<IconFile size={I} />} onClick={() => addNodes([node.moduleId!, id], { anchor: id, select: id, focus: node.moduleId! })} />
       )}
       {node?.kind === "module" && can.folder && (
         <IconBtn label={`Show its folder (${node.filePath.slice(0, node.filePath.lastIndexOf("/"))})`} icon={<IconFolderUp size={I} />} onClick={() => showParentFolders(id, false)} />

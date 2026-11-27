@@ -66,6 +66,24 @@ export function fileOfChange(s: Snapshot, id: string): string | undefined {
  * declaration is always drawn inside its file, for context. Each file comes right after the first
  * declaration it holds.
  */
+/** The file a declaration is in (not for files, merged files, libraries or routes). */
+export function fileOf(s: Snapshot, id: string): string | undefined {
+  const n = s.nodes[id];
+  if (!n || n.kind === "module" || n.kind === "external" || n.kind === "route" || n.file || !n.moduleId) return undefined;
+  return s.nodes[n.moduleId] ? n.moduleId : undefined;
+}
+
+/** `ids` with the file of each declaration in them: a declaration is drawn as a row of its file. */
+export function withFiles(s: Snapshot, ids: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const id of ids) {
+    const file = fileOf(s, id);
+    if (file) out.add(file);
+    out.add(id);
+  }
+  return [...out];
+}
+
 export function withFilesOfChanges(s: Snapshot, ids: readonly string[]): string[] {
   if (!s.diff) return [...ids];
   const out = new Set<string>();

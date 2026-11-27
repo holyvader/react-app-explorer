@@ -28,8 +28,8 @@ export function treeMenuEntries(n: TreeNode, changesView: boolean): MenuEntry[] 
       entries.push({ type: "item", value: "reveal", label: "Show on the diagram", icon: <IconFocus size={I} />, onSelect: () => st.addNodes([id], { select: id, focus: id }) });
     } else {
       entries.push({ type: "item", value: "add", label: "Add to the diagram", icon: <IconPlus size={I} />, onSelect: () => st.addNodes([id], { select: id, focus: id }) });
-      // a declaration: with the file it's in, as a row of that file
-      const file = node && node.kind !== "module" && !node.file ? node.moduleId : undefined;
+      // a declaration: with the file it's in, as a row of that file (already so with Settings → "Add with their file")
+      const file = node && node.kind !== "module" && !node.file && !st.addWithFile ? node.moduleId : undefined;
       if (file && s.nodes[file])
         entries.push({ type: "item", value: "add-file", label: "Add with its file", icon: <IconModule size={I} />, hint: s.nodes[file]!.name, onSelect: () => st.addNodes([file, id], { select: id, focus: id }) });
     }

@@ -8,7 +8,7 @@ import { type PlacedElement, rowRank } from "../../graph/layout.ts";
 import { privatePropsType } from "../../graph/privateProps.ts";
 import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
 import { bigFileOf, fileSize } from "../../lib/bigFile.ts";
-import { changeOf } from "../../lib/diff.ts";
+import { changeOf, fileOf } from "../../lib/diff.ts";
 import { type ElementFlowNode, FRAME_HANDLE } from "../nodes/types.ts";
 
 /*
@@ -162,6 +162,11 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
                 // files: their own folder, and every folder above it
                 folder: node.kind === "module" && foldersAbove(snapshot, id, false).some((x) => !drawn.has(x)),
                 allFolders: node.kind === "module" && foldersAbove(snapshot, id, true).filter((x) => !drawn.has(x)).length > 1,
+                // declarations: the file they're in, when it isn't drawn
+                file: (() => {
+                  const file = fileOf(snapshot, id);
+                  return !!file && !drawn.has(file);
+                })(),
               }
             : id.startsWith(FOLDER_PREFIX)
               ? // folders: "children" = the files inside, "all children" = files and their declarations

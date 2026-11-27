@@ -10,6 +10,7 @@ import {
   IconCopy,
   IconFocus,
   IconFolder,
+  IconFile,
   IconFolderTree,
   IconFolderUp,
   IconInvokes,
@@ -27,6 +28,7 @@ import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts"
 import { folderContents, folderExpansion, folderPath, foldersAbove, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
 import { downKinds, hasUndrawn, INVOKES, reachable, type EdgeKinds } from "../graph/relations.ts";
+import { fileOf } from "../lib/diff.ts";
 import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { displayName } from "../lib/displayName.ts";
@@ -205,6 +207,11 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
       () => expand(id, "children", true, down),
     ),
   );
+  {
+    const file = fileOf(s, id);
+    if (file)
+      entries.push({ type: "item", value: "file", label: "Show its file", icon: <IconFile size={I} />, hint: s.nodes[file]!.name, disabled: drawnNow.has(file), onSelect: () => addNodes([file, id], { anchor: id, select: id, focus: file }) });
+  }
   if (node.kind === "module") {
     const drawnIds = new Set(st.graph.elements.map((e) => e.id));
     const own = foldersAbove(s, id, false)[0];

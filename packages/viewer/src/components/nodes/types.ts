@@ -19,7 +19,7 @@ export type ElementNodeData = {
   propsType?: { id: string; name: string; keyword: string };
   /** Which expansions would add something (components: children = what they render); `routeChain`: routes and route files whose chain isn't all drawn. */
   /** Expansions that would add something. The deep ones ("up to the root", "down to the leaves", everything inside) ask first when they'd add many (store `requestAdd`). */
-  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean; folder?: boolean; allFolders?: boolean };
+  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean; folder?: boolean; allFolders?: boolean; file?: boolean };
   /** Files past the big-file limits (Settings → Code health): the red badge's text and tooltip. */
   big?: { label: string; title: string };
   /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
