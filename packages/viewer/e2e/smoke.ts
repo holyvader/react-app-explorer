@@ -25,27 +25,35 @@ const list = (await (await fetch(new URL("api/snapshots", url))).json()) as { di
 if (!list.snapshots.length)
   throw new Error(`the server has no snapshots in ${list.dir}: RAE_SNAPSHOTS is relative to the repo root (packages/fixtures/next-app/.explorer/snapshots), and run \`bun run scan packages/fixtures/next-app --no-merge\` first`);
 
+// The app reads the open project again on start (a quiet refresh that replaces the snapshot and
+// deletes older ones): keep it unmerged, as the test needs files holding declarations.
+// Earlier runs open react-app from the UI into the same folder: start from next-app's newest snapshot.
+const nextApp = (list.snapshots as { file: string; rootDir?: string; createdAt: string }[])
+  .filter((x) => x.rootDir?.endsWith("next-app"))
+  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+if (!nextApp) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app --no-merge` first");
+// (only before the app has stored its own: a reload later must keep what it shows)
+await page.addInitScript((file) => {
+  localStorage.setItem("rae.scanMerge", "false");
+  if (!localStorage.getItem("rae.lastSnapshot")) localStorage.setItem("rae.lastSnapshot", JSON.stringify(file));
+}, nextApp.file);
 await page.goto(url);
-await page.getByText("Empty diagram").waitFor({ timeout: 15000 });
-// Earlier runs' UI scans add react-app snapshots to the same folder: pick the newest next-app one
-// from the toolbar's snapshot menu (grouped by scanned folder: "<project> — <path>", newest first).
+// It opens the last snapshot shown (set above).
 const store = <T,>(read: string) => page.evaluate((r) => new Function("s", `return ${r}`)((window as any).__rae.getState()), read) as Promise<T>;
-await page.getByRole("button", { name: /^Snapshots/ }).click();
-const nth = await page.locator("[role=menu]").first().evaluate((menu) => {
-  let inNextApp = false;
-  let item = -1;
-  for (const el of menu.querySelectorAll("[role=menuitem], p, div:not([role])")) {
-    if (el.getAttribute("role") === "menuitem") {
-      item++;
-      if (inNextApp) return item;
-    } else if (el.children.length === 0 && el.textContent) inNextApp = el.textContent.startsWith("next-app");
-  }
-  return -1;
-});
-if (nth < 0) throw new Error("no next-app snapshot: run `bun run scan packages/fixtures/next-app --no-merge` first");
-await page.getByRole("menuitem").nth(nth).click();
-await page.waitForFunction(() => (window as any).__rae.getState().snapshot?.rootDir.endsWith("next-app"));
-await page.getByRole("button", { name: /^Snapshots: next-app/ }).waitFor();
+await page.waitForFunction(() => (window as any).__rae?.getState().snapshot, null, { timeout: 15000 });
+if (!(await store<string>("s.snapshot.rootDir")).endsWith("next-app")) throw new Error("next-app's snapshot didn't open");
+// …and lets that refresh finish (it starts within a moment of the page), so the snapshot isn't swapped mid-test
+for (let t = 0, seen = false; t < 120; t++) {
+  const phase = await store<string | undefined>("s.scan?.phase");
+  if (phase) seen = true;
+  if ((seen && ["typed", "failed", "cancelled"].includes(phase!)) || (!seen && t >= 10)) break;
+  await page.waitForTimeout(500);
+}
+await page
+  .waitForFunction(() => !!(window as any).__rae.getState().snapshot?.nodes["components/TodoItem.tsx#TodoItem"], null, { timeout: 15000 })
+  .catch(() => {
+    throw new Error("the snapshot merged single-declaration files: scan with `--no-merge`");
+  });
 await page.getByText("Empty diagram").waitFor();
 // Adding: "Start exploration" opens the picker; filter, Enter picks the first match.
 await page.getByRole("button", { name: "Start exploration" }).click();
@@ -56,31 +64,31 @@ await page.getByRole("button", { name: "Done" }).click();
 await page.locator('.react-flow__node[data-id="app/page.tsx#HomePage"]').click({ position: { x: 60, y: 14 } });
 await page.locator(".react-flow__node").first().waitFor();
 if ((await page.getByText("Render tree").count()) === 0) fail("details panel did not open");
-// Adding a node draws just that node: no file module is added around it.
-if ((await page.locator(".react-flow__node").count()) !== 1) fail("adding a component must draw only that component");
+// A declaration comes with its file (Settings → "Add with their file"): drawn as the file's row.
+if ((await page.locator('.react-flow__node-frame[data-id="app/page.tsx"]').count()) !== 1) fail("adding a component must draw it in its file");
+if ((await store<string[]>("s.visible")).length !== 2) fail("adding a component must draw it and its file only");
 
-// One level at a time: there's no "down to the leaves" / "up to the root" (it could draw hundreds).
-await page.getByRole("button", { name: "Renders", exact: true }).first().click();
-await page.getByRole("button", { name: "Rendered by", exact: true }).first().click();
+// One level at a time from the node's buttons, and the deep ones ("the render tree"…) offered too.
+await page.locator('.react-flow__node[data-id="app/page.tsx#HomePage"]').hover();
+await page.getByRole("button", { name: /^Renders \(/ }).first().click();
 await page.waitForTimeout(600);
 const onCanvas = await store<number>("s.visible.length");
-if (!(onCanvas > 1)) fail(`expected expansion to add nodes, got ${onCanvas}`);
-for (const deep of ["Children down to leaves", "Parents up to root", "Show render tree"])
-  if ((await page.getByRole("button", { name: deep }).count()) !== 0) fail(`"${deep}" should be gone`);
+if (!(onCanvas > 2)) fail(`expected expansion to add nodes, got ${onCanvas}`);
+await page.locator('.react-flow__node[data-id="app/page.tsx#HomePage"]').hover();
+if ((await page.getByRole("button", { name: "Show the render tree" }).count()) + (await store<number>("s.visible.length")) === 0) fail("the render tree should be offered");
 if (outDir) await page.screenshot({ path: `${outDir}/smoke.png` });
 
 if ((await page.locator('.react-flow__node[data-id="ext:react"]').count()) !== 0) fail("react should be hidden by default");
 // Read-only diagram: no handle can start a connection.
 if ((await page.locator(".react-flow__handle.connectable").count()) !== 0) fail("handles must not be connectable");
 
-// Nesting: adding TodoItem's file (sidebar "Module" link) draws it as a frame around TodoItem.
-// Folders are nodes of their own now: never drawn automatically around files.
-await page.getByRole("button", { name: "Fit everything" }).click();
-await page.waitForTimeout(400);
-await page.locator('.react-flow__node[data-id="components/TodoItem.tsx#TodoItem"]').click();
-// the sidebar header shows the file a component is declared in, as a chip
-await page.getByRole("button", { name: "TodoItem.tsx", exact: true }).first().click();
-await page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"]').waitFor();
+// Nesting: TodoItem added from the picker comes in a frame of its file.
+// Folders are nodes of their own: never drawn automatically around files.
+await page.keyboard.press(" ");
+await page.getByLabel("Filter elements").fill("TodoItem");
+await page.locator('[role=treeitem][data-id="components/TodoItem.tsx#TodoItem"]').click();
+await page.getByRole("button", { name: "Done" }).click();
+await page.locator('.react-flow__node-frame[data-id="components/TodoItem.tsx"]').waitFor({ state: "attached" });
 if ((await page.locator('.react-flow__node[data-id^="dir:"]').count()) !== 0) fail("no folder should be drawn around the file");
 
 const frame = page.locator('.react-flow__node[data-id="components/TodoItem.tsx"]');
@@ -124,11 +132,11 @@ if ((await page.locator(".rae-canvas[data-selection]").count()) !== 1) fail("sel
 if ((await page.locator(".react-flow__node.rae-related").count()) === 0) fail("selecting should highlight related nodes");
 
 // Right-click: actions and relations (e.g. "Components rendering it"), each listing related
-// elements one by one — no "Show all" (only the diff view adds many at once).
+// elements, with "Show all" first (it asks before adding many).
 await card.click({ button: "right" });
 await page.getByRole("menuitem", { name: /^Components rendering it/ }).hover();
 await page.waitForTimeout(300);
-if ((await page.getByRole("menuitem", { name: /^Show all|^Add all/ }).count()) !== 0) fail("relation menus must not offer Show all");
+if ((await page.getByRole("menuitem", { name: /^Show all|^All shown/ }).count()) === 0) fail("relation menus should offer Show all");
 await page.keyboard.press("Escape");
 await page.keyboard.press("Escape");
 
@@ -201,15 +209,17 @@ if ((await page.getByText("1 hidden", { exact: true }).count()) !== 1) fail("set
 await page.keyboard.press("Meta+Comma");
 if ((await page.getByRole("complementary", { name: "Settings" }).count()) !== 0) fail("⌘, should close the settings");
 
-// Scan from the UI: pick the react-app fixture via the folder browser + path input.
+// Opening a project from the UI: the react-app fixture, its path typed in the Open dialog.
 const reactApp = new URL("../../fixtures/react-app", import.meta.url).pathname;
-await page.getByRole("button", { name: "Scan a project…" }).click();
+await page.getByRole("button", { name: "Open project…" }).click();
+await page.getByRole("dialog").getByRole("button", { name: "Edit path" }).click();
 await page.getByPlaceholder(/path\/to\/app/).fill(reactApp);
+await page.getByRole("dialog").getByRole("button", { name: "Go", exact: true }).click();
 if (outDir) await page.screenshot({ path: `${outDir}/scan-modal.png` });
-await page.getByRole("dialog").getByRole("button", { name: "Scan", exact: true }).click();
+await page.getByRole("dialog").getByRole("button", { name: "Open react-app", exact: true }).click();
 // The dialog closes right away; a progress panel over the canvas follows files, then types.
 await page.getByRole("dialog").waitFor({ state: "hidden", timeout: 30000 });
-await page.getByText("Scan finished").waitFor({ timeout: 30000 });
+await page.getByText("Opened react-app").waitFor({ timeout: 60000 });
 if (outDir) await page.screenshot({ path: `${outDir}/scan-done.png` });
 const typed = await page.evaluate(() => (window as any).__rae.getState().snapshot.stats.types);
 if (!typed) fail("the typed snapshot should replace the structure-only one after the type pass");
