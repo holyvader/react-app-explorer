@@ -157,12 +157,17 @@ export const MAX_ROWS = 400;
 /**
  * Rows to show: without a query, what the open folders reveal; with one, every match with the
  * line of folders down to it (opened). `keep` hides nodes (e.g. already drawn in quick add).
+ * `accept` narrows what matches (the filter's kinds: only components…); like a query, the folders
+ * holding a match open.
  */
-export function visibleRows(roots: TreeNode[], open: ReadonlySet<string>, query: string, keep: (n: TreeNode) => boolean = () => true) {
-  const q = query.trim().toLowerCase();
+export function visibleRows(roots: TreeNode[], open: ReadonlySet<string>, query: string, keep: (n: TreeNode) => boolean = () => true, accept?: (n: TreeNode) => boolean) {
+  const text = query.trim().toLowerCase();
+  // filtering at all: by text, or by kind
+  const q = text || (accept ? " " : "");
   const rows: TreeRow[] = [];
   let truncated = false;
-  const matches = (n: TreeNode) => !q || n.name.toLowerCase().includes(q) || ((n.kind !== "decl" || n.file) && n.path.toLowerCase().includes(q));
+  const textMatches = (n: TreeNode) => !text || n.name.toLowerCase().includes(text) || ((n.kind !== "decl" || n.file) && n.path.toLowerCase().includes(text));
+  const matches = (n: TreeNode) => textMatches(n) && (!accept || accept(n));
   // Whether a node or anything under it is shown.
   const memo = new Map<TreeNode, boolean>();
   const relevant = (n: TreeNode): boolean => {

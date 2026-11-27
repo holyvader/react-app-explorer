@@ -34,6 +34,9 @@ export const frameWidthOf = (name: string) => widthOf(name) + 224;
 
 /** Room at the top of a frame for its header, and around what it holds. */
 export const PADDING = { top: 48, left: 14, bottom: 20, right: 14 } as const;
+/** A route frame's header: its URL in bold, its folder (and what it serves) dimmed below. */
+export const ROUTE_HEADER = 52;
+export const ROUTE_PADDING = { ...PADDING, top: ROUTE_HEADER + 14 } as const;
 /** Room between two cards side by side. */
 export const SPACING = 32;
 
@@ -56,7 +59,7 @@ const FILE_MAX = 380;
 
 export const isFileFrame = (e: Pick<DrawnElement, "kind"> | undefined | null) => e?.kind === "module";
 /** The room round what a frame holds: a file's, or a folder's / route's. */
-export const paddingOf = (e: Pick<DrawnElement, "kind"> | undefined | null) => (isFileFrame(e) ? FILE_PADDING : PADDING);
+export const paddingOf = (e: Pick<DrawnElement, "kind"> | undefined | null) => (isFileFrame(e) ? FILE_PADDING : e?.kind === "route" ? ROUTE_PADDING : PADDING);
 /** A frame's least width: a file's is its list's (`fileListOf`), a folder's / route's its header's. */
 export const leastWidthOf = (e: Pick<DrawnElement, "kind" | "name">) => (isFileFrame(e) ? 0 : frameWidthOf(e.name));
 

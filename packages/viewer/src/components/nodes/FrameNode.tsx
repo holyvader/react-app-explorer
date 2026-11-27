@@ -126,6 +126,11 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
             </div>
             <div className="rae-file__path">{node.filePath.includes("/") ? node.filePath.slice(0, node.filePath.lastIndexOf("/") + 1) : "./"}</div>
           </div>
+          {data.big && (
+            <span className="rae-chip rae-chip--big" title={data.big.title}>
+              {data.big.label}
+            </span>
+          )}
           {detailed && indexFolderOf(node) && <span className="rae-chip rae-chip--props">index</span>}
           {detailed && node.nextRole && <span className="rae-badge rae-badge--role">{node.nextRole}</span>}
           {detailed && node.moduleType && <span className="rae-chip" data-boundary={node.moduleType}>{node.moduleType}</span>}
@@ -134,13 +139,34 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
           </span>
           {detailed && <NodeActions data={data} frame />}
         </div>
+      ) : route && node ? (
+        // a route: its URL in bold, its folder and what it serves dimmed below
+        <div className={`rae-frame__header rae-route__header ${FRAME_HANDLE}`}>
+          <span className="rae-icon">
+            <Icon size={15} />
+          </span>
+          <div className="rae-file__titles">
+            <div className="rae-route__name" title={route.url}>
+              {element.name}
+            </div>
+            <div className="rae-file__path" title={node.filePath}>
+              {node.filePath === "." ? "./" : `${node.filePath}/`} · {routeCaption(route)}
+            </div>
+          </div>
+          {detailed && route.rendering && (
+            <span className="rae-chip" data-render={renderingKey(route.rendering)} title={route.rendering.reasons.join("\n")}>
+              {renderingLabel(route.rendering)}
+            </span>
+          )}
+          {detailed && <NodeActions data={data} frame />}
+        </div>
       ) : (
       <div className={`rae-frame__header ${FRAME_HANDLE}`}>
         <span className="rae-icon">
           <Icon size={13} />
         </span>
         <div className="rae-frame__title">
-          {/* a file by its path, a route by its URL, a folder by its name: one mono line */}
+          {/* a folder by its name: one mono line */}
           <div className="rae-name" title={data.path ?? node?.filePath}>
             {title}
           </div>

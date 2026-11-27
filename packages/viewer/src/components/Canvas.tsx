@@ -220,11 +220,12 @@ export function Canvas() {
   const filter = useRelationFilter();
   // diff snapshots, overlay on: what changed is marked
   const showDiff = !!snapshot?.diff && diffOverlay;
+  const bigFile = useExplorer((s) => s.bigFile);
   const related = useRelated(selection, graph);
   // Zoomed far out, frames are blocks: what's inside is hidden (React Flow keeps the nodes and their
   // measurements), the frame says how many it holds.
   const collapse = useMemo(() => collapseFrames(placed, collapseLevelOf(lod, placed.length)), [placed, lod]);
-  const selectedNodes = useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related });
+  const selectedNodes = useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile });
   const edges = useCanvasEdges({ graph, placed, showDiff, collapse, related, lod });
   // which flowing relations: recounted once the edges are drawn
   useEffect(() => {

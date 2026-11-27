@@ -44,6 +44,9 @@ interface TypeMember {
   optional: boolean;
 }
 
+/** Lines in a text, as an editor numbers them (a final newline doesn't start another). */
+export const lineCount = (text: string) => (text ? text.split("\n").length - (text.endsWith("\n") ? 1 : 0) : 0);
+
 export function extractFile(absPath: string, text: string, stamp: string, resolve: ResolveFn): FileExtract {
   const src = new SourceText(text);
   const result = parseSync(absPath, text, { lang: langOf(absPath), preserveParens: false });
@@ -54,6 +57,7 @@ export function extractFile(absPath: string, text: string, stamp: string, resolv
     absPath,
     stamp,
     hash: codeHash(text),
+    lines: lineCount(text),
     directives: [],
     serverOnly: false,
     clientOnly: false,

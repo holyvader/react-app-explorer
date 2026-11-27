@@ -3,10 +3,11 @@ import { Position } from "@xyflow/react";
 import { type CSSProperties, useMemo } from "react";
 import type { Collapse } from "../../graph/collapse.ts";
 import { type DrawnGraph, FOLDER_PREFIX, routeChain, routeOf } from "../../graph/drawn.ts";
-import { foldersAbove, parentFolders } from "../../graph/folder.ts";
+import { folderExpansion, folderPath, foldersAbove, parentFolders } from "../../graph/folder.ts";
 import { type PlacedElement, rowRank } from "../../graph/layout.ts";
 import { privatePropsType } from "../../graph/privateProps.ts";
-import { childEdges, downKinds, type GraphIndex, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
+import { childEdges, downKinds, type GraphIndex, hasUndrawn, INVOKES, parentEdges, type RelationFilter } from "../../graph/relations.ts";
+import { bigFileOf, fileSize } from "../../lib/bigFile.ts";
 import { changeOf } from "../../lib/diff.ts";
 import { type ElementFlowNode, FRAME_HANDLE } from "../nodes/types.ts";
 
@@ -64,9 +65,11 @@ export interface CanvasNodesInput {
   collapse: Collapse;
   selection: string[];
   related: Related;
+  /** Settings → Code health: files past these limits wear a red badge. */
+  bigFile: { lines: number; functions: number };
 }
 
-export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related }: CanvasNodesInput): ElementFlowNode[] {
+export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile }: CanvasNodesInput): ElementFlowNode[] {
   // Scanned elements (files + declarations) under each folder, for folder headers.
   const scannedUnder = useMemo(() => {
     const counts = new Map<string, number>();
@@ -148,7 +151,9 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
           can: node
             ? {
                 parents: parents.some((e) => !drawn.has(e.from)),
+                allParents: hasUndrawn(snapshot, index, id, "parents", true, filter, drawn),
                 children: children.some((e) => !drawn.has(e.to)),
+                allChildren: hasUndrawn(snapshot, index, id, "children", true, filter, drawn, downKinds(node.kind)),
                 invokes: !!invokes?.some((e) => !drawn.has(e.to)),
                 routeChain: (() => {
                   const route = routeOf(snapshot, id);
@@ -156,19 +161,27 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
                 })(),
                 // files: their own folder, and every folder above it
                 folder: node.kind === "module" && foldersAbove(snapshot, id, false).some((x) => !drawn.has(x)),
+                allFolders: node.kind === "module" && foldersAbove(snapshot, id, true).filter((x) => !drawn.has(x)).length > 1,
               }
             : id.startsWith(FOLDER_PREFIX)
-              ? // folders: only their parent folder (what's inside is added one by one: details, search)
-                { parents: parentFolders(id, false).some((x) => !drawn.has(x)), children: false }
-              : { parents: false, children: false },
+              ? // folders: "children" = the files inside, "all children" = files and their declarations
+                {
+                  // parents = the folders above it, up to the project root
+                  parents: parentFolders(id, false).some((x) => !drawn.has(x)),
+                  allParents: parentFolders(id, true).filter((x) => !drawn.has(x)).length > 1,
+                  children: folderExpansion(snapshot, folderPath(id), false).some((x) => !drawn.has(x)),
+                  allChildren: folderExpansion(snapshot, folderPath(id), true).some((x) => !drawn.has(x)),
+                }
+              : { parents: false, allParents: false, children: false, allChildren: false },
           change: showDiff ? changeOf(snapshot, id) : undefined,
+          big: node ? bigFileOf(fileSize(snapshot, index, node), bigFile) : undefined,
           row: isRow(p) ? { groupStart: groupStarts.has(id) } : undefined,
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
       } as ElementFlowNode;
     });
-  }, [snapshot, index, placed, filter, scannedUnder, showDiff]);
+  }, [snapshot, index, placed, filter, scannedUnder, showDiff, bigFile]);
 
   const shownNodes = useMemo(() => {
     if (!collapse.frames.size) return derived;

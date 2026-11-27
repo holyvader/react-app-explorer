@@ -6,7 +6,7 @@ import { type DrawnGraph, drawnGraph, FOLDER_PREFIX, isFolder, nodesUnderFolder,
 import type { PlacedElement } from "./graph/layout.ts";
 import { layoutOffThread } from "./graph/layoutOffThread.ts";
 import type { LayoutEffort, LayoutMode } from "./graph/squareLayout.ts";
-import { folderPath, foldersAbove } from "./graph/folder.ts";
+import { folderExpansion, folderPath, foldersAbove } from "./graph/folder.ts";
 import { DEFAULT_EXCLUDED } from "./graph/packages.ts";
 import { absoluteRect, arrangeWithin, autoPlaceSoleChildren, type CanvasPoint, movedTo, type PlaceOptions, placeLocally } from "./graph/placement.ts";
 import { ALL_GROUPS, buildIndex, type EdgeGroup, type EdgeKinds, type EnabledGroups, type GraphIndex, reachable, type RelationFilter } from "./graph/relations.ts";
@@ -15,8 +15,10 @@ import { hasCode } from "./lib/nodeDiff.ts";
 import { readSetting, writeSetting } from "./lib/settings.ts";
 import type { EditorKind } from "./lib/editor.ts";
 
-/** Expansions above this size ask for confirmation first. */
-export const LARGE_EXPANSION = 300;
+/** Expansions adding more than this ask for confirmation first (Settings: `confirmAbove`). */
+export const LARGE_EXPANSION = 150;
+/** A file is "big" (a red badge) past either limit (Settings: `bigFile`). */
+export const BIG_FILE = { lines: 300, functions: 15 };
 /** Most new elements (incl. derived frames) placed locally; above this, everything is laid out anew. */
 const LOCAL_LIMIT = 12;
 /** Direct parents / children: placed beside the diagram up to this many new elements (frames included). */
@@ -96,6 +98,10 @@ interface ExplorerState {
   showAssets: boolean;
   /** Relations drawn as flowing dashes, each its own pattern and speed (Settings; off by default). */
   animateEdges: boolean;
+  /** Adding more elements than this at once asks first (ConfirmExpansion). */
+  confirmAbove: number;
+  /** Files past these limits wear a red "big" badge: lines, or functions (components, hooks, functions) declared. */
+  bigFile: { lines: number; functions: number };
   /** The settings sheet, docked beside the canvas (toolbar, ⌘,). */
   settingsOpen: boolean;
   /** Diff snapshots: show what changed (colours, badges, removed elements as ghosts). */
@@ -178,6 +184,8 @@ interface ExplorerState {
   expand: (id: string, dir: "parents" | "children", deep: boolean, only?: EdgeKinds) => void;
   /** Routes (and route files): add every route and file that renders its URL, root first. */
   showRouteChain: (id: string) => void;
+  /** Folders: show the files inside (deep = false) or everything inside — files and declarations. */
+  expandFolder: (id: string, deep: boolean) => void;
   /** Folders: add the parent folder, or every folder above it up to the project root. */
   showParentFolders: (id: string, all: boolean) => void;
   confirmPending: () => void;
@@ -186,6 +194,8 @@ interface ExplorerState {
   setLibraryFilter: (patch: { excluded?: string[]; hideAllLibraries?: boolean }) => void;
   setShowAssets: (on: boolean) => void;
   setAnimateEdges: (on: boolean) => void;
+  setConfirmAbove: (n: number) => void;
+  setBigFile: (patch: Partial<ExplorerState["bigFile"]>) => void;
   setSettingsOpen: (open: boolean) => void;
   setDiffOverlay: (on: boolean) => void;
   /** The toolbar's diff view: off, the overlay, or the overlay plus the selected element's code changes. */
@@ -224,12 +234,12 @@ interface ExplorerState {
   setSearchOpen: (open: boolean, anchor?: CanvasPoint) => void;
   setQuickAdd: (q: ExplorerState["quickAdd"]) => void;
   openMenu: (menu: ExplorerState["menu"]) => void;
-  /** Adds many elements; above LARGE_EXPANSION it asks first. */
+  /** Adds many elements (folders too); above `confirmAbove` it asks first. */
   requestAdd: (ids: string[], label: string, anchor?: Anchor) => void;
   consumeFocus: () => void;
 }
 
-const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", animateEdges: "rae.animateEdges", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
+const KEYS = { editor: "rae.editor", layoutMode: "rae.layoutMode", excluded: "rae.excludedLibraries", hideAll: "rae.hideAllLibraries", folders: "rae.folders", routes: "rae.routes", assets: "rae.showAssets", animateEdges: "rae.animateEdges", confirmAbove: "rae.confirmAbove", bigFile: "rae.bigFile", diffOverlay: "rae.diffOverlay", diffCode: "rae.diffCode", sidebar: "rae.sidebarWidth", treeOpen: "rae.treeOpen", treeWidth: "rae.treeWidth", detailsOpen: "rae.detailsOpen", enabled: "rae.relationGroups" };
 
 export const relationFilterOf = (s: Pick<ExplorerState, "enabled" | "excluded" | "hideAllLibraries" | "showAssets"> & Partial<Pick<ExplorerState, "diffOverlay">>): RelationFilter => ({
   enabled: s.enabled,
@@ -314,6 +324,8 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     hideAllLibraries: readSetting(KEYS.hideAll, false),
     showAssets: readSetting(KEYS.assets, false),
     animateEdges: readSetting(KEYS.animateEdges, false),
+    confirmAbove: readSetting(KEYS.confirmAbove, LARGE_EXPANSION),
+    bigFile: { ...BIG_FILE, ...readSetting<Partial<typeof BIG_FILE>>(KEYS.bigFile, {}) },
     settingsOpen: false,
     diffOverlay: readSetting(KEYS.diffOverlay, true),
     diffCode: readSetting(KEYS.diffCode, false),
@@ -501,7 +513,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       const ids = reachable(s.snapshot, s.index, id, dir, deep, relationFilterOf(s), only);
       const present = new Set(s.visible);
       const fresh = ids.filter((x) => !present.has(x));
-      if (fresh.length > LARGE_EXPANSION) {
+      if (fresh.length > s.confirmAbove) {
         const name = s.snapshot.nodes[id]?.name ?? id;
         set({ pending: { ids: [id, ...ids], label: `${deep ? "All" : "Direct"} ${dir} of ${name}`, anchor: id } });
         return;
@@ -522,6 +534,13 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       const route = routeOf(s.snapshot, id);
       if (!route) return;
       s.requestAdd(routeChain(s.snapshot, route), `The route chain of ${s.snapshot.nodes[route]!.name}`, id);
+    },
+
+    expandFolder: (id, deep) => {
+      const s = get();
+      if (!s.snapshot) return;
+      const path = folderPath(id);
+      s.requestAdd(folderExpansion(s.snapshot, path, deep), `${deep ? "Everything" : "The files"} inside ${path}`, id);
     },
 
     showParentFolders: (id, all) => {
@@ -589,6 +608,17 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     setAnimateEdges: (animateEdges) => {
       writeSetting(KEYS.animateEdges, animateEdges);
       set({ animateEdges });
+    },
+
+    setConfirmAbove: (confirmAbove) => {
+      writeSetting(KEYS.confirmAbove, confirmAbove);
+      set({ confirmAbove });
+    },
+
+    setBigFile: (patch) => {
+      const bigFile = { ...get().bigFile, ...patch };
+      writeSetting(KEYS.bigFile, bigFile);
+      set({ bigFile });
     },
 
     setDiffOverlay: (on) => {
@@ -688,9 +718,11 @@ export const useExplorer = create<ExplorerState>((set, get) => {
     requestAdd: (ids, label, anchor = null) => {
       const s = get();
       const present = new Set(s.visible);
-      const fresh = ids.filter((id) => !present.has(id) && s.snapshot?.nodes[id]);
+      const drawnNow = new Set(s.graph.elements.map((e) => e.id));
+      // folders aren't snapshot nodes: they count as present once drawn
+      const fresh = ids.filter((id) => (isFolder(id) ? !drawnNow.has(id) : !present.has(id) && s.snapshot?.nodes[id]));
       if (!fresh.length) return;
-      if (fresh.length > LARGE_EXPANSION) {
+      if (fresh.length > s.confirmAbove) {
         set({ pending: { ids: fresh, label, anchor: typeof anchor === "string" ? anchor : "" } });
         return;
       }

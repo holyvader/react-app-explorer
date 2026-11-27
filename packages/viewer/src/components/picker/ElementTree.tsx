@@ -1,7 +1,9 @@
 import { IconChevronDown, IconChevronRight, IconClose, IconFolder, IconLibrary, IconPlus } from "@rae/design-system/icons";
 import { type KeyboardEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { buildTree, changesTree, openKeys, type TreeNode, visibleRows } from "../../graph/tree.ts";
+import { bigFileOf, fileSize } from "../../lib/bigFile.ts";
 import { CHANGE_LETTER, CHANGE_WORD, changeOf } from "../../lib/diff.ts";
+import type { NodeKind } from "@rae/schema";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../../store.ts";
 import "./picker.css";
@@ -33,6 +35,8 @@ export interface ElementTreeProps {
   selectedId?: string;
   /** Diff snapshots: only what the diff touched (and the folders / files down to it), all opened at first. */
   changesOnly?: boolean;
+  /** Browse mode: a row right-clicked (the file tree's menu), at that point. */
+  onRowMenu?: (node: TreeNode, at: { x: number; y: number }) => void;
   /** Shown when there are no rows at all (without a filter). */
   emptyText?: string;
   /**
@@ -44,14 +48,37 @@ export interface ElementTreeProps {
 
 const TICK: Record<TickState, string> = { off: "", on: "✓", all: "✓", file: "–", partial: "–" };
 
+/** The filter's kind chips, in this order (only kinds the project has are offered). */
+const KIND_FILTERS: { kind: NodeKind; label: string }[] = [
+  { kind: "component", label: "Components" },
+  { kind: "hook", label: "Hooks" },
+  { kind: "function", label: "Functions" },
+  { kind: "serverAction", label: "Server actions" },
+  { kind: "type", label: "Types" },
+  { kind: "route", label: "Routes" },
+  { kind: "module", label: "Files" },
+  { kind: "external", label: "Libraries" },
+];
+
+/** A row's element kind, for the kind filter: files are modules, libraries externals; folders and groups none. */
+function kindOfRow(n: TreeNode, nodes: Record<string, { kind: NodeKind }> | undefined): NodeKind | undefined {
+  if (n.kind === "route") return "route";
+  if (n.kind === "file") return "module";
+  if (n.kind === "library") return "external";
+  if (n.kind === "decl" && n.id) return nodes?.[n.id]?.kind;
+  return undefined;
+}
+
 /**
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
  * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
-export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText, commands }: ElementTreeProps) {
+export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText, commands, onRowMenu }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const filter = useRelationFilter({ allGroups: true });
   const diffOverlay = useExplorer((s) => s.diffOverlay);
+  const index = useExplorer((s) => s.index);
+  const bigLimits = useExplorer((s) => s.bigFile);
   // diff snapshots: folders holding changed files get a dot
   const diffShown = !!snapshot?.diff && diffOverlay;
   const changedDirs = useMemo(() => {
@@ -63,8 +90,13 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const [query, setQuery] = useState("");
   // the text after the commands' prefix, when the filter starts with it
   const command = commands && query.startsWith(commands.prefix) ? query.slice(commands.prefix.length).trim() : null;
-  // the filter box hidden: its text no longer filters
+  // the filter's kinds: none chosen = every kind
+  const [kinds, setKinds] = useState<ReadonlySet<NodeKind>>(new Set());
+  // the filter box hidden: its text and kinds no longer filter
   if (hideFilter && query) setQuery("");
+  if (hideFilter && kinds.size) setKinds(new Set());
+  const presentKinds = useMemo(() => new Set(Object.values(snapshot?.nodes ?? {}).map((n) => n.kind)), [snapshot]);
+  const accept = useMemo(() => (kinds.size ? (n: TreeNode) => kinds.has(kindOfRow(n, snapshot?.nodes) as NodeKind) : undefined), [kinds, snapshot]);
   const list = useRef<HTMLDivElement>(null);
 
   // changes view: what git says about each file (status, line counts)
@@ -78,7 +110,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   }, [snapshot, filter, changesOnly, fileChanges]);
   // the changes view starts with everything open (it's short); the full tree closed
   const [open, setOpen] = useState<Set<string>>(() => (changesOnly ? openKeys(roots) : new Set()));
-  const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep), [roots, open, query, keep]);
+  const { rows, truncated } = useMemo(() => visibleRows(roots, open, query, keep, accept), [roots, open, query, keep, accept]);
 
   // browse mode: a newly selected element's row comes into sight (its folders opened)
   const [revealed, setRevealed] = useState<string>();
@@ -186,13 +218,43 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           </button>
         )}
       </div>
+      {command === null && (
+        <div className="rae-tree-kinds" hidden={hideFilter} role="group" aria-label="Filter by kind">
+          {KIND_FILTERS.filter((k) => presentKinds.has(k.kind)).map((k) => {
+            const Icon = KIND_META[k.kind].icon;
+            const on = kinds.has(k.kind);
+            return (
+              <button
+                key={k.kind}
+                type="button"
+                className="rae-tree-kind"
+                data-kind={k.kind}
+                aria-pressed={on}
+                title={on ? `Showing ${k.label.toLowerCase()} · click to stop` : `Only ${k.label.toLowerCase()} (⇧-click to add to the others chosen)`}
+                onClick={(e) => {
+                  // a click picks only this kind (again: all kinds); ⇧-click adds or removes it
+                  const next = new Set(e.shiftKey ? kinds : []);
+                  if (e.shiftKey) {
+                    if (on) next.delete(k.kind);
+                    else next.add(k.kind);
+                  } else if (!(on && kinds.size === 1)) next.add(k.kind);
+                  setKinds(next);
+                }}
+              >
+                <Icon size={12} />
+                {k.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {command !== null ? (
         <div className="rae-tree" ref={list}>
           {commands!.render(command)}
         </div>
       ) : (
       <div className="rae-tree" role="tree" aria-label={mode === "browse" ? "Files" : "Project elements"} ref={list}>
-        {rows.length === 0 && <div className="rae-tree__empty">{!query && emptyText ? emptyText : "Nothing matches."}</div>}
+        {rows.length === 0 && <div className="rae-tree__empty">{!query && !kinds.size && emptyText ? emptyText : "Nothing matches."}</div>}
         {rows.map((r, i) => {
           const n = r.node;
           const node = n.id ? snapshot?.nodes[n.id] : undefined;
@@ -202,6 +264,7 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           const change = diffShown && n.id ? changeOf(snapshot, n.id) : undefined;
           // a folder holding changes, or (changes view) a file git didn't change whose elements did
           const dirChanged = diffShown && ((n.kind === "folder" && changedDirs.has(n.path)) || (!!changesOnly && n.kind === "file" && !change && !fileChanges.has(n.path)));
+          const big = node && index && (n.kind === "file" || n.file) ? bigFileOf(fileSize(snapshot!, index, node), bigLimits) : undefined;
           const gitFile = changesOnly && (n.kind === "file" || n.file) ? fileChanges.get(n.path) : undefined;
           return (
             <button
@@ -219,6 +282,13 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               tabIndex={i === 0 ? 0 : -1}
               style={{ paddingLeft: mode === "browse" ? 10 + r.depth * 12 : 8 + r.depth * 16 }}
               onClick={() => activate(n)}
+              onContextMenu={
+                onRowMenu &&
+                ((e) => {
+                  e.preventDefault();
+                  onRowMenu(n, { x: e.clientX, y: e.clientY });
+                })
+              }
               onKeyDown={(e) => onRowKey(e, i)}
               title={n.path || n.name}
             >
@@ -247,6 +317,11 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               {change && (
                 <span className="rae-tree__change" data-change={change} title={`${CHANGE_WORD[change]} in this diff`}>
                   {CHANGE_LETTER[change]}
+                </span>
+              )}
+              {big && (
+                <span className="rae-tree__big" title={big.title} aria-label={big.title}>
+                  {big.label}
                 </span>
               )}
               {dirChanged && <span className="rae-tree__change" data-change="dir" title={n.kind === "file" ? "Unchanged file: elements in it changed" : "Changes inside"} />}

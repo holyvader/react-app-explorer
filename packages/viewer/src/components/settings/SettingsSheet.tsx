@@ -5,6 +5,7 @@ import {
   DIAGRAM_PALETTES,
   type DiagramPaletteId,
   Flex,
+  Input,
   Panel,
   PanelBar,
   SearchInput,
@@ -37,7 +38,7 @@ const LAYOUT_MODES = [
   { value: "tree", label: "Tree" },
   { value: "square", label: "Squares" },
 ];
-const SECTIONS = ["Appearance", "Diagram", "Editor", "This diagram"] as const;
+const SECTIONS = ["Appearance", "Diagram", "Code health", "Editor", "This diagram"] as const;
 
 /**
  * One setting: where it's listed, what it's called, a quieter line under it, more words search
@@ -52,6 +53,39 @@ interface Setting {
   /** Switches render their own row (the label toggles them); everything else sits on the right. */
   switch?: { checked: boolean; onChange: (on: boolean) => void };
   control?: ReactNode;
+}
+
+/** A whole number of at least `min`, taken when it's valid (typing "1" on the way to "150" waits for blur). */
+function NumberSetting({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (n: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const [last, setLast] = useState(value);
+  if (value !== last) {
+    setLast(value);
+    setDraft(String(value));
+  }
+  const commit = () => {
+    const n = Math.round(Number(draft));
+    if (Number.isFinite(n) && n >= min) onChange(n);
+    else setDraft(String(value));
+  };
+  return (
+    <Input
+      type="number"
+      min={min}
+      step={1}
+      size="xs"
+      width="80px"
+      textAlign="right"
+      fontFamily="mono"
+      aria-label={label}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+      }}
+    />
+  );
 }
 
 /** `text` with what matches `query` marked. */
@@ -87,9 +121,11 @@ export function SettingsSheet({ onLibraries }: { onLibraries: () => void }) {
   const hideAllLibraries = useExplorer((s) => s.hideAllLibraries);
   const showAssets = useExplorer((s) => s.showAssets);
   const animateEdges = useExplorer((s) => s.animateEdges);
+  const confirmAbove = useExplorer((s) => s.confirmAbove);
+  const bigFile = useExplorer((s) => s.bigFile);
   const layoutMode = useExplorer((s) => s.layoutMode);
   const hasDiagram = useExplorer((s) => s.visible.length > 0);
-  const { setEditor, setShowAssets, setAnimateEdges, setLayoutMode, clear, setSettingsOpen } = useExplorer.getState();
+  const { setEditor, setShowAssets, setAnimateEdges, setConfirmAbove, setBigFile, setLayoutMode, clear, setSettingsOpen } = useExplorer.getState();
 
   const open = useExplorer((s) => s.settingsOpen);
   const [width, setWidth] = useState(() => readSetting(WIDTH_KEY, SETTINGS_WIDTH));
@@ -154,6 +190,14 @@ export function SettingsSheet({ onLibraries }: { onLibraries: () => void }) {
       switch: { checked: animateEdges, onChange: setAnimateEdges },
     },
     {
+      id: "confirm",
+      section: "Diagram",
+      label: "Ask before adding more than",
+      hint: "Elements at once: up to the root, down to the leaves, everything inside",
+      keywords: "confirm warning limit expansion batch add all many",
+      control: <NumberSetting label="Ask before adding more than" value={confirmAbove} min={1} onChange={setConfirmAbove} />,
+    },
+    {
       id: "assets",
       section: "Diagram",
       label: "Asset files",
@@ -172,6 +216,22 @@ export function SettingsSheet({ onLibraries }: { onLibraries: () => void }) {
           <IconLibrary size={12} /> Choose…
         </Button>
       ),
+    },
+    {
+      id: "big-lines",
+      section: "Code health",
+      label: "Big file: lines",
+      hint: "More lines than this: a red badge on the file",
+      keywords: "large file size length loc badge warning",
+      control: <NumberSetting label="Big file: lines" value={bigFile.lines} min={1} onChange={(lines) => setBigFile({ lines })} />,
+    },
+    {
+      id: "big-functions",
+      section: "Code health",
+      label: "Big file: functions",
+      hint: "More components, hooks and functions than this: a red badge",
+      keywords: "large file methods declarations count badge warning",
+      control: <NumberSetting label="Big file: functions" value={bigFile.functions} min={1} onChange={(functions) => setBigFile({ functions })} />,
     },
     {
       id: "editor",

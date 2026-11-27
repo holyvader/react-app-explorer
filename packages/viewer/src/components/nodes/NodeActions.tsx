@@ -1,14 +1,18 @@
 import {
   IconArrowDown,
   IconArrowUp,
+  IconChevronsDown,
+  IconChevronsUp,
   IconRenderedBy,
   IconCode,
   IconCodeDiff,
+  IconFolderTree,
   IconFolderUp,
   IconInvokes,
   IconLayout,
   IconRemove,
   IconRenders,
+  IconRenderTree,
   IconRouteChain,
   IconUnwrap,
 } from "@rae/design-system/icons";
@@ -42,7 +46,7 @@ const I = 12;
 
 /** Expand / hide (frames: tidy up, remove only the file) buttons shared by cards and frames. */
 export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: boolean }) {
-  const { expand, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff, showCode } = useExplorer.getState();
+  const { expand, expandFolder, showParentFolders, showRouteChain, hideNode, arrange, showCodeDiff, showCode } = useExplorer.getState();
   const { element, node, change, parents, children, hiddenParents, hiddenChildren, invokes, hiddenInvokes, can } = data;
   const id = element.id;
   const isComponent = node?.kind === "component";
@@ -56,11 +60,21 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       {node && can.parents && (
         <IconBtn label={`${node.kind === "component" ? "Rendered by" : "Show parents"} (${hiddenParents} of ${parents} not drawn)`} icon={node.kind === "component" ? <IconRenderedBy size={I} /> : <IconArrowUp size={I} />} onClick={() => expand(id, "parents", false)} />
       )}
+      {node && can.allParents && (
+        <IconBtn label={isComponent ? "Rendered by, up to the route" : "Show all parents up to the root"} icon={<IconChevronsUp size={I} />} onClick={() => expand(id, "parents", true)} />
+      )}
       {node && can.children && (
         <IconBtn
           label={`${isComponent ? "Renders" : "Show children"} (${hiddenChildren} of ${children} not drawn)`}
           icon={isComponent ? <IconRenders size={I} /> : <IconArrowDown size={I} />}
           onClick={() => expand(id, "children", false, down)}
+        />
+      )}
+      {node && can.allChildren && (
+        <IconBtn
+          label={isComponent ? "Show the render tree" : "Show all children down to the leaves"}
+          icon={isComponent ? <IconRenderTree size={I} /> : <IconChevronsDown size={I} />}
+          onClick={() => expand(id, "children", true, down)}
         />
       )}
       {node && can.invokes && (
@@ -72,8 +86,20 @@ export function NodeActions({ data, frame }: { data: ElementNodeData; frame?: bo
       {node?.kind === "module" && can.folder && (
         <IconBtn label={`Show its folder (${node.filePath.slice(0, node.filePath.lastIndexOf("/"))})`} icon={<IconFolderUp size={I} />} onClick={() => showParentFolders(id, false)} />
       )}
+      {node?.kind === "module" && can.allFolders && (
+        <IconBtn label="Show all its folders up to the root" icon={<IconFolderTree size={I} />} onClick={() => showParentFolders(id, true)} />
+      )}
       {element.kind === "folder" && can.parents && (
         <IconBtn label="Show the parent folder" icon={<IconFolderUp size={I} />} onClick={() => showParentFolders(id, false)} />
+      )}
+      {element.kind === "folder" && can.allParents && (
+        <IconBtn label="Show all parent folders up to the root" icon={<IconFolderTree size={I} />} onClick={() => showParentFolders(id, true)} />
+      )}
+      {element.kind === "folder" && can.children && (
+        <IconBtn label="Show the files inside" icon={<IconArrowDown size={I} />} onClick={() => expandFolder(id, false)} />
+      )}
+      {element.kind === "folder" && can.allChildren && (
+        <IconBtn label="Show everything inside (files and their declarations)" icon={<IconChevronsDown size={I} />} onClick={() => expandFolder(id, true)} />
       )}
       {/* a file's rows have their fixed order: nothing to tidy */}
       {frame && element.kind !== "module" && <IconBtn label="Tidy up inside" icon={<IconLayout size={I} />} onClick={() => void arrange(id)} />}

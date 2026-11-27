@@ -126,6 +126,8 @@ export interface FileExtract {
   stamp: string;
   /** Hash of the file's text (diffs tell changed files by it). */
   hash: string;
+  /** How many lines the file has. */
+  lines: number;
   directives: string[];
   serverOnly: boolean;
   clientOnly: boolean;

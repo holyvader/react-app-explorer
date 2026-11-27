@@ -18,8 +18,10 @@ export type ElementNodeData = {
   /** Components: the props type only they use (`ButtonProps`), named in the caption instead of drawn as a card. */
   propsType?: { id: string; name: string; keyword: string };
   /** Which expansions would add something (components: children = what they render); `routeChain`: routes and route files whose chain isn't all drawn. */
-  /** Expansions that would add something. None goes "up to the root" or "down to the leaves", or adds everything inside: those could draw hundreds at once (only the diff view adds many). */
-  can: { parents: boolean; children: boolean; invokes?: boolean; routeChain?: boolean; folder?: boolean };
+  /** Expansions that would add something. The deep ones ("up to the root", "down to the leaves", everything inside) ask first when they'd add many (store `requestAdd`). */
+  can: { parents: boolean; allParents: boolean; children: boolean; allChildren: boolean; invokes?: boolean; routeChain?: boolean; folder?: boolean; allFolders?: boolean };
+  /** Files past the big-file limits (Settings → Code health): the red badge's text and tooltip. */
+  big?: { label: string; title: string };
   /** Folders: how many scanned elements (files and declarations) are inside, shown in the header. */
   scannedCount?: number;
   /** File modules: declarations inside not drawn yet (for the "+" on its bottom border). */

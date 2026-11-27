@@ -233,6 +233,8 @@ export interface GraphNode {
   loc?: Loc;
   /** Declarations: their last line. Files and declarations: a hash of their source text (diffs tell changed ones by it). */
   endLine?: number;
+  /** Files (and declarations standing for their file): how many lines the file has. */
+  lines?: number;
   hash?: string;
   moduleType?: ModuleType;
   nextRole?: NextRole;

@@ -7,6 +7,31 @@
   gap: 8px;
 }
 .rae-tree-search[hidden] { display: none; }
+/* the filter's kind chips: a click shows only that kind, ⇧-click combines */
+.rae-tree-kinds { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 8px; border-bottom: 1px solid var(--chakra-colors-border-muted); margin-top: -2px; }
+.rae-tree-kinds[hidden] { display: none; }
+.rae-tree-kind {
+  all: unset;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 0 7px; height: calc(20px * var(--rae-text-scale, 1));
+  border-radius: 999px;
+  font-size: calc(11px * var(--rae-text-scale, 1));
+  color: var(--chakra-colors-fg-muted);
+  box-shadow: inset 0 0 0 1px var(--chakra-colors-border);
+  cursor: pointer;
+}
+.rae-tree-kind:hover { background: var(--chakra-colors-bg-muted); color: var(--chakra-colors-fg); }
+.rae-tree-kind:focus-visible { outline: 1.5px solid var(--chakra-colors-selection-solid); outline-offset: 1px; }
+.rae-tree-kind svg { color: var(--k, var(--chakra-colors-fg-subtle)); }
+.rae-tree-kind[aria-pressed="true"] { color: var(--chakra-colors-fg); background: var(--k-soft, var(--chakra-colors-bg-muted)); box-shadow: inset 0 0 0 1px var(--k, var(--chakra-colors-border-emphasized)); }
+.rae-tree-kind[data-kind="component"] { --k: var(--chakra-colors-kind-component-solid); --k-soft: var(--chakra-colors-kind-component-subtle); }
+.rae-tree-kind[data-kind="hook"] { --k: var(--chakra-colors-kind-hook-solid); --k-soft: var(--chakra-colors-kind-hook-subtle); }
+.rae-tree-kind[data-kind="function"] { --k: var(--chakra-colors-kind-function-solid); --k-soft: var(--chakra-colors-kind-function-subtle); }
+.rae-tree-kind[data-kind="serverAction"] { --k: var(--chakra-colors-kind-server-action-solid); --k-soft: var(--chakra-colors-kind-server-action-subtle); }
+.rae-tree-kind[data-kind="type"] { --k: var(--chakra-colors-kind-type-solid); --k-soft: var(--chakra-colors-kind-type-subtle); }
+.rae-tree-kind[data-kind="route"] { --k: var(--chakra-colors-kind-route-solid); --k-soft: var(--chakra-colors-kind-route-subtle); }
+.rae-tree-kind[data-kind="module"] { --k: var(--chakra-colors-kind-module-solid); --k-soft: var(--chakra-colors-kind-module-subtle); }
+.rae-tree-kind[data-kind="external"] { --k: var(--chakra-colors-kind-external-solid); --k-soft: var(--chakra-colors-kind-external-subtle); }
 .rae-tree-search { position: relative; }
 .rae-tree-search__clear {
   all: unset;
@@ -81,6 +106,8 @@
 .rae-tree__row[data-drawn] .rae-tree__name { font-weight: 500; }
 .rae-tree__row[data-selected] { background: var(--chakra-colors-selection-tree-row); box-shadow: inset 2px 0 0 var(--chakra-colors-selection-solid); color: var(--chakra-colors-fg); }
 .rae-tree__row[data-selected] .rae-tree__note { color: var(--chakra-colors-fg-muted); }
+/* a file past the big-file limits (Settings → Code health) */
+.rae-tree__big { flex-shrink: 0; padding: 0 5px; border-radius: 4px; font: 500 calc(10px * var(--rae-text-scale, 1))/calc(15px * var(--rae-text-scale, 1)) var(--chakra-fonts-mono); color: var(--chakra-colors-red-fg); background: var(--chakra-colors-red-subtle); }
 .rae-tree__add {
   margin-left: auto;
   flex-shrink: 0;

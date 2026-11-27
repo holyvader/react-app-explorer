@@ -1,15 +1,20 @@
 import type { Edge, EdgeKind, Snapshot } from "@rae/schema";
 import type { MenuEntry } from "@rae/design-system";
+import type { ReactNode } from "react";
 import {
   IconArrowDown,
   IconArrowUp,
+  IconChevronsDown,
+  IconChevronsUp,
   IconRenderedBy,
   IconCopy,
   IconFocus,
   IconFolder,
+  IconFolderTree,
   IconFolderUp,
   IconInvokes,
   IconRenders,
+  IconRenderTree,
   IconRouteChain,
   IconRemove,
   IconLayout,
@@ -19,9 +24,9 @@ import {
   IconUnwrap,
 } from "@rae/design-system/icons";
 import { FOLDER_PREFIX, isFolder, routeChain, routeOf } from "../graph/drawn.ts";
-import { folderContents, folderPath, foldersAbove, parentFolders } from "../graph/folder.ts";
+import { folderContents, folderExpansion, folderPath, foldersAbove, parentFolders } from "../graph/folder.ts";
 import { isFiltered } from "../graph/packages.ts";
-import { downKinds, hasUndrawn, INVOKES, type EdgeKinds } from "../graph/relations.ts";
+import { downKinds, hasUndrawn, INVOKES, reachable, type EdgeKinds } from "../graph/relations.ts";
 import { canOpenEditor, editorUrl, openInEditor } from "../lib/editor.ts";
 import { KIND_META } from "../lib/kinds.tsx";
 import { displayName } from "../lib/displayName.ts";
@@ -44,14 +49,15 @@ const RELATIONS: { kinds: EdgeKind[]; out: string; in: string }[] = [
   { kinds: ["routeChild"], out: "Nested routes", in: "Parent route" },
 ];
 
-/** Items listed per submenu; the rest are found through search. */
+/** Items listed per submenu before "Show all" is the way to get the rest. */
 const MAX_ITEMS = 60;
 const I = 14;
 
 function relationMenu(label: string, edges: Edge[], side: "from" | "to", anchor: string, s: Snapshot, onCanvas: Set<string>): MenuEntry | null {
   const ids = [...new Set(edges.map((e) => e[side]))].filter((id) => s.nodes[id]);
   if (!ids.length) return null;
-  const { addNodes } = useExplorer.getState();
+  const { addNodes, requestAdd } = useExplorer.getState();
+  const missing = ids.filter((id) => !onCanvas.has(id));
   ids.sort((a, b) => Number(onCanvas.has(a)) - Number(onCanvas.has(b)) || displayName(s.nodes[a]!).localeCompare(displayName(s.nodes[b]!)));
   const items: MenuEntry[] = ids.slice(0, MAX_ITEMS).map((id) => {
     const n = s.nodes[id]!;
@@ -71,8 +77,18 @@ function relationMenu(label: string, edges: Edge[], side: "from" | "to", anchor:
     label,
     icon: <IconRelations size={I} />,
     hint: `${ids.length}`,
-    // one at a time: no "show all" (only the diff view adds many at once)
-    entries: [...items, ...(ids.length > MAX_ITEMS ? [{ type: "label" as const, label: `…and ${ids.length - MAX_ITEMS} more (find them with Space)` }] : [])],
+    entries: [
+      {
+        type: "item",
+        value: `${label}:all`,
+        label: missing.length ? `Show all (${missing.length} not shown)` : "All shown",
+        disabled: !missing.length,
+        onSelect: () => requestAdd(missing, `${label} (${displayName(s.nodes[anchor]!)})`, anchor),
+      },
+      { type: "separator" },
+      ...items,
+      ...(ids.length > MAX_ITEMS ? [{ type: "label" as const, label: `…and ${ids.length - MAX_ITEMS} more (use Show all)` }] : []),
+    ],
   };
 }
 
@@ -101,6 +117,16 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
         disabled: !parentFolders(id, false).some((x) => !drawnNow.has(x)),
         onSelect: () => st.showParentFolders(id, false),
       },
+      {
+        type: "item",
+        value: "parents",
+        label: "Show all parent folders up to the root",
+        icon: <IconFolderTree size={I} />,
+        disabled: parentFolders(id, true).filter((x) => !drawnNow.has(x)).length < 2,
+        onSelect: () => st.showParentFolders(id, true),
+      },
+      countedItem("files", "Show the files inside", <IconArrowDown size={I} />, folderExpansion(s, path, false), drawnNow, () => st.expandFolder(id, false)),
+      countedItem("all", "Show everything inside", <IconChevronsDown size={I} />, folderExpansion(s, path, true), drawnNow, () => st.expandFolder(id, true)),
       ...subfolderMenu(id, path, drawnNow),
       { type: "separator" },
       { type: "item", value: "tidy", label: "Tidy up inside", icon: <IconLayout size={I} />, onSelect: () => void arrange(id) },
@@ -156,6 +182,11 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
     }
   }
   entries.push({ type: "item", value: "parents", label: node?.kind === "component" ? "Rendered by" : "Show parents", icon: node?.kind === "component" ? <IconRenderedBy size={I} /> : <IconArrowUp size={I} />, disabled: !can("parents", false), onSelect: () => expand(id, "parents", false) });
+  entries.push(
+    countedItem("parents-all", isComponent ? "Rendered by, up to the route" : "Show all parents up to the root", <IconChevronsUp size={I} />, reachable(s, index, id, "parents", true, rf), drawnNow, () =>
+      expand(id, "parents", true),
+    ),
+  );
   entries.push({
     type: "item",
     value: "children",
@@ -164,11 +195,23 @@ export function nodeMenuEntries(id: string): MenuEntry[] {
     disabled: !can("children", false, down),
     onSelect: () => expand(id, "children", false, down),
   });
+  entries.push(
+    countedItem(
+      "children-all",
+      isComponent ? "Show the render tree" : "Show all children down to the leaves",
+      isComponent ? <IconRenderTree size={I} /> : <IconChevronsDown size={I} />,
+      reachable(s, index, id, "children", true, rf, down),
+      drawnNow,
+      () => expand(id, "children", true, down),
+    ),
+  );
   if (node.kind === "module") {
     const drawnIds = new Set(st.graph.elements.map((e) => e.id));
     const own = foldersAbove(s, id, false)[0];
+    const above = foldersAbove(s, id, true).filter((x) => !drawnIds.has(x));
     if (own) {
       entries.push({ type: "item", value: "folder", label: "Show its folder", icon: <IconFolderUp size={I} />, hint: folderPath(own), disabled: drawnIds.has(own), onSelect: () => st.showParentFolders(id, false) });
+      entries.push({ type: "item", value: "folders-all", label: "Show all its folders up to the root", icon: <IconFolderTree size={I} />, disabled: above.length < 2, onSelect: () => st.showParentFolders(id, true) });
     }
   }
   if (isComponent && (index.out.get(id) ?? []).some((e) => INVOKES.includes(e.kind)))
@@ -230,6 +273,8 @@ export function containsEntries(id: string): MenuEntry[] {
   const missing = (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).map((e) => e.to);
   if (!missing.length) return [{ type: "label", label: "Everything inside is drawn" }];
   return [
+    { type: "item", value: "all", label: `Show all ${missing.length}`, onSelect: () => st.requestAdd(missing, `Everything ${displayName(s.nodes[id]!)} declares`, id) },
+    { type: "separator" },
     ...missing.map((m): MenuEntry => {
       const n = s.nodes[m]!;
       const Icon = KIND_META[n.kind].icon;
@@ -238,12 +283,13 @@ export function containsEntries(id: string): MenuEntry[] {
   ];
 }
 
-/** A folder's "Subfolders" submenu: any one of them (as a folder on the diagram). */
+/** A folder's "Subfolders" submenu: add all of them, or any one (as folders on the diagram). */
 function subfolderMenu(id: string, path: string, drawn: ReadonlySet<string>): MenuEntry[] {
   const st = useExplorer.getState();
   if (!st.snapshot) return [];
   const subs = folderContents(st.snapshot, path).subfolders;
   if (!subs.length) return [];
+  const missing = subs.filter((f) => !drawn.has(`${FOLDER_PREFIX}${f.path}`)).map((f) => `${FOLDER_PREFIX}${f.path}`);
   return [
     {
       type: "submenu",
@@ -252,6 +298,14 @@ function subfolderMenu(id: string, path: string, drawn: ReadonlySet<string>): Me
       icon: <IconFolder size={I} />,
       hint: `${subs.length}`,
       entries: [
+        {
+          type: "item",
+          value: "subfolders:all",
+          label: missing.length ? `Add all (${missing.length} not shown)` : "All shown",
+          disabled: !missing.length,
+          onSelect: () => st.requestAdd(missing, `The subfolders of ${path}`, id),
+        },
+        { type: "separator" },
         ...subs.map(
           (f): MenuEntry => ({
             type: "item",
@@ -265,4 +319,14 @@ function subfolderMenu(id: string, path: string, drawn: ReadonlySet<string>): Me
       ],
     },
   ];
+}
+
+/**
+ * A batch add ("up to the root", "everything inside"…) with how many it would add as its hint;
+ * past the confirmation limit the hint says it will ask first. Disabled when it would add nothing.
+ */
+function countedItem(value: string, label: string, icon: ReactNode, ids: string[], drawn: ReadonlySet<string>, onSelect: () => void): MenuEntry {
+  const fresh = ids.filter((x) => !drawn.has(x)).length;
+  const asks = fresh > useExplorer.getState().confirmAbove;
+  return { type: "item", value, label, icon, hint: fresh ? `${asks ? "⚠ " : ""}${fresh}` : undefined, disabled: !fresh, onSelect };
 }

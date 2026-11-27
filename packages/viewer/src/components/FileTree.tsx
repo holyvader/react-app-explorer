@@ -1,10 +1,11 @@
-import { ActionIconButton, Flex, Panel, PanelBar, Text, textPx } from "@rae/design-system";
+import { ActionIconButton, ContextMenu, Flex, Panel, PanelBar, Text, textPx } from "@rae/design-system";
 import { IconDiff, IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../graph/tree.ts";
 import { TREE_WIDTH, useExplorer } from "../store.ts";
 import { ChangesList } from "./ChangesList.tsx";
 import { ElementTree } from "./picker/ElementTree.tsx";
+import { routesEntry, treeMenuEntries } from "./treeMenu.tsx";
 
 /**
  * The scanned files as a tree on the left — collapsible (to a thin strip) and resizable, both kept.
@@ -23,6 +24,15 @@ export function FileTree() {
   // diff snapshots: the changes, file by file, instead of the whole tree (shown first)
   const [changesView, setChangesView] = useState(true);
   const showChanges = !!snapshot?.diff && changesView;
+  // a row's right-click menu (or the panel's own, off the rows: just the routes)
+  const [menu, setMenu] = useState<{ node?: TreeNode; at: { x: number; y: number } } | null>(null);
+  const onRowMenu = useCallback((node: TreeNode, at: { x: number; y: number }) => setMenu({ node, at }), []);
+  const menuEntries = useMemo(() => {
+    if (!menu) return [];
+    if (menu.node) return treeMenuEntries(menu.node, showChanges);
+    const routes = routesEntry(showChanges);
+    return routes ? [routes] : [];
+  }, [menu, showChanges]);
   useEffect(() => {
     if (filtering) inputRef.current?.focus();
   }, [filtering]);
@@ -106,16 +116,23 @@ export function FileTree() {
         flex="1"
         minH="0"
         className="rae-filetree"
+        onContextMenu={(e) => {
+          // off the rows (they open their own): the routes
+          if (e.defaultPrevented || !routesEntry(showChanges)) return;
+          e.preventDefault();
+          setMenu({ at: { x: e.clientX, y: e.clientY } });
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape" && filtering) setFiltering(false);
         }}
       >
         {showChanges ? (
-          <ChangesList onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} />
+          <ChangesList onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} />
         ) : (
-          <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
+          <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
         )}
       </Flex>
+      <ContextMenu at={menu?.at ?? null} onClose={() => setMenu(null)} entries={menuEntries} title={menu?.node?.name} />
       {/* what was scanned, quietly */}
       <Flex align="center" h="28px" px="3" flexShrink={0} borderTopWidth="1px" borderColor="border.muted">
         <Text fontFamily="mono" fontSize={textPx(10.5)} color="fg.subtle" truncate>

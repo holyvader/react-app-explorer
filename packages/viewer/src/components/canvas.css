@@ -252,6 +252,8 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 /* a file's Next.js role (page, layout…): the route's colour */
 .rae-badge--role { color: var(--chakra-colors-kind-route-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-kind-route-muted); }
 /* a component's props count ("2 + 39 props"): mono, quiet */
+/* a file past the big-file limits (Settings → Code health) */
+.rae-chip--big { font-family: var(--chakra-fonts-mono); font-size: 11px; font-weight: 500; color: var(--chakra-colors-red-fg); background: var(--chakra-colors-red-subtle); box-shadow: inset 0 0 0 1px var(--chakra-colors-red-muted); }
 .rae-chip--props { font-family: var(--chakra-fonts-mono); font-size: 11px; color: var(--fg-subtle); }
 .rae-chip[data-boundary="client"] { color: var(--chakra-colors-boundary-client-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-boundary-client-muted); }
 .rae-chip[data-boundary="shared"] { color: var(--chakra-colors-boundary-shared-fg); box-shadow: inset 0 0 0 1px var(--chakra-colors-boundary-shared-muted); }
@@ -326,6 +328,12 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
 .rae-file__path { font-family: var(--chakra-fonts-mono); font-size: 11.5px; line-height: 16px; color: var(--fg-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rae-file__header :is(.rae-chip, .rae-badge) { margin-top: 2px; flex-shrink: 0; }
 .rae-file__lock { margin-top: 4px; display: inline-flex; color: var(--fg-subtle); flex-shrink: 0; }
+/* a route: its URL in bold, the folder · what it serves dimmed below (graph/layout.ts ROUTE_HEADER 52) */
+.rae-route__header { position: relative; height: 52px; align-items: flex-start; gap: 9px; padding: 8px 12px 0 12px; }
+.rae-route__header .rae-icon { margin-top: 2px; }
+.rae-route__header :is(.rae-chip, .rae-badge) { margin-top: 1px; flex-shrink: 0; }
+.rae-route__name { font-size: 15px; line-height: 20px; font-weight: 700; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rae-route__header .rae-actions { position: absolute; right: 8px; top: 6px; }
 /* the file's actions over the header's right end, on hover */
 .rae-file__header .rae-actions { position: absolute; right: 8px; top: 8px; }
 

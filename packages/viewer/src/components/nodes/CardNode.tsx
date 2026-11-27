@@ -191,8 +191,13 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
             </div>
           )}
         </div>
-        {full && ((fileBadges && (node.nextRole || moduleType)) || props || isIndex) && (
+        {full && ((fileBadges && (node.nextRole || moduleType)) || props || isIndex || data.big) && (
           <span className="rae-card__badges">
+            {data.big && (
+              <span className="rae-chip rae-chip--big" title={data.big.title}>
+                {data.big.label}
+              </span>
+            )}
             {isIndex && (
               <span className="rae-chip rae-chip--props" title={node.filePath}>
                 index
