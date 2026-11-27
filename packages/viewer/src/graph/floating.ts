@@ -1,5 +1,5 @@
 import { type InternalNode, Position } from "@xyflow/react";
-import { TAG_DEPTH } from "./layout.ts";
+import { FILE_HEADER, TAG_DEPTH } from "./layout.ts";
 
 /*
  * Floating edges (after https://reactflow.dev/examples/edges/floating-edges): an edge leaves and
@@ -112,6 +112,27 @@ function rowEnd(node: InternalNode, other: InternalNode, sameFile: boolean, shif
   return { x: left ? p.x : p.x + w, y, side: left ? Position.Left : Position.Right };
 }
 
+/** A file drawn as a frame of its rows (not zoomed out into a block). */
+const isFileFrame = (n: InternalNode) => {
+  const d = n.data as { element?: { kind?: string }; collapsed?: unknown };
+  return n.type === "frame" && d.element?.kind === "module" && !d.collapsed;
+};
+
+/**
+ * Where an edge meets a file itself (not one of its rows): its header, at the end facing the other
+ * node, so it reads apart from the rows' ends below.
+ */
+function headerEnd(node: InternalNode, other: InternalNode, shiftY: number): Point & { side: Position } {
+  const { w } = sizeOf(node);
+  const p = node.internals.positionAbsolute;
+  const left = centreOf(other).x < p.x + w / 2;
+  const y = p.y + FILE_HEADER / 2 + Math.max(-12, Math.min(12, shiftY));
+  return { x: left ? p.x : p.x + w, y, side: left ? Position.Left : Position.Right };
+}
+
+/** What an edge's end is attached to: a row (a declaration inside a file), a file's header, or anything else. */
+export type EdgeEnd = "row" | "file" | undefined;
+
 /**
  * `lane`: for several relations between the same two nodes, how far (px) this one runs beside the
  * line between their centres, so they don't draw on top of each other. Positive is to the left of
@@ -126,9 +147,14 @@ export function floatingEdgeParams(source: InternalNode, target: InternalNode, l
     shift = { x: (-(b.y - a.y) / len) * lane, y: ((b.x - a.x) / len) * lane };
   }
   const sameFile = isRow(source) && isRow(target) && source.parentId === target.parentId;
-  const s = isRow(source) ? rowEnd(source, target, sameFile, shift.y) : intersection(source, target, shift);
-  const t = isRow(target) ? rowEnd(target, source, sameFile, shift.y) : intersection(target, source, shift);
-  return { sx: s.x, sy: s.y, tx: t.x, ty: t.y, sourcePos: s.side ?? sideOf(source, s), targetPos: t.side ?? sideOf(target, t) };
+  const endOf = (n: InternalNode): EdgeEnd => (isRow(n) ? "row" : isFileFrame(n) ? "file" : undefined);
+  const sourceEnd = endOf(source);
+  const targetEnd = endOf(target);
+  const at = (n: InternalNode, other: InternalNode, end: EdgeEnd) =>
+    end === "row" ? rowEnd(n, other, sameFile, shift.y) : end === "file" ? headerEnd(n, other, shift.y) : intersection(n, other, shift);
+  const s = at(source, target, sourceEnd);
+  const t = at(target, source, targetEnd);
+  return { sx: s.x, sy: s.y, tx: t.x, ty: t.y, sourcePos: s.side ?? sideOf(source, s), targetPos: t.side ?? sideOf(target, t), sourceEnd, targetEnd };
 }
 
 const centreOf = (n: InternalNode) => {

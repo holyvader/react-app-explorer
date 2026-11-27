@@ -390,6 +390,10 @@ html[data-palette="tinted"] .rae-card:where(:not([data-kind="type"], [data-kind=
   stroke-dasharray: calc(var(--dash-on) * var(--ds, 1) * 1px) calc(var(--dash-off) * var(--ds, 1) * 1px);
   stroke-linecap: round;
 }
+/* where an edge meets a file: a dot on a row's end, a square on the file's header (ConditionEdge Port) */
+.rae-edge-port { fill: var(--e); stroke: var(--canvas, var(--chakra-colors-canvas-bg)); stroke-width: 2px; }
+.rae-edge--added .rae-edge-port { fill: var(--chakra-colors-diff-added-solid); }
+.rae-edge--removed .rae-edge-port { fill: var(--chakra-colors-diff-removed-solid); }
 .rae-edge--imports        { --e: var(--chakra-colors-relation-imports); }
 .rae-edge--imports-lazy   { --e: var(--chakra-colors-relation-imports); --dash-on: 4; --dash-off: 3; }
 .rae-edge--imports-type   { --e: var(--chakra-colors-relation-imports); --dash-on: 4; --dash-off: 3; opacity: 0.5; }

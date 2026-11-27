@@ -1,7 +1,7 @@
 import type { Edge as GraphEdge } from "@rae/schema";
-import { BaseEdge, type Edge, type EdgeProps, getBezierPath, useInternalNode } from "@xyflow/react";
+import { BaseEdge, type Edge, type EdgeProps, getBezierPath, Position, useInternalNode } from "@xyflow/react";
 import { type CSSProperties, memo } from "react";
-import { floatingEdgeParams } from "../graph/floating.ts";
+import { type EdgeEnd, floatingEdgeParams } from "../graph/floating.ts";
 import { formatCondition, summarize } from "../lib/conditions.ts";
 import { relationWord } from "../lib/relationWords.ts";
 import { useLod } from "./lod.ts";
@@ -17,6 +17,19 @@ export type ConditionEdgeData = {
   /** Zoomed out: the relations this edge stands for, between collapsed frames (graph/collapse.ts). */
   bundle?: string[];
 };
+
+/** How far the line runs on into a row or a file's header past its port, to its arrowhead (px). */
+const STUB = 10;
+
+/**
+ * Where an edge meets a file, a mark on the border says what it's attached to: a dot for a row (a
+ * declaration inside the file), a square on the header for the file itself.
+ */
+function Port({ x, y, end }: { x: number; y: number; end: EdgeEnd }) {
+  if (end === "row") return <circle className="rae-edge-port" cx={x} cy={y} r={4} />;
+  if (end === "file") return <rect className="rae-edge-port" x={x - 4} y={y - 4} width={8} height={8} rx={1} />;
+  return null;
+}
 
 /** Labels of side-by-side relations: this far apart, one under another (px). */
 const LABEL_STEP = 24;
@@ -48,9 +61,12 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
   // zoomed out, labels are unreadable: none at all (each is an HTML element of its own)
   const labelled = useLod() === "full";
   if (!sourceNode || !targetNode || !data) return null;
-  const { sx, sy, tx, ty, sourcePos, targetPos } = floatingEdgeParams(sourceNode, targetNode, data.lane);
+  const { sx, sy, tx, ty, sourcePos, targetPos, sourceEnd, targetEnd } = floatingEdgeParams(sourceNode, targetNode, data.lane);
   const edge = data.edge;
-  const [path, midX, midY] = getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sourcePos, targetPosition: targetPos });
+  const [curve, midX, midY] = getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sourcePos, targetPosition: targetPos });
+  // into a file (a row, or its header): on past the border a little, the arrowhead inside
+  const into = labelled && targetEnd ? (targetPos === Position.Left ? STUB : targetPos === Position.Right ? -STUB : 0) : 0;
+  const path = into ? `${curve} L${tx + into},${ty}` : curve;
   // side-by-side relations: their labels stacked one under another, in the lanes' order (the same
   // whichever way each relation points), so they never cover each other
   const labelX = midX;
@@ -67,6 +83,8 @@ function ConditionEdgeImpl({ source, target, markerEnd, data }: EdgeProps<Condit
   return (
     <>
       <BaseEdge path={path} markerEnd={labelled ? markerEnd : undefined} style={strokeStyle(length, data.bundle?.length)} />
+      {labelled && <Port x={sx} y={sy} end={sourceEnd} />}
+      {labelled && <Port x={tx} y={ty} end={targetEnd} />}
       {labelled && (
         <EdgeLabel>
           <div
