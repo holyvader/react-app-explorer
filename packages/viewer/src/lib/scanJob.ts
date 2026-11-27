@@ -6,7 +6,8 @@ import { readSetting } from "./settings.ts";
 /** The last folder or file scanned from the UI, and whether single-export files are merged (remembered). */
 export const SCAN_PATH_KEY = "rae.scanPath";
 export const SCAN_MERGE_KEY = "rae.scanMerge";
-export const readMergeSetting = () => readSetting(SCAN_MERGE_KEY, true, (raw) => raw !== "off");
+/** Off unless turned on (Open project → "Merge single-export files"): a file stays a file, its declarations rows in it. */
+export const readMergeSetting = () => readSetting(SCAN_MERGE_KEY, false, (raw) => raw !== "off");
 
 /** How long the "Types added" note stays before the progress panel goes away. */
 const DONE_LINGER_MS = 2500;
