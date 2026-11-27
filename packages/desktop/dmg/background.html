@@ -1,12 +1,13 @@
 <!doctype html>
 <!--
-  The .dmg window's background (660 × 400, Finder's window), in the app's Paper palette: the mark and
-  name, a hairline, three chevrons from the app (165,192) to Applications (495,192), and how to
-  install. Light in both appearances on purpose: Finder puts a background picture on white even in
-  Dark Mode (transparency doesn't let its dark window through) and keeps the icons' names black over
-  one, so a light picture is the one that reads either way. Rendered to background.png and
-  background@2x.png by render.ts; fonts come from the design system's bundled files (render.ts puts their
-  @font-face rules in place of FONTS below).
+  The .dmg window's background (660 × 400, Finder's window), drawn like the app draws a diagram, in its
+  light (Paper) palette: the app in a file frame, Applications in a dashed folder frame, an "installs"
+  relation between them, on the canvas's dot grid. Finder draws the two icons and their names in the
+  frames (package.ts: app at 165,192, Applications at 495,192). Light in both appearances on purpose:
+  Finder draws a background picture on white even in Dark Mode (transparency doesn't let its dark
+  window through) and keeps the icons' names black over one, so a light picture reads either way.
+  Rendered to background.png and background@2x.png by render.ts; fonts come from the design system's
+  bundled files (render.ts puts their @font-face rules in place of FONTS below).
 -->
 <html lang="en">
 <head>
@@ -14,27 +15,54 @@
 <style>
 /*FONTS*/
 html, body { margin: 0; background: #F7F6F3; }
-.window { position: relative; width: 660px; height: 400px; overflow: hidden; font-family: "IBM Plex Sans Variable", system-ui, sans-serif; color: #1F1E1C; background: #F7F6F3; }
-.top { position: absolute; left: 32px; right: 32px; top: 24px; display: flex; align-items: center; gap: 10px; }
-.name { flex: 1; font-size: 16px; font-weight: 700; }
-.rule { position: absolute; left: 32px; right: 32px; top: 64px; border-top: 1px solid #E2E0DA; }
-.chevrons { position: absolute; left: 290px; top: 180px; width: 80px; display: flex; justify-content: center; gap: 4px; }
-.hint { position: absolute; left: 0; right: 0; bottom: 30px; text-align: center; font-size: 13px; color: #6F6C66; }
+.window {
+  position: relative; width: 660px; height: 400px; overflow: hidden;
+  background-color: #F7F6F3;
+  background-image: radial-gradient(#DAD7CF 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+  font-family: "IBM Plex Sans Variable", system-ui, sans-serif; color: #1F1E1C;
+}
+.frame { position: absolute; top: 70px; width: 200px; height: 236px; box-sizing: border-box; border-radius: 12px; }
+.frame--app { left: 65px; border: 1px solid #D9D6CE; background: #FFFFFF; box-shadow: 0 1px 2px rgba(31, 30, 28, 0.04); }
+.frame--folder { left: 395px; border: 1px dashed #B9B5AC; background: rgba(255, 255, 255, 0.55); }
+.frame__head {
+  height: 34px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-size: 11px; color: #3D3B37;
+  white-space: nowrap; overflow: hidden;
+}
+.frame--app .frame__head { border-bottom: 1px solid #E2E0DA; }
+.frame--folder .frame__head { border-bottom: 1px dashed #D9D6CE; }
+.label {
+  position: absolute; left: 300px; top: 172px; padding: 1px 7px; border-radius: 4px; background: #F7F6F3;
+  font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-size: 11px; color: #1D6F86;
+}
+.hint { position: absolute; left: 65px; bottom: 30px; display: flex; align-items: center; gap: 8px; color: #6F6C66; font-size: 12px; }
 </style>
 </head>
 <body>
 <div class="window">
-  <div class="top">
-    <svg width="22" height="22" viewBox="0 0 96 96"><g fill="none" stroke="#1F1E1C" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"><path d="M31.75 57.5 22.25 48 31.75 38.5"/><path d="M64.25 57.5 73.75 48 64.25 38.5"/><circle cx="48" cy="48" r="8" fill="#1F1E1C" stroke="none"/></g></svg>
-    <span class="name">React App Explorer</span>
+  <div class="frame frame--app">
+    <div class="frame__head">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A877F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>
+      React App Explorer.app
+    </div>
   </div>
-  <div class="rule"></div>
-  <div class="chevrons">
-    <svg width="14" height="24" viewBox="0 0 14 24"><path d="M3 3 L11 12 L3 21" fill="none" stroke="#D9D6CE" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <svg width="14" height="24" viewBox="0 0 14 24"><path d="M3 3 L11 12 L3 21" fill="none" stroke="#B9B5AC" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <svg width="14" height="24" viewBox="0 0 14 24"><path d="M3 3 L11 12 L3 21" fill="none" stroke="#8A877F" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <div class="frame frame--folder">
+    <div class="frame__head">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A877F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      /Applications
+    </div>
   </div>
-  <p class="hint" style="margin: 0">To install, drag the app onto the Applications folder.</p>
+  <svg width="660" height="400" viewBox="0 0 660 400" style="position: absolute; inset: 0">
+    <path d="M265 196 C 320 196, 340 196, 393 196" fill="none" stroke="#2B8FAE" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="265" cy="196" r="4.5" fill="#2B8FAE" stroke="#F7F6F3" stroke-width="2"/>
+    <path d="M382 189 L 394 196 L 382 203 z" fill="#2B8FAE"/>
+  </svg>
+  <span class="label">installs</span>
+  <div class="hint">
+    <svg width="18" height="18" viewBox="0 0 96 96"><g fill="none" stroke="#3D3B37" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"><path d="M31.75 57.5 22.25 48 31.75 38.5"/><path d="M64.25 57.5 73.75 48 64.25 38.5"/><circle cx="48" cy="48" r="8" fill="#3D3B37" stroke="none"/></g></svg>
+    Drag the app onto Applications
+  </div>
 </div>
 </body>
 </html>

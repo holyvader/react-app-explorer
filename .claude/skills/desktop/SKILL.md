@@ -29,8 +29,9 @@ description: Build, run or change the desktop app (Electron, packages/desktop) a
   `dev.rae.explorer`, the version from `package.json`, `LSMinimumSystemVersion` 13.0 — Bun's minimum),
   the sidecar, `tsgo/` and `loading/` as resources, ad-hoc signed (nested executables first), and a
   `.dmg` in `out/` made by **appdmg**: its window (660 × 400) is `dmg/background.png` + `@2x` (combined
-  into a Retina TIFF) in the Paper palette: the mark and name, a hairline, three chevrons from the app
-  (165,192) to Applications (495,192), how to install. Icons 128 px; the app icon is the volume's.
+  into a Retina TIFF), drawn like the app draws a diagram in its Paper palette: the app in a file frame,
+  Applications in a dashed folder frame, an "installs" relation, on the dot grid; Finder's icons sit in
+  the frames (165,192 / 495,192). Icons 128 px; the app icon is the volume's.
   **Light in both appearances, on purpose**: Finder draws a background picture on white even in Dark Mode
   (a transparent one doesn't let its dark window through; only a window with no picture follows the
   appearance) and keeps the icons' names black over a picture, so a light picture reads either way.
