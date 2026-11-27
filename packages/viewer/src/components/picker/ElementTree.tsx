@@ -6,6 +6,7 @@ import { CHANGE_LETTER, CHANGE_WORD, changeOf } from "../../lib/diff.ts";
 import type { NodeKind } from "@rae/schema";
 import { KIND_META, renderingLabel } from "../../lib/kinds.tsx";
 import { useExplorer, useRelationFilter } from "../../store.ts";
+import { setDragGhost, TREE_DRAG_TYPE } from "../../lib/treeDrag.ts";
 import "./picker.css";
 
 export type TickState = "off" | "on" | "file" | "all" | "partial";
@@ -35,6 +36,12 @@ export interface ElementTreeProps {
   selectedId?: string;
   /** Diff snapshots: only what the diff touched (and the folders / files down to it), all opened at first. */
   changesOnly?: boolean;
+  /**
+   * Browse mode: rows picked for adding together (⌘-click toggles one, ⇧-click a run from the last
+   * one), marked; `toggle` flips the keys, `range` adds them. Picked rows drag onto the canvas together.
+   */
+  picked?: ReadonlySet<string>;
+  onPick?: (keys: string[], how: "toggle" | "range" | "clear") => void;
   /** Browse mode: a row right-clicked (the file tree's menu), at that point. */
   onRowMenu?: (node: TreeNode, at: { x: number; y: number }) => void;
   /** Shown when there are no rows at all (without a filter). */
@@ -73,7 +80,7 @@ function kindOfRow(n: TreeNode, nodes: Record<string, { kind: NodeKind }> | unde
  * The scanned model as a tree under a filter box. ↓ from the box steps into the tree; ↑/↓ move,
  * →/← (or the chevron) open/close, Enter or Space activates the row — folders included.
  */
-export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText, commands, onRowMenu }: ElementTreeProps) {
+export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef, placeholder, hideFilter, drawn, onAdd, selectedId, changesOnly, emptyText, commands, onRowMenu, picked, onPick }: ElementTreeProps) {
   const snapshot = useExplorer((s) => s.snapshot);
   const filter = useRelationFilter({ allGroups: true });
   const diffOverlay = useExplorer((s) => s.diffOverlay);
@@ -98,6 +105,8 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
   const presentKinds = useMemo(() => new Set(Object.values(snapshot?.nodes ?? {}).map((n) => n.kind)), [snapshot]);
   const accept = useMemo(() => (kinds.size ? (n: TreeNode) => kinds.has(kindOfRow(n, snapshot?.nodes) as NodeKind) : undefined), [kinds, snapshot]);
   const list = useRef<HTMLDivElement>(null);
+  // the last row picked: ⇧-click picks the run from it
+  const pickAnchor = useRef<string | null>(null);
 
   // changes view: what git says about each file (status, line counts)
   const fileChanges = useMemo(() => new Map((changesOnly && snapshot?.diff?.files.map((f) => [f.path, f])) || []), [changesOnly, snapshot]);
@@ -265,6 +274,8 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
           // a folder holding changes, or (changes view) a file git didn't change whose elements did
           const dirChanged = diffShown && ((n.kind === "folder" && changedDirs.has(n.path)) || (!!changesOnly && n.kind === "file" && !change && !fileChanges.has(n.path)));
           const big = node && index && (n.kind === "file" || n.file) ? bigFileOf(fileSize(snapshot!, index, node), bigLimits) : undefined;
+          // what adding this row adds: its element, or the folder
+          const addKey = n.id ?? (n.kind === "folder" ? n.key : undefined);
           const gitFile = changesOnly && (n.kind === "file" || n.file) ? fileChanges.get(n.path) : undefined;
           return (
             <button
@@ -281,7 +292,31 @@ export function ElementTree({ mode, onActivate, tickOf, keep, inactive, inputRef
               data-selected={mode === "browse" && !!selectedId && (n.id ?? n.key) === selectedId ? "" : undefined}
               tabIndex={i === 0 ? 0 : -1}
               style={{ paddingLeft: mode === "browse" ? 10 + r.depth * 12 : 8 + r.depth * 16 }}
-              onClick={() => activate(n)}
+              data-picked={addKey && picked?.has(addKey) ? "" : undefined}
+              draggable={mode === "browse" && !!addKey}
+              onDragStart={(e) => {
+                if (!addKey) return;
+                const ids = picked?.has(addKey) ? [...picked] : [addKey];
+                e.dataTransfer.setData(TREE_DRAG_TYPE, JSON.stringify(ids));
+                e.dataTransfer.effectAllowed = "copy";
+                setDragGhost(e.nativeEvent, ids.length > 1 ? `+${ids.length}` : `+ ${n.name}`);
+              }}
+              onClick={(e) => {
+                if (mode === "browse" && onPick && addKey && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                  // ⌘-click: this row in or out; ⇧-click: the run from the last one picked
+                  const from = e.shiftKey && pickAnchor.current ? rows.findIndex((r) => (r.node.id ?? r.node.key) === pickAnchor.current) : -1;
+                  if (from >= 0) {
+                    const [a, b] = from < i ? [from, i] : [i, from];
+                    const run = rows.slice(a, b + 1).map((r) => r.node.id ?? (r.node.kind === "folder" ? r.node.key : undefined)).filter((k): k is string => !!k);
+                    onPick(run, "range");
+                  } else onPick([addKey], "toggle");
+                  pickAnchor.current = addKey;
+                  return;
+                }
+                if (picked?.size) onPick?.([], "clear");
+                pickAnchor.current = addKey ?? null;
+                activate(n);
+              }}
               onContextMenu={
                 onRowMenu &&
                 ((e) => {

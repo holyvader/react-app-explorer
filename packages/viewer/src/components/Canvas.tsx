@@ -1,3 +1,4 @@
+import { TREE_DRAG_TYPE } from "../lib/treeDrag.ts";
 import { ContextMenu, type Shortcut, tokenVar, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
@@ -321,6 +322,21 @@ export function Canvas() {
         data-refused-drop={drag.refusedDrop ? "" : undefined}
         // Shift + drag on empty space: a selection box, before React Flow (or a frame's room) pans
         onPointerDownCapture={marquee.onPointerDownCapture}
+        // rows dragged from the file tree: added where they're dropped (asking first when many)
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(TREE_DRAG_TYPE)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          const raw = e.dataTransfer.getData(TREE_DRAG_TYPE);
+          if (!raw) return;
+          e.preventDefault();
+          const ids = JSON.parse(raw) as string[];
+          const at = flow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+          if (ids.length === 1) useExplorer.getState().addNodes(ids, { anchor: at, select: ids[0] });
+          else useExplorer.getState().requestAdd(ids, `${ids.length} elements from the tree`, at);
+        }}
         // Pressing on the diagram takes focus from any field, so the diagram's shortcuts apply.
         onPointerDown={(e) => {
           const active = document.activeElement as HTMLElement | null;

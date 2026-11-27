@@ -104,6 +104,12 @@
 .rae-tree__tick[data-state="file"], .rae-tree__tick[data-state="partial"] { background: color-mix(in srgb, var(--chakra-colors-selection-solid) 45%, transparent); border-color: var(--chakra-colors-selection-solid); }
 /* file tree panel (browse mode): elements on the diagram, the selected one, and the + to add */
 .rae-tree__row[data-drawn] .rae-tree__name { font-weight: 500; }
+/* rows drag onto the canvas: `all: unset` above took the UA's `-webkit-user-drag` away */
+.rae-tree__row[draggable="true"] { -webkit-user-drag: element; }
+/* picked to add together (⌘ / ⇧-click in the file tree) */
+.rae-tree__row[data-picked] { background: color-mix(in oklab, var(--chakra-colors-selection-solid) 18%, transparent); color: var(--chakra-colors-fg); }
+.rae-tree__row[data-picked]:hover { background: color-mix(in oklab, var(--chakra-colors-selection-solid) 24%, transparent); }
+.rae-drag-ghost { position: fixed; top: -100px; left: -100px; padding: 2px 9px; border-radius: 999px; font: 600 12px/20px var(--chakra-fonts-body); color: #fff; background: var(--chakra-colors-selection-solid); box-shadow: 0 6px 16px -6px rgb(0 0 0 / 0.5); white-space: nowrap; }
 .rae-tree__row[data-selected] { background: var(--chakra-colors-selection-tree-row); box-shadow: inset 2px 0 0 var(--chakra-colors-selection-solid); color: var(--chakra-colors-fg); }
 .rae-tree__row[data-selected] .rae-tree__note { color: var(--chakra-colors-fg-muted); }
 /* a file past the big-file limits (Settings → Code health) */

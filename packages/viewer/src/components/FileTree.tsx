@@ -1,4 +1,4 @@
-import { ActionIconButton, ContextMenu, Flex, Panel, PanelBar, Text, textPx } from "@rae/design-system";
+import { ActionIconButton, Button, ContextMenu, Flex, Kbd, Panel, PanelBar, Text, textPx } from "@rae/design-system";
 import { IconDiff, IconFilter, IconPanelClose, IconPanelOpen } from "@rae/design-system/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../graph/tree.ts";
@@ -24,6 +24,24 @@ export function FileTree() {
   // diff snapshots: the changes, file by file, instead of the whole tree (shown first)
   const [changesView, setChangesView] = useState(true);
   const showChanges = !!snapshot?.diff && changesView;
+  // rows picked to add together (⌘ / ⇧-click), then added at once from the bar at the foot (or ⏎)
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const onPick = useCallback((keys: string[], how: "toggle" | "range" | "clear") => {
+    setPicked((prev) => {
+      if (how === "clear") return new Set();
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (how === "range" || !next.has(k)) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+  }, []);
+  const addPicked = useCallback(() => {
+    if (!picked.size) return;
+    useExplorer.getState().requestAdd([...picked], `${picked.size} elements from the tree`);
+    setPicked(new Set());
+  }, [picked]);
   // a row's right-click menu (or the panel's own, off the rows: just the routes)
   const [menu, setMenu] = useState<{ node?: TreeNode; at: { x: number; y: number } } | null>(null);
   const onRowMenu = useCallback((node: TreeNode, at: { x: number; y: number }) => setMenu({ node, at }), []);
@@ -122,16 +140,41 @@ export function FileTree() {
           e.preventDefault();
           setMenu({ at: { x: e.clientX, y: e.clientY } });
         }}
+        onKeyDownCapture={(e) => {
+          // with rows picked, ⏎ adds them (not the focused row's own action), Esc lets them go
+          if (!picked.size || (e.target as HTMLElement).matches("input")) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            addPicked();
+          } else if (e.key === "Escape") {
+            e.stopPropagation();
+            setPicked(new Set());
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape" && filtering) setFiltering(false);
         }}
       >
         {showChanges ? (
-          <ChangesList onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} />
+          <ChangesList onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} picked={picked} onPick={onPick} />
         ) : (
-          <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
+          <ElementTree mode="browse" onActivate={activate} drawn={drawn} onAdd={add} selectedId={selectedId} onRowMenu={onRowMenu} picked={picked} onPick={onPick} inputRef={inputRef} placeholder="Filter files…" hideFilter={!filtering} />
         )}
       </Flex>
+      {picked.size > 0 && (
+        <Flex align="center" gap="2" px="3" py="2" flexShrink={0} borderTopWidth="1px" borderColor="border" bg="bg.subtle" role="toolbar" aria-label="Picked elements">
+          <Text flex="1" minW="0" fontSize={textPx(12)} fontWeight="medium" truncate>
+            {picked.size} selected
+          </Text>
+          <Button size="2xs" variant="ghost" onClick={() => setPicked(new Set())}>
+            Clear
+          </Button>
+          <Button size="2xs" colorPalette="accent" onClick={addPicked} title="Add them to the diagram (⏎); or drag them onto it">
+            Add to canvas <Kbd size="sm">⏎</Kbd>
+          </Button>
+        </Flex>
+      )}
       <ContextMenu at={menu?.at ?? null} onClose={() => setMenu(null)} entries={menuEntries} title={menu?.node?.name} />
       {/* what was scanned, quietly */}
       <Flex align="center" h="28px" px="3" flexShrink={0} borderTopWidth="1px" borderColor="border.muted">

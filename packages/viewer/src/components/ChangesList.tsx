@@ -11,6 +11,9 @@ export interface ChangesListProps {
   /** The + next to a row's name (rows not on the diagram). */
   onAdd: (node: TreeNode) => void;
   selectedId?: string;
+  /** Rows picked to add together (see ElementTree). */
+  picked?: ReadonlySet<string>;
+  onPick?: (keys: string[], how: "toggle" | "range" | "clear") => void;
   /** A row right-clicked. */
   onRowMenu?: (node: TreeNode, at: { x: number; y: number }) => void;
 }
@@ -20,7 +23,7 @@ export interface ChangesListProps {
  * with its changed elements (and files git didn't change whose elements did), all open at first.
  * Rows open and add like the file tree's (the + puts one on the diagram).
  */
-export function ChangesList({ onActivate, drawn, onAdd, selectedId, onRowMenu }: ChangesListProps) {
+export function ChangesList({ onActivate, drawn, onAdd, selectedId, onRowMenu, picked, onPick }: ChangesListProps) {
   const diff = useExplorer((s) => s.snapshot?.diff);
   const inputRef = useRef<HTMLInputElement>(null);
   if (!diff) return null;
@@ -45,7 +48,7 @@ export function ChangesList({ onActivate, drawn, onAdd, selectedId, onRowMenu }:
           Show on canvas
         </Button>
       </Flex>
-      <ElementTree mode="browse" changesOnly onActivate={onActivate} drawn={drawn} onAdd={onAdd} selectedId={selectedId} onRowMenu={onRowMenu} inputRef={inputRef} hideFilter emptyText="No changes under this folder." />
+      <ElementTree mode="browse" changesOnly onActivate={onActivate} drawn={drawn} onAdd={onAdd} selectedId={selectedId} onRowMenu={onRowMenu} picked={picked} onPick={onPick} inputRef={inputRef} hideFilter emptyText="No changes under this folder." />
     </>
   );
 }
