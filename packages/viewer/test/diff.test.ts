@@ -85,6 +85,24 @@ describe("diff snapshots in the viewer", () => {
     expect(changesToShow(s, 2)).toHaveLength(2);
   });
 
+  test("a change in a route's file brings its route (drawn as its frame); changed routes come too", () => {
+    const base = snapshot();
+    const route = (id: string, url: string, files: Record<string, string>) =>
+      ({ id, kind: "route", name: url, filePath: url, route: { url, segment: "", segmentKind: "static", params: [], kind: "page", files } }) as unknown as Snapshot["nodes"][string];
+    base.nodes["route:/"] = route("route:/", "/", { page: "src/App.tsx" });
+    base.nodes["route:/about"] = route("route:/about", "/about", {});
+    base.diff!.nodes["route:/about"] = "added";
+    const s = applyDiff(base);
+    const ids = changesToShow(s);
+    // App changed in the route's page: App, its file, and the route around them
+    expect(ids).toContain("route:/");
+    expect(ids.indexOf("route:/")).toBe(ids.indexOf("src/App.tsx") + 1);
+    // a changed route without changed files is drawn as well
+    expect(ids).toContain("route:/about");
+    // the limit still holds
+    expect(changesToShow(s, 3)).toHaveLength(3);
+  });
+
   test("a changed declaration never comes without its file", () => {
     const s = applyDiff(snapshot());
     const ids = changesToShow(s);

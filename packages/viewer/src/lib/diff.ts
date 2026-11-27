@@ -97,30 +97,48 @@ export function withFilesOfChanges(s: Snapshot, ids: readonly string[]): string[
 
 /**
  * What a diff opens with: its changed, added and removed elements — declarations, each with the file
- * holding it (as a frame, for context), then other changed files — without libraries and routes. At
- * most `limit` ids; a declaration never comes without its file.
+ * holding it (as a frame, for context), then other changed files — without libraries. A change in a
+ * route's file (its page, layout…) brings that route too, so it's drawn inside its route's frame, and
+ * changed routes come last. At most `limit` ids; a declaration never comes without its file. The
+ * Changes panel lists them all: past `limit`, its "Show on canvas" adds the rest.
  */
 export function changesToShow(s: Snapshot, limit = CHANGES_ON_OPEN): string[] {
   const d = s.diff;
   if (!d) return [];
+  // route files → their route (graph/drawn.ts has the same; it imports this file)
+  const routeOfFile = new Map<string, string>();
+  for (const n of Object.values(s.nodes)) for (const f of Object.values(n.route?.files ?? {})) if (f) routeOfFile.set(f, n.id);
+  const routeOf = (id: string) => {
+    const n = s.nodes[id];
+    return n ? routeOfFile.get(n.kind === "module" || n.file ? id : (n.moduleId ?? "")) : undefined;
+  };
   const decls: string[] = [];
   const files: string[] = [];
+  const routes: string[] = [];
   for (const id of Object.keys(d.nodes)) {
     const n = s.nodes[id];
-    if (!n || n.kind === "external" || n.kind === "route") continue;
-    (n.kind === "module" ? files : decls).push(id);
+    if (!n || n.kind === "external") continue;
+    (n.kind === "route" ? routes : n.kind === "module" ? files : decls).push(id);
   }
   const out = new Set<string>();
+  /** Adds these together, or none of them when they don't all fit. */
+  const add = (ids: (string | undefined)[]) => {
+    const fresh = [...new Set(ids.filter((x): x is string => !!x && !out.has(x)))];
+    if (out.size + fresh.length > limit) return false;
+    for (const x of fresh) out.add(x);
+    return true;
+  };
   for (const id of decls) {
     const file = fileOfChange(s, id);
-    if (out.size + (file && !out.has(file) ? 2 : 1) > limit) break;
-    out.add(id);
-    if (file) out.add(file);
+    // the declaration and its file; its route if there's room for it too
+    if (!add([id, file])) break;
+    add([routeOf(id)]);
   }
   for (const f of files) {
     if (out.size >= limit) break;
-    out.add(f);
+    if (add([f])) add([routeOf(f)]);
   }
+  for (const r of routes) if (out.size < limit) add([r]);
   return [...out];
 }
 

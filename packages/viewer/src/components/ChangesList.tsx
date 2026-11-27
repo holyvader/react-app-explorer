@@ -44,7 +44,7 @@ export function ChangesList({ onActivate, drawn, onAdd, selectedId, onRowMenu, p
             −{counts.removed}
           </Text>
         </Text>
-        <Button size="2xs" variant="outline" rounded="l2" onClick={() => useExplorer.getState().showChanges()}>
+        <Button size="2xs" variant="outline" rounded="l2" onClick={() => useExplorer.getState().showChanges(true)}>
           Show on canvas
         </Button>
       </Flex>

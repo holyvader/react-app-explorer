@@ -176,7 +176,7 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 - Canvas: node data `change` → `data-change` on `.rae-card` / `.rae-frame` + the A/M/D `.rae-change` corner
   badge; edges get `rae-edge--added|removed`. Colours: `diff.{added,changed,removed}.{solid,subtle,fg}` tokens
   (green / amber / red; blue stays selection's).
-- A diff opens with `changesToShow` (declarations first, then their files) unless its diagram was saved;
+- A diff opens with `changesToShow` (declarations first, each with its file and — for a route's file — its route, so it's drawn in the route's frame; then changed files, then changed routes) unless its diagram was saved, up to `confirmAbove` (Settings; a notice says how many are left out). "Show on canvas" (Changes panel) and the impact summary add all of them (`showChanges(true)`, through `requestAdd`, asking first);
   diagrams are stored per diff (`rae.diagram:<root>@<base>..<head>`).
 - Files panel: the Changes view (`ChangesList`: counts + "Show on canvas" over `ElementTree changesOnly` — the
   tree pruned by `changesTree` to changed elements and files git lists, with their folders, all opened at

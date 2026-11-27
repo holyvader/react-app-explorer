@@ -47,7 +47,7 @@ export function ImpactModal() {
             rounded="l2"
             onClick={() => {
               close();
-              showChanges();
+              showChanges(true);
             }}
           >
             Show the changes on the diagram

@@ -213,7 +213,8 @@ interface ExplorerState {
   /** Back (-1) or forward (+1) in the code dialog's history. */
   codeStep: (by: -1 | 1) => void;
   /** Diff snapshots: puts the changes on the canvas (declarations and their files, up to a limit). */
-  showChanges: () => void;
+  /** A diff's changes on the canvas: up to `confirmAbove` (a notice says what's left), or `all` of them (asking first when many). */
+  showChanges: (all?: boolean) => void;
   setImpactOpen: (open: boolean) => void;
   /** Opens the diff summary once this snapshot (a compare scan's result) is loaded. */
   openImpactFor: (file: string) => void;
@@ -381,12 +382,20 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       else set({ impactFor });
     },
 
-    showChanges: () => {
+    showChanges: (everything) => {
       const s = get();
       if (!s.snapshot?.diff) return;
-      const ids = changesToShow(s.snapshot);
+      if (everything) {
+        if (!s.diffOverlay) set({ diffOverlay: true });
+        return s.requestAdd(changesToShow(s.snapshot, Number.MAX_SAFE_INTEGER), "All the changes");
+      }
+      // up to the confirmation limit at once; past it, a notice says what's left out (the Changes
+      // panel's "Show on canvas" adds the rest, asking first)
+      const all = changesToShow(s.snapshot, Number.MAX_SAFE_INTEGER);
+      const ids = all.length > s.confirmAbove ? changesToShow(s.snapshot, s.confirmAbove) : all;
       if (!s.diffOverlay) set({ diffOverlay: true });
       get().addNodes(ids, { fit: true });
+      if (ids.length < all.length) get().notify(`Showing ${ids.length} of ${all.length} changed elements. "Show on canvas" in the Changes panel adds the rest.`);
     },
 
     updateSnapshot: (snapshot, name) => {
