@@ -28,7 +28,14 @@ description: Build, run or change the desktop app (Electron, packages/desktop) a
 - `packages/desktop/package.ts` — `@electron/packager`: `React App Explorer.app` (bundle id
   `dev.rae.explorer`, the version from `package.json`, `LSMinimumSystemVersion` 13.0 — Bun's minimum),
   the sidecar, `tsgo/` and `loading/` as resources, ad-hoc signed (nested executables first), and a
-  `.dmg` (app + /Applications link) in `out/`.
+  `.dmg` in `out/` made by **appdmg**: its window (660 × 400) is `dmg/background.png` + `@2x` (combined
+  into a Retina TIFF), drawn like the app draws a diagram — the app in a file frame, Applications in a
+  folder frame, an "installs" relation; Finder's icons sit in the frames (165,192 / 495,192, 128 px),
+  the app icon is the volume's. Change the look in `dmg/background.html`, then `bun
+  packages/desktop/dmg/render.ts` (headless Chromium, the design system's bundled fonts) and commit the PNGs.
+  appdmg runs as **its CLI under Node**: its `macos-alias` addon doesn't link CoreFoundation and only
+  loads inside Node (Bun: "symbol not found … _kCFURLVolumeNameKey"). `macos-alias` and `fs-xattr` are
+  in the root `trustedDependencies` (native builds).
 - The data folders are the ones the app has always had (from its Tauri days, until 0.1.33): projects,
   snapshots and `viewer-storage.json` carry over.
 

@@ -23,6 +23,8 @@
     "typescript": "7.1.0-beta"
   },
   "trustedDependencies": [
-    "electron"
+    "electron",
+    "fs-xattr",
+    "macos-alias"
   ]
 }
