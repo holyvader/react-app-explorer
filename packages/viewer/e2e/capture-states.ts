@@ -26,7 +26,6 @@ const fresh = async () => {
   await st((s) => {
     const g = s.getState();
     g.setSearchOpen(false);
-    g.setQuickAdd(null);
     g.openMenu(null);
     g.inspect(undefined);
     g.setDetailsOpen(true);

@@ -16,6 +16,9 @@ import { ScriptCommands } from "../scripts/ScriptCommands.tsx";
  */
 export function ExplorationPicker() {
   const open = useExplorer((s) => s.searchOpen);
+  // a right-click on empty space: open there, and put what's ticked at that point
+  const at = useExplorer((s) => s.searchAt);
+  const searchAnchor = useExplorer((s) => s.searchAnchor);
   const snapshot = useExplorer((s) => s.snapshot);
   const visible = useExplorer((s) => s.visible);
   const filter = useRelationFilter({ allGroups: true });
@@ -48,8 +51,9 @@ export function ExplorationPicker() {
     [shown, onCanvas, snapshot],
   );
 
-  // New elements go near the middle of what the user is looking at.
+  // New elements go where the canvas was right-clicked, else near the middle of what the user is looking at.
   const anchor = () => {
+    if (searchAnchor) return searchAnchor;
     const box = document.querySelector(".rae-canvas")?.getBoundingClientRect();
     return box ? flow.screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 }) : null;
   };
@@ -81,7 +85,8 @@ export function ExplorationPicker() {
       open={open}
       onOpenChange={(o) => setSearchOpen(o)}
       label="Add to the diagram"
-      placement="top"
+      placement={at ? "bottom-start" : "top"}
+      at={at}
       initialFocusEl={input}
       height="min(560px, calc(100dvh - 200px))"
       // opens above the canvas's bottom centre (Space, ⌘K, "Start exploration"); no button there: the
@@ -107,9 +112,9 @@ export function ExplorationPicker() {
           },
         }}
       />
+      <div className="rae-picker-hint">Click once to draw, again for all inside a file or folder, once more to take them off.</div>
       <div className="rae-picker-foot">
-        <span style={{ flex: 1 }}>Click once to draw, again for all inside a file or folder, once more to take them off.</span>
-        <output>
+        <output style={{ flex: 1 }}>
           <b>{visible.length}</b> of {total} drawn
         </output>
         <Button size="xs" variant="outline" disabled={visible.length >= total} onClick={() => requestAdd(Object.keys(snapshot?.nodes ?? {}).filter((id) => !id.startsWith("asset:") && !isFiltered(snapshot!.nodes[id], filter.libraries)), "All elements")}>

@@ -128,6 +128,16 @@
 .rae-tree__add + .rae-tree__note { margin-left: 0; }
 .rae-tree__more { padding: 6px 12px; font-size: calc(12px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); }
 .rae-tree__empty { padding: 16px 12px; font-size: calc(13px * var(--rae-text-scale, 1)); color: var(--chakra-colors-fg-muted); text-align: center; }
+/* how ticking works: one dimmed line across the picker, above its buttons */
+.rae-picker-hint {
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--chakra-colors-border-muted);
+  background: var(--chakra-colors-bg-subtle);
+  font: calc(11.5px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
+  color: var(--chakra-colors-fg-subtle);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rae-picker-hint + .rae-picker-foot { border-top: 0; padding-top: 8px; }
 .rae-picker-foot {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px;
@@ -136,7 +146,6 @@
   font: calc(12px * var(--rae-text-scale, 1)) var(--chakra-fonts-body);
   color: var(--chakra-colors-fg-muted);
 }
-/* The round plus at the canvas's foot. */
 /* where the picker opens from (Space, ⌘K): the canvas's bottom centre, nothing drawn there */
 .rae-add-anchor { position: absolute; bottom: 24px; left: 50%; width: 1px; height: 1px; pointer-events: none; }
 

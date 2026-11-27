@@ -141,8 +141,8 @@ interface ExplorerState {
   searchOpen: boolean;
   /** Where nodes picked in search go (right-click on the canvas); viewport centre otherwise. */
   searchAnchor?: CanvasPoint;
-  /** Quick add: right-click on the empty canvas opens a small picker there (client coords + canvas point). */
-  quickAdd: { at: { x: number; y: number }; anchor: CanvasPoint } | null;
+  /** Right-click on the canvas: the picker opens there (client coordinates); else above the canvas's foot. */
+  searchAt?: { x: number; y: number };
   /** Open context menu: a node's actions, or what a file contains (its "+" button). */
   menu: { id: string; x: number; y: number; mode: "node" | "contains" } | null;
   pending?: PendingExpansion;
@@ -235,8 +235,8 @@ interface ExplorerState {
   setEditor: (e: EditorKind) => void;
   /** The installed editors; the chosen one falls back to the first of them when it isn't one (not stored). */
   setEditors: (editors: EditorKind[] | null) => void;
-  setSearchOpen: (open: boolean, anchor?: CanvasPoint) => void;
-  setQuickAdd: (q: ExplorerState["quickAdd"]) => void;
+  /** The picker (Space, ⌘K, a right-click on empty space): `anchor` where picked elements go, `at` where it opens. */
+  setSearchOpen: (open: boolean, anchor?: CanvasPoint, at?: { x: number; y: number }) => void;
   openMenu: (menu: ExplorerState["menu"]) => void;
   /** Adds many elements (folders too); above `confirmAbove` it asks first. */
   requestAdd: (ids: string[], label: string, anchor?: Anchor) => void;
@@ -318,7 +318,6 @@ export const useExplorer = create<ExplorerState>((set, get) => {
   return {
     visible: [],
     selection: [],
-    quickAdd: null,
     menu: null,
     past: [],
     future: [],
@@ -729,8 +728,7 @@ export const useExplorer = create<ExplorerState>((set, get) => {
       set({ editors, ...(editors?.length && !editors.includes(editor) ? { editor: editors[0] } : {}) });
     },
 
-    setSearchOpen: (searchOpen, searchAnchor) => set({ searchOpen, ...(searchOpen ? { searchAnchor } : {}) }),
-    setQuickAdd: (quickAdd) => set({ quickAdd }),
+    setSearchOpen: (searchOpen, searchAnchor, searchAt) => set({ searchOpen, ...(searchOpen ? { searchAnchor, searchAt } : {}) }),
     openMenu: (menu) => set({ menu }),
 
     requestAdd: (ids, label, anchor = null) => {

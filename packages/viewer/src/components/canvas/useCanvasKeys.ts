@@ -24,9 +24,8 @@ export function useCanvasKeys() {
       const s = useExplorer.getState();
       // Esc closes what's open (picker, quick add, menu) — even from inside it — else clears the selection.
       if (e.key === "Escape") {
-        if (s.searchOpen || s.quickAdd || s.menu) {
+        if (s.searchOpen || s.menu) {
           if (s.searchOpen) s.setSearchOpen(false);
-          if (s.quickAdd) s.setQuickAdd(null);
           if (s.menu) setMenu(null);
         } else if (!isTyping(e.target)) s.select(undefined);
         return;

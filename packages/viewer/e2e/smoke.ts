@@ -160,11 +160,11 @@ await page.getByLabel("Filter elements").waitFor();
 await page.keyboard.press("Escape");
 await page.getByLabel("Filter elements").waitFor({ state: "detached" });
 
-// Right-click on the empty canvas: quick add right there.
+// Right-click on the empty canvas: the same picker as Space, opened right there.
 await page.locator(".react-flow__pane").click({ button: "right", position: { x: 30, y: 120 } });
-await page.getByPlaceholder(/Add here/).waitFor();
+await page.getByLabel("Filter elements").waitFor();
 await page.keyboard.press("Escape");
-await page.getByPlaceholder(/Add here/).waitFor({ state: "detached" });
+await page.getByLabel("Filter elements").waitFor({ state: "detached" });
 
 // Delete removes the selection; undo brings it back, redo removes it again.
 const count = () => page.locator(".react-flow__node").count();

@@ -42,7 +42,6 @@ import { NodeDiffModal } from "./NodeDiffModal.tsx";
 import { collapseLevelOf, type Lod, LodContext, lodOf, nextLod } from "./lod.ts";
 import { containsEntries, nodeMenuEntries } from "./nodeMenu.tsx";
 import { ExplorationPicker } from "./picker/ExplorationPicker.tsx";
-import { QuickAdd } from "./picker/QuickAdd.tsx";
 import { NodeTooltip } from "./NodeTooltip.tsx";
 import { CardNode } from "./nodes/CardNode.tsx";
 import { FrameNode } from "./nodes/FrameNode.tsx";
@@ -391,7 +390,8 @@ export function Canvas() {
               e.preventDefault();
               const s = useExplorer.getState();
               // Quick add: a small picker right there; what's picked lands at that point.
-              if (s.snapshot) s.setQuickAdd({ at: { x: e.clientX, y: e.clientY }, anchor: flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
+              // the picker, right there: what's ticked in it lands at that point
+              if (s.snapshot) s.setSearchOpen(true, flow.screenToFlowPosition({ x: e.clientX, y: e.clientY }), { x: e.clientX, y: e.clientY });
             }}
             onNodeDragStart={drag.onNodeDragStart}
             onNodeDrag={drag.onNodeDrag}
@@ -421,7 +421,6 @@ export function Canvas() {
         {codeDiffOf && snapshot && <NodeDiffModal node={codeDiffOf} snapshot={snapshot} open onOpenChange={(open) => !open && useExplorer.getState().showCodeDiff(undefined)} />}
         {marquee.box && <div className="rae-marquee" style={marquee.box} />}
         <ExplorationPicker />
-        <QuickAdd />
         <ReviewPopover />
         <ContextMenu
           at={menu && { x: menu.x, y: menu.y }}
