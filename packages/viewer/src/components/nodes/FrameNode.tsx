@@ -6,6 +6,7 @@ import { indexFolderOf } from "../../lib/displayName.ts";
 import { KIND_META, renderingKey, renderingLabel, routeCaption } from "../../lib/kinds.tsx";
 import { useExplorer } from "../../store.ts";
 import { COMPACT_BELOW, useLod } from "../lod.ts";
+import { ReviewBadge } from "../review/ReviewThreads.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { FRAME_HANDLE, type FrameFlowNode, HIDDEN_HANDLE } from "./types.ts";
 
@@ -126,6 +127,7 @@ function FrameNodeImpl({ id, data }: NodeProps<FrameFlowNode>) {
             </div>
             <div className="rae-file__path">{node.filePath.includes("/") ? node.filePath.slice(0, node.filePath.lastIndexOf("/") + 1) : "./"}</div>
           </div>
+          {data.review && <ReviewBadge id={element.id} {...data.review} />}
           {data.big && (
             <span className="rae-chip rae-chip--big" title={data.big.title}>
               {data.big.label}

@@ -8,6 +8,7 @@ import { KIND_META, duration, fileNote, renderingKey, renderingLabel, routeCapti
 import { isBlocks, useLod } from "../lod.ts";
 import { useExplorer } from "../../store.ts";
 import { propsChipLabel, propsCount } from "../../lib/propsCount.ts";
+import { ReviewBadge } from "../review/ReviewThreads.tsx";
 import { ContainsButton, NodeActions } from "./NodeActions.tsx";
 import { TagOutline } from "./TagOutline.tsx";
 import { type CardFlowNode, HIDDEN_HANDLE } from "./types.ts";
@@ -76,6 +77,7 @@ function RowCard({ data, node }: { data: CardFlowNode["data"]; node: GraphNode }
       </span>
       <span className="rae-name">{isComponent ? <JsxName name={data.element.name} /> : data.element.name}</span>
       {full && meta && <span className="rae-row__meta">{meta}</span>}
+      {data.review && <ReviewBadge id={data.element.id} {...data.review} />}
       {full && props && <span className="rae-chip rae-chip--props">{propsChipLabel(props)}</span>}
       {data.change && (
         <span className="rae-row__change" data-change={data.change} title={`${CHANGE_WORD[data.change]} in this diff`}>
@@ -191,8 +193,9 @@ function CardNodeImpl({ data, width, height }: NodeProps<CardFlowNode>) {
             </div>
           )}
         </div>
-        {full && ((fileBadges && (node.nextRole || moduleType)) || props || isIndex || data.big) && (
+        {full && ((fileBadges && (node.nextRole || moduleType)) || props || isIndex || data.big || data.review) && (
           <span className="rae-card__badges">
+            {data.review && <ReviewBadge id={element.id} {...data.review} />}
             {data.big && (
               <span className="rae-chip rae-chip--big" title={data.big.title}>
                 {data.big.label}

@@ -1,4 +1,4 @@
-import type { Snapshot } from "@rae/schema";
+import type { ReviewThread, Snapshot } from "@rae/schema";
 import { Position } from "@xyflow/react";
 import { type CSSProperties, useMemo } from "react";
 import type { Collapse } from "../../graph/collapse.ts";
@@ -56,6 +56,13 @@ export function useRelated(selection: string[], graph: DrawnGraph): Related {
   }, [selection, graph]);
 }
 
+/** An element's review threads, with those on its undrawn declarations (a file): how many, how many unresolved. */
+function reviewOf(id: string, undrawn: string[], byNode: Map<string, ReviewThread[]>): { count: number; open: number } | undefined {
+  const threads = [id, ...undrawn].flatMap((x) => byNode.get(x) ?? []);
+  if (!threads.length) return undefined;
+  return { count: threads.length, open: threads.filter((t) => !t.resolved).length };
+}
+
 export interface CanvasNodesInput {
   snapshot?: Snapshot;
   index?: GraphIndex;
@@ -65,11 +72,13 @@ export interface CanvasNodesInput {
   collapse: Collapse;
   selection: string[];
   related: Related;
+  /** Review threads by element (lib/review.ts): a badge on what they're on. */
+  review: Map<string, ReviewThread[]>;
   /** Settings → Code health: files past these limits wear a red badge. */
   bigFile: { lines: number; functions: number };
 }
 
-export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile }: CanvasNodesInput): ElementFlowNode[] {
+export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile, review }: CanvasNodesInput): ElementFlowNode[] {
   // Scanned elements (files + declarations) under each folder, for folder headers.
   const scannedUnder = useMemo(() => {
     const counts = new Map<string, number>();
@@ -180,13 +189,14 @@ export function useCanvasNodes({ snapshot, index, placed, filter, showDiff, coll
               : { parents: false, allParents: false, children: false, allChildren: false },
           change: showDiff ? changeOf(snapshot, id) : undefined,
           big: node ? bigFileOf(fileSize(snapshot, index, node), bigFile) : undefined,
+          review: review.size ? reviewOf(id, node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).map((e) => e.to) : [], review) : undefined,
           row: isRow(p) ? { groupStart: groupStarts.has(id) } : undefined,
           undrawnContents:
             node?.kind === "module" ? (index.out.get(id) ?? []).filter((e) => e.kind === "declares" && !drawn.has(e.to)).length : undefined,
         },
       } as ElementFlowNode;
     });
-  }, [snapshot, index, placed, filter, scannedUnder, showDiff, bigFile]);
+  }, [snapshot, index, placed, filter, scannedUnder, showDiff, bigFile, review]);
 
   const shownNodes = useMemo(() => {
     if (!collapse.frames.size) return derived;

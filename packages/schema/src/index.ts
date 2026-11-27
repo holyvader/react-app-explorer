@@ -494,6 +494,37 @@ export interface GitRequestList {
   fallback?: string;
 }
 
+// ---- review comments of a pull / merge request (/api/git/review) ----------------------------------
+
+export interface ReviewComment {
+  author?: string;
+  /** As written (Markdown), shown as plain text. */
+  body: string;
+  createdAt?: string;
+  /** The comment on the host's page (a pull / merge request link with its anchor). */
+  url?: string;
+}
+
+/** A review thread on a line of a file in the request's diff. */
+export interface ReviewThread {
+  id: string;
+  /** The file, relative to the opened folder (Snapshot.rootDir). */
+  path: string;
+  /** The line it's on, in the head (`new`) or the base (`old`); none when the code moved on (outdated). */
+  line?: number;
+  side: "new" | "old";
+  resolved: boolean;
+  outdated?: boolean;
+  comments: ReviewComment[];
+}
+
+/** GET /api/git/review?path=…&provider=…&number=…: the request's line comments, read through gh / glab. */
+export interface ReviewThreadList {
+  threads: ReviewThread[];
+  source?: "gh" | "glab";
+  error?: string;
+}
+
 // ---- package.json scripts (scanner/src/scripts.ts, /api/scripts) ----------------------------------
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";

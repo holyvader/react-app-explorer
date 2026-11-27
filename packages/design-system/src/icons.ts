@@ -45,6 +45,7 @@ export {
   FolderUp as IconFolderUp,
   RefreshCw as IconRescan,
   FileCode as IconFile,
+  MessageSquareText as IconComment,
   CornerLeftUp as IconParentDir,
   ScanSearch as IconScan,
   Library as IconLibrary,

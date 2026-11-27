@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import type { GitRequest, GitToolStatus, RequestSource } from "@rae/schema";
+import type { GitRequest, GitToolStatus, RequestSource, ReviewThread } from "@rae/schema";
 
 /*
  * Optional: the GitHub CLI (`gh`) and GitLab CLI (`glab`), for what git doesn't know about pull /
@@ -174,3 +174,100 @@ export function toolFor(provider: "github" | "gitlab" | undefined): HostTool[] {
 }
 
 export const SOURCES: readonly RequestSource[] = ["auto", "git", "gh", "glab"];
+
+// ---- review comments ------------------------------------------------------------------------------
+
+/** A thread as the host has it: its path relative to the repository root. */
+export type HostThread = Omit<ReviewThread, "path"> & { path: string };
+
+const GH_THREADS = `query($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id isResolved isOutdated path line originalLine diffSide
+          comments(first: 50) { nodes { author { login } body createdAt url } }
+        }
+      }
+    }
+  }
+}`;
+
+interface GhThread {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string;
+  line: number | null;
+  originalLine: number | null;
+  diffSide: "LEFT" | "RIGHT";
+  comments: { nodes: { author?: { login?: string } | null; body: string; createdAt?: string; url?: string }[] };
+}
+
+/** A pull request's review threads (`gh api graphql`: resolved state included), up to 500. */
+export async function reviewViaGh(root: string, remote: { host: string; path: string }, number: number): Promise<HostThread[]> {
+  const [owner, ...rest] = remote.path.split("/");
+  const out: HostThread[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const args = ["api", "graphql", "--hostname", remote.host, "-f", `query=${GH_THREADS}`, "-f", `owner=${owner}`, "-f", `name=${rest.join("/")}`, "-F", `number=${number}`];
+    if (after) args.push("-f", `after=${after}`);
+    const res = JSON.parse(await run("gh", args, root, 30_000)) as {
+      data?: { repository?: { pullRequest?: { reviewThreads?: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: GhThread[] } } } };
+    };
+    const threads = res.data?.repository?.pullRequest?.reviewThreads;
+    if (!threads) break;
+    for (const t of threads.nodes) {
+      out.push({
+        id: t.id,
+        path: t.path,
+        line: t.line ?? undefined,
+        side: t.diffSide === "LEFT" ? "old" : "new",
+        resolved: t.isResolved,
+        outdated: t.isOutdated || t.line === null,
+        comments: t.comments.nodes.map((c) => ({ author: c.author?.login, body: c.body, createdAt: c.createdAt, url: c.url })),
+      });
+    }
+    if (!threads.pageInfo.hasNextPage) break;
+    after = threads.pageInfo.endCursor;
+  }
+  return out;
+}
+
+interface GlabNote {
+  id: number;
+  body: string;
+  system?: boolean;
+  author?: { username?: string };
+  created_at?: string;
+  resolvable?: boolean;
+  resolved?: boolean;
+  position?: { new_path?: string; old_path?: string; new_line?: number | null; old_line?: number | null } | null;
+}
+
+/** A merge request's line discussions (`glab api …/discussions`), up to 500; `url` is the request's page, each note gets its anchor. */
+export async function reviewViaGlab(root: string, remote: { host: string; path: string }, iid: number, url?: string): Promise<HostThread[]> {
+  const project = encodeURIComponent(remote.path);
+  const out: HostThread[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const list = JSON.parse(await run("glab", ["api", "--hostname", remote.host, `projects/${project}/merge_requests/${iid}/discussions?per_page=100&page=${page}`], root, 30_000)) as { id: string; notes: GlabNote[] }[];
+    for (const d of list) {
+      const notes = d.notes.filter((n) => !n.system);
+      const first = notes[0];
+      const pos = first?.position;
+      if (!first || !pos) continue; // general comments: not on a line
+      const onNew = pos.new_line != null;
+      out.push({
+        id: d.id,
+        path: (onNew ? pos.new_path : pos.old_path) ?? pos.new_path ?? pos.old_path ?? "",
+        line: (onNew ? pos.new_line : pos.old_line) ?? undefined,
+        side: onNew ? "new" : "old",
+        resolved: notes.every((n) => !n.resolvable || n.resolved),
+        comments: notes.map((n) => ({ author: n.author?.username, body: n.body, createdAt: n.created_at, url: url ? `${url}#note_${n.id}` : undefined })),
+      });
+    }
+    if (list.length < 100) break;
+  }
+  return out;
+}

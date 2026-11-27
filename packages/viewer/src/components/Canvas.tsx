@@ -1,4 +1,6 @@
+import { useReview } from "../lib/review.ts";
 import { TREE_DRAG_TYPE } from "../lib/treeDrag.ts";
+import { ReviewPopover } from "./review/ReviewThreads.tsx";
 import { ContextMenu, type Shortcut, tokenVar, useColorMode } from "@rae/design-system";
 import {
   applyNodeChanges,
@@ -222,11 +224,12 @@ export function Canvas() {
   // diff snapshots, overlay on: what changed is marked
   const showDiff = !!snapshot?.diff && diffOverlay;
   const bigFile = useExplorer((s) => s.bigFile);
+  const review = useReview((s) => s.byNode);
   const related = useRelated(selection, graph);
   // Zoomed far out, frames are blocks: what's inside is hidden (React Flow keeps the nodes and their
   // measurements), the frame says how many it holds.
   const collapse = useMemo(() => collapseFrames(placed, collapseLevelOf(lod, placed.length)), [placed, lod]);
-  const selectedNodes = useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile });
+  const selectedNodes = useCanvasNodes({ snapshot, index, placed, filter, showDiff, collapse, selection, related, bigFile, review });
   const edges = useCanvasEdges({ graph, placed, showDiff, collapse, related, lod });
   // which flowing relations: recounted once the edges are drawn
   useEffect(() => {
@@ -419,6 +422,7 @@ export function Canvas() {
         {marquee.box && <div className="rae-marquee" style={marquee.box} />}
         <ExplorationPicker />
         <QuickAdd />
+        <ReviewPopover />
         <ContextMenu
           at={menu && { x: menu.x, y: menu.y }}
           onClose={() => setMenu(null)}

@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { installedEditors } from "../scanner/src/editors.ts";
-import { gitFetch, gitOverview, gitPull, isBranchName, gitRequests, gitSource, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
+import { gitFetch, gitOverview, gitPull, isBranchName, gitRequests, gitReviewThreads, gitSource, gitTools, parseDiffRequest, refreshTools } from "../scanner/src/gitApi.ts";
 import { followRun, listRuns, listScripts, runScript, stopRun } from "../scanner/src/scripts.ts";
 import { upgradeIndex } from "../scanner/src/snapshotIndex.ts";
 
@@ -155,6 +155,10 @@ export function snapshotsPlugin(repoRoot: string): Plugin {
         }
         const q = url.searchParams.get("path");
         if (!q) return json(res, 400, { error: "path is required" });
+        if (url.pathname === "/review") {
+          const provider = url.searchParams.get("provider") === "gitlab" ? "gitlab" : "github";
+          return json(res, 200, await gitReviewThreads(resolve(q), provider, Number(url.searchParams.get("number")), url.searchParams.get("url") ?? undefined));
+        }
         if (url.pathname === "/source") {
           const r = await gitSource(resolve(q), url.searchParams.get("sha") ?? "", url.searchParams.get("file") ?? "");
           return json(res, "error" in r ? 400 : 200, r);

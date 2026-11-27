@@ -199,6 +199,12 @@ Pass a screenshot dir and look at the PNG to check layout visually. In dev, `win
 - Try it: `bun run scan packages/viewer --base <ref> --head <ref> --out <dir>` and a dev server with
   `RAE_SNAPSHOTS=<dir>`; swap base and head (`--against-tip`) for removals to look at.
 
+## Review comments (lib/review.ts, components/review/)
+- A diff opened from a pull / merge request (`diff.head.request`) reads its line threads once: `GET /api/git/review?path&provider&number&url` (both servers; `gitReviewThreads` in scanner/src/gitApi.ts through `gh api graphql` / `glab api …/discussions`, logged in; paths made relative to the opened folder). Read-only: no replying or resolving.
+- `placeThreads` puts each on the innermost declaration whose lines hold it (head side, not outdated), else its file; `useReview` (its own zustand store) keeps `threads` and `byNode`, reloaded when the snapshot changes.
+- Canvas: `ReviewBadge` on rows, cards and file headers (node data `review`: a file counts its undrawn declarations' too), amber while any is unresolved, green outline once all are; a click opens `ReviewPopover`. The Git bar shows the count, or why they couldn't be read.
+- Code diff (`NodeDiffModal`): each thread under its line (`new:<line>` / `old:<line>`; in split view under its side), lines with threads never folded; this element's others (outdated, base side, outside the lines shown) above the code.
+
 ## Code and type text (lib/syntax.ts, components/Code.tsx, TypeText.tsx)
 - `layoutType(text, { width, start, flat })`: a checker-printed type laid out like an editor — one line
   when it fits, else objects / parameter lists broken one entry per line, a lone object hugging its

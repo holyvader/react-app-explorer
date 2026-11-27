@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource } from "@rae/schema";
-import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
+import type { GitOverview, GitRequestList, GitTools, GitToolStatus, RequestSource, ReviewThreadList } from "@rae/schema";
+import { type HostTool, listViaGh, listViaGlab, remoteRepo, resetToolPaths, reviewViaGh, reviewViaGlab, SOURCES, toolFor, toolStatus } from "./hostCli.ts";
 import type { ScanDiffRequest } from "./job.ts";
 import { git, GIT_MISSING, gitPath, isBranchName, listBranches, listRequests, repoOf } from "./git.ts";
 
@@ -134,6 +134,44 @@ export async function gitRequests(path: string, source: RequestSource = "auto"):
   } catch (e) {
     const why = `${tool}: ${(e as Error).message}`;
     return source === "auto" ? viaGit(why) : { requests: [], source: tool, error: why };
+  }
+}
+
+/**
+ * A pull / merge request's review threads on lines, through the host's CLI (gh for GitHub, glab for
+ * GitLab, logged in), with paths relative to the opened folder `path` (threads on files outside it
+ * are left out). `url`: the request's page, for GitLab notes' links.
+ */
+export async function gitReviewThreads(path: string, provider: "github" | "gitlab", number: number, url?: string): Promise<ReviewThreadList> {
+  if (!Number.isInteger(number) || number <= 0) return { threads: [], error: "Invalid request number" };
+  const info = await repoOf(folderOf(path)).catch(() => undefined);
+  if (!info) return { threads: [], error: "Not in a git repository" };
+  const remote = info.remote ? remoteRepo(info.remote.url) : undefined;
+  if (!remote) return { threads: [], error: "No origin remote" };
+  const tool: HostTool = provider === "github" ? "gh" : "glab";
+  const status = await cachedStatus(tool, remote.host, info.root);
+  if (!status.installed) return { threads: [], source: tool, error: `${tool} isn't installed: review comments are read through it` };
+  if (!status.authed) return { threads: [], source: tool, error: status.error ?? `${tool} isn't logged in` };
+  try {
+    const safeUrl = url && isRequestUrl(url) ? url : undefined;
+    const threads = tool === "gh" ? await reviewViaGh(info.root, remote, number) : await reviewViaGlab(info.root, remote, number, safeUrl);
+    // repo-relative → relative to the opened folder (which may be a package inside the repo)
+    // (symlinked folders, /tmp → /private/tmp: whichever spelling sits inside the root)
+    const real = (() => {
+      try {
+        return realpathSync(folderOf(path));
+      } catch {
+        return folderOf(path);
+      }
+    })();
+    const rel = [relative(info.root, real), relative(info.root, folderOf(path))].find((r) => !r.startsWith("..") && !isAbsolute(r)) ?? "";
+    const prefix = rel.split(sep).join("/");
+    const inside = threads
+      .filter((t) => !prefix || t.path.startsWith(`${prefix}/`))
+      .map((t) => ({ ...t, path: prefix ? t.path.slice(prefix.length + 1) : t.path }));
+    return { threads: inside, source: tool };
+  } catch (e) {
+    return { threads: [], source: tool, error: `${tool}: ${(e as Error).message}` };
   }
 }
 

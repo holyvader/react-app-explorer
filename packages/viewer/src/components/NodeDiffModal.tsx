@@ -1,6 +1,6 @@
 import { Alert, Button, Flex, HStack, Modal, Spinner, Text, textPx } from "@rae/design-system";
 import { IconInline, IconSplit } from "@rae/design-system/icons";
-import type { GraphNode, Snapshot } from "@rae/schema";
+import type { GraphNode, ReviewThread, Snapshot } from "@rae/schema";
 import { Fragment, useMemo, useState } from "react";
 import { type DiffLine, foldUnchanged, splitRows } from "../lib/lineDiff.ts";
 import { type Coloured, isWholeFile, sidesOf, useColoured, useNodeDiff } from "../lib/nodeDiff.ts";
@@ -12,6 +12,43 @@ import { codeLinks } from "../lib/codeLinks.ts";
 import { useExplorer } from "../store.ts";
 import { CodeNavBar } from "./codeNav.tsx";
 import { CodeNavContext } from "./codeNavContext.ts";
+import { useReview } from "../lib/review.ts";
+import { ReviewThreadView } from "./review/ReviewThreads.tsx";
+
+/** Review threads by where they sit: `new:<head line>` / `old:<base line>`. */
+type ThreadsAt = (keys: string[]) => ReviewThread[];
+const NO_THREADS: ThreadsAt = () => [];
+/** A diff line's places: its head line (not for a removed one), its base line (not for an added one). */
+const keysOf = (l: DiffLine | undefined): string[] => (!l ? [] : [...(l.type !== "del" ? [`new:${l.b}`] : []), ...(l.type !== "add" ? [`old:${l.a}`] : [])]);
+
+const ThreadList = ({ threads }: { threads: ReviewThread[] }) => (
+  <Flex direction="column" gap="2">
+    {threads.map((t) => (
+      <ReviewThreadView key={t.id} thread={t} />
+    ))}
+  </Flex>
+);
+
+/** The review threads under a line: across the inline table; in a split one, under their side (base left, head right). */
+function ThreadRows({ threads, cols, split }: { threads: ReviewThread[]; cols: number; split?: boolean }) {
+  if (!threads.length) return null;
+  if (!split)
+    return (
+      <tr className="rae-cdiff__thread">
+        <td colSpan={cols}>
+          <ThreadList threads={threads} />
+        </td>
+      </tr>
+    );
+  const left = threads.filter((t) => t.side === "old");
+  const right = threads.filter((t) => t.side === "new");
+  return (
+    <tr className="rae-cdiff__thread" data-split="">
+      <td colSpan={2}>{left.length > 0 && <ThreadList threads={left} />}</td>
+      <td colSpan={2}>{right.length > 0 && <ThreadList threads={right} />}</td>
+    </tr>
+  );
+}
 
 export type DiffMode = "split" | "inline";
 
@@ -46,6 +83,19 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
   const { diff: loaded, error } = useNodeDiff(snapshot, node, open, wholeFile);
   const lines: DiffLine[] | undefined = loaded?.lines;
   const coloured = useColoured(loaded);
+  // the request's review threads on this file: under their line; the rest of this element's above the code
+  const allThreads = useReview((s) => s.threads);
+  const mine = useReview((s) => s.byNode.get(node.id));
+  const review = useMemo(() => {
+    const onFile = allThreads.filter((t) => t.path === node.filePath);
+    const at = new Map<string, ReviewThread[]>();
+    for (const t of onFile) if (t.line && !t.outdated) at.set(`${t.side}:${t.line}`, [...(at.get(`${t.side}:${t.line}`) ?? []), t]);
+    const shown = new Set((lines ?? []).flatMap(keysOf));
+    const placed = new Set(onFile.filter((t) => t.line && !t.outdated && shown.has(`${t.side}:${t.line}`)));
+    const elsewhere = (whole ? onFile : (mine ?? [])).filter((t) => !placed.has(t));
+    const threadsAt: ThreadsAt = (keys) => [...new Set(keys.flatMap((k) => at.get(k) ?? []))];
+    return { threadsAt: at.size ? threadsAt : NO_THREADS, elsewhere };
+  }, [allThreads, mine, node.filePath, lines, whole]);
   const counts = { add: loaded?.added ?? 0, del: loaded?.removed ?? 0 };
   // names in the code lead on, in this dialog (components/codeNav.tsx)
   const index = useExplorer((s) => s.index);
@@ -107,8 +157,18 @@ export function NodeDiffModal({ node, snapshot, open, onOpenChange }: NodeDiffMo
           <Spinner size="sm" /> Reading both versions from git…
         </Flex>
       )}
+      {review.elsewhere.length > 0 && (
+        <div className="rae-cdiff-elsewhere" aria-label="Review comments not on these lines">
+          <Text fontSize="xs" color="fg.muted">
+            Review comments not on these lines
+          </Text>
+          {review.elsewhere.map((t) => (
+            <ReviewThreadView key={t.id} thread={t} where />
+          ))}
+        </div>
+      )}
       {lines && lines.length === 0 && <Text color="fg.muted">No lines.</Text>}
-      {lines && lines.length > 0 && (mode === "split" ? <SplitView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} /> : <InlineView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} />)}
+      {lines && lines.length > 0 && (mode === "split" ? <SplitView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} threadsAt={review.threadsAt} /> : <InlineView lines={lines} coloured={coloured} showAll={showAll} onExpand={() => setShowAll(true)} threadsAt={review.threadsAt} />)}
       </CodeNavContext.Provider>
     </Modal>
   );
@@ -134,8 +194,9 @@ function Fold({ count, cols, onExpand }: { count: number; cols: number; onExpand
   );
 }
 
-function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void }) {
-  const parts = showAll ? [{ type: "rows" as const, rows: lines }] : foldUnchanged(lines, (l) => l.type !== "same");
+function InlineView({ lines, coloured, showAll, onExpand, threadsAt }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void; threadsAt: ThreadsAt }) {
+  // lines with a review thread stay in sight, like changed ones
+  const parts = showAll ? [{ type: "rows" as const, rows: lines }] : foldUnchanged(lines, (l) => l.type !== "same" || threadsAt(keysOf(l)).length > 0);
   return (
     <div className="rae-cdiff" data-mode="inline">
       <table>
@@ -146,7 +207,10 @@ function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[];
             ) : (
               <Fragment key={i}>
                 {p.rows.map((l, k) => (
-                  <InlineRow key={k} line={l} coloured={coloured} />
+                  <Fragment key={k}>
+                    <InlineRow line={l} coloured={coloured} />
+                    <ThreadRows threads={threadsAt(keysOf(l))} cols={4} />
+                  </Fragment>
                 ))}
               </Fragment>
             ),
@@ -157,9 +221,10 @@ function InlineView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[];
   );
 }
 
-function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void }) {
+function SplitView({ lines, coloured, showAll, onExpand, threadsAt }: { lines: DiffLine[]; coloured: Coloured; showAll: boolean; onExpand: () => void; threadsAt: ThreadsAt }) {
   const rows = useMemo(() => splitRows(lines), [lines]);
-  const parts = showAll ? [{ type: "rows" as const, rows }] : foldUnchanged(rows, (r) => r.left?.type === "del" || r.right?.type === "add");
+  const at = (r: (typeof rows)[number]) => threadsAt([...keysOf(r.right), ...keysOf(r.left)]);
+  const parts = showAll ? [{ type: "rows" as const, rows }] : foldUnchanged(rows, (r) => r.left?.type === "del" || r.right?.type === "add" || at(r).length > 0);
   return (
     <div className="rae-cdiff" data-mode="split">
       <table>
@@ -176,7 +241,8 @@ function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; 
             ) : (
               <Fragment key={i}>
                 {p.rows.map((r, k) => (
-                  <tr key={k}>
+                  <Fragment key={k}>
+                  <tr>
                     <td className="rae-cdiff__num" data-type={r.left?.type ?? "empty"}>
                       {r.left?.a ?? ""}
                     </td>
@@ -190,6 +256,8 @@ function SplitView({ lines, coloured, showAll, onExpand }: { lines: DiffLine[]; 
                       {r.right ? <DiffCode tokens={coloured.after?.[r.right.b - 1]} text={r.right.text} /> : ""}
                     </td>
                   </tr>
+                  <ThreadRows threads={at(r)} cols={4} split />
+                  </Fragment>
                 ))}
               </Fragment>
             ),

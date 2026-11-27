@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renam
 import { arch, homedir, release, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { gitFetch, gitOverview, gitPath, gitPull, gitRequests, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
+import { gitFetch, gitOverview, gitPath, gitPull, gitRequests, gitReviewThreads, gitSource, gitTools, isRequestUrl, parseDiffRequest, refreshTools } from "@rae/scanner/git";
 import { installedEditors } from "@rae/scanner/editors";
 import { followRun, listRuns, listScripts, runScript, stopAllRuns, stopRun, type RunEvent } from "@rae/scanner/scripts";
 import { runScanJob, type ScanEvent } from "@rae/scanner/job";
@@ -262,9 +262,14 @@ async function api(req: Request, url: URL): Promise<Response> {
     log(`git ${path.endsWith("fetch") ? "fetch" : "pull"}: ${body.path}`);
     return json(path.endsWith("fetch") ? await gitFetch(resolve(body.path)) : await gitPull(resolve(body.path)));
   }
-  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools" || path === "/api/git/source") {
+  if (path === "/api/git" || path === "/api/git/requests" || path === "/api/git/tools" || path === "/api/git/source" || path === "/api/git/review") {
     const q = url.searchParams.get("path");
     if (!q) return json({ error: "path is required" }, 400);
+    // a pull / merge request's line comments (read-only, through gh / glab)
+    if (path === "/api/git/review") {
+      const provider = url.searchParams.get("provider") === "gitlab" ? "gitlab" : "github";
+      return json(await gitReviewThreads(resolve(q), provider, Number(url.searchParams.get("number")), url.searchParams.get("url") ?? undefined));
+    }
     if (path === "/api/git/source") {
       const r = await gitSource(resolve(q), url.searchParams.get("sha") ?? "", url.searchParams.get("file") ?? "");
       return json(r, "error" in r ? 400 : 200);

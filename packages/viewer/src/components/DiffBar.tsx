@@ -1,9 +1,10 @@
 import { ActionIconButton, Box, Button, Flex, SegmentedControl, Text, textPx, Tooltip } from "@rae/design-system";
-import { IconBranch, IconOpen, IconRouteChain } from "@rae/design-system/icons";
+import { IconBranch, IconOpen, IconRouteChain, IconComment } from "@rae/design-system/icons";
 import type { SnapshotDiff } from "@rae/schema";
 import { useMemo } from "react";
 import { sideLabel } from "../lib/diff.ts";
 import { openRequestPage } from "../lib/editor.ts";
+import { useReview } from "../lib/review.ts";
 import { type DiffMode, diffModeOf, useExplorer } from "../store.ts";
 
 const DIFF_MODES: { value: DiffMode; label: string }[] = [
@@ -120,6 +121,26 @@ function DiffRefs({ diff }: { diff: SnapshotDiff }) {
           onClick={() => void openRequestPage(req.url!).catch((e: Error) => useExplorer.getState().notify(e.message))}
         />
       )}
+      {req && <ReviewCount />}
     </Flex>
+  );
+}
+
+/** The request's review threads: how many (unresolved first), or why they couldn't be read. Badges on the canvas open them. */
+function ReviewCount() {
+  const threads = useReview((s) => s.threads);
+  const loading = useReview((s) => s.loading);
+  const error = useReview((s) => s.error);
+  if (loading) return null;
+  const open = threads.filter((t) => !t.resolved).length;
+  const text = error ? "No comments" : `${threads.length} ${threads.length === 1 ? "comment" : "comments"}${open ? ` · ${open} open` : ""}`;
+  const tip = error ? `Review comments couldn't be read: ${error}` : threads.length ? "Review threads on lines: the badges on the diagram and the code diff show them" : "No review comments on lines";
+  return (
+    <Tooltip content={tip}>
+      <Flex align="center" gap="1" ml="2" flexShrink={0} fontSize={textPx(11.5)} color={error ? "fg.subtle" : open ? "diff.changed.fg" : "fg.muted"}>
+        <IconComment size={12} />
+        <Text as="span">{text}</Text>
+      </Flex>
+    </Tooltip>
   );
 }
