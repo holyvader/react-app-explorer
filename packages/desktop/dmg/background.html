@@ -29,6 +29,10 @@ html, body { margin: 0; background: #121316; }
 }
 .frame--app .frame__head { border-bottom: 1px solid #26282D; }
 .frame--folder .frame__head { border-bottom: 1px dashed #33353B; }
+/* where Finder writes the icon's name (just under the 128 px icon centred at y 192): a slate row
+   halfway in lightness, so Finder's black names (Light Mode) and white ones (Dark Mode) both read
+   at 4.5:1 or more — Finder picks the colour, a .dmg can't */
+.name-row { position: absolute; left: 8px; right: 8px; top: 180px; height: 40px; border-radius: 7px; background: #6F7783; }
 .label {
   position: absolute; left: 300px; top: 172px; padding: 1px 7px; border-radius: 4px; background: #121316;
   font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-size: 11px; color: #7FD2E6;
@@ -43,12 +47,14 @@ html, body { margin: 0; background: #121316; }
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A8D94" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>
       React App Explorer.app
     </div>
+    <div class="name-row"></div>
   </div>
   <div class="frame frame--folder">
     <div class="frame__head">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A8D94" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       /Applications
     </div>
+    <div class="name-row"></div>
   </div>
   <svg width="660" height="400" viewBox="0 0 660 400" style="position: absolute; inset: 0">
     <path d="M265 196 C 320 196, 340 196, 393 196" fill="none" stroke="#3FB7D4" stroke-width="2" stroke-linecap="round"/>
