@@ -112,7 +112,7 @@ export function ExplorationPicker() {
           },
         }}
       />
-      <div className="rae-picker-hint">Click once to draw, again for all inside a file or folder, once more to take them off.</div>
+      <div className="rae-picker-hint">Click to add · again for all inside · once more to remove</div>
       <div className="rae-picker-foot">
         <output style={{ flex: 1 }}>
           <b>{visible.length}</b> of {total} drawn
